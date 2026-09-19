@@ -1,8 +1,6 @@
 package logger
 
 import (
-	"backend/constant"
-
 	loggergo "github.com/Alonza0314/logger-go/v2"
 	loggergoModel "github.com/Alonza0314/logger-go/v2/model"
 	loggergoUtil "github.com/Alonza0314/logger-go/v2/util"
@@ -16,6 +14,8 @@ type BackendLogger struct {
 	BckLog  loggergoModel.LoggerInterface
 	ProcLog loggergoModel.LoggerInterface
 	GinLog  loggergoModel.LoggerInterface
+	CtxLog  loggergoModel.LoggerInterface
+	DbLog   loggergoModel.LoggerInterface
 }
 
 func NewBackendLogger(level loggergoUtil.LogLevelString, filePath string, debugMode bool) *BackendLogger {
@@ -25,10 +25,12 @@ func NewBackendLogger(level loggergoUtil.LogLevelString, filePath string, debugM
 	return &BackendLogger{
 		Logger: logger,
 
-		CfgLog:  logger.WithTags(constant.CFG_LOG),
-		AccLog:  logger.WithTags(constant.ACC_LOG),
-		BckLog:  logger.WithTags(constant.BCK_LOG),
-		ProcLog: logger.WithTags(constant.PROC_LOG),
-		GinLog:  logger.WithTags(constant.API_LOG),
+		CfgLog:  logger.WithTags(CFG_LOG),
+		AccLog:  logger.WithTags(ACC_LOG),
+		BckLog:  logger.WithTags(BCK_LOG),
+		ProcLog: logger.WithTags(PROC_LOG),
+		GinLog:  logger.WithTags(API_LOG),
+		CtxLog:  logger.WithTags(CTX_LOG),
+		DbLog:   logger.WithTags(DB_LOG),
 	}
 }

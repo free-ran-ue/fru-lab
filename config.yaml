@@ -8,6 +8,11 @@ backend:
     secret: "fru-lab"
     expiresIn: 1h
 
+  db:
+    type: "bbolt"
+    path: "/tmp/frulab.db"
+
+
   frontendFilePath: "build/frontend"
 
 logger:

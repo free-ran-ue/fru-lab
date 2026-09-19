@@ -58,3 +58,4 @@ lint:
 
 clean:
 	rm -rf build
+	rm /tmp/frulab.db

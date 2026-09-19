@@ -3,6 +3,7 @@ package internal
 import (
 	"backend/config"
 	"backend/constant"
+	flctx "backend/internal/context"
 	"backend/internal/processor"
 	"backend/logger"
 	"context"
@@ -42,6 +43,17 @@ type backend struct {
 }
 
 func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
+	flCtx := flctx.NewFlContext(&flctx.FlCotextIE{
+		DbType: config.Backend.Db.Type,
+		DbPath: config.Backend.Db.Path,
+
+		BackendLogger: logger,
+	})
+	if flCtx == nil {
+		logger.BckLog.Errorln("Failed to create FlContext")
+		return nil
+	}
+
 	b := &backend{
 		router: nil,
 		server: nil,
@@ -64,6 +76,8 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 
 			JwtSecret:    config.Backend.JWT.Secret,
 			JwtExpiresIn: config.Backend.JWT.ExpiresIn,
+
+			FlContext: flCtx,
 
 			BackendLogger: logger,
 		}),
@@ -129,6 +143,8 @@ func (b *backend) Stop() {
 	} else {
 		b.BckLog.Infoln("Backend server stopped successfully")
 	}
+
+	b.Processor.Release()
 }
 
 func (b *backend) iniRoutes() util.Routes {
