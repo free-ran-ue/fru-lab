@@ -1,10 +1,10 @@
 {
   "info": {
-    "_postman_id": "6d012a3d-a758-400e-967d-8d01edd361e8",
-    "name": "full-stack-framework",
+    "_postman_id": "5a519725-1944-4af1-81aa-34cbe976d655",
+    "name": "fru-lab",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "51528375",
-    "_collection_link": "https://go.postman.co/collection/51528375-6d012a3d-a758-400e-967d-8d01edd361e8?source=collection_link"
+    "_collection_link": "https://go.postman.co/collection/51528375-5a519725-1944-4af1-81aa-34cbe976d655?source=collection_link"
   },
   "item": [
     {
@@ -63,7 +63,7 @@
               },
               "status": "OK",
               "code": 200,
-              "_postman_previewlanguage": null,
+              "_postman_previewlanguage": "Text",
               "header": [
                 {
                   "key": "Access-Control-Allow-Headers",
@@ -120,7 +120,7 @@
               },
               "status": "Bad Request",
               "code": 400,
-              "_postman_previewlanguage": null,
+              "_postman_previewlanguage": "Text",
               "header": [
                 {
                   "key": "Access-Control-Allow-Headers",
@@ -177,7 +177,7 @@
               },
               "status": "Unauthorized",
               "code": 401,
-              "_postman_previewlanguage": null,
+              "_postman_previewlanguage": "Text",
               "header": [
                 {
                   "key": "Access-Control-Allow-Headers",
@@ -234,7 +234,7 @@
               },
               "status": "Internal Server Error",
               "code": 500,
-              "_postman_previewlanguage": null,
+              "_postman_previewlanguage": "Text",
               "header": [
                 {
                   "key": "Access-Control-Allow-Headers",
@@ -267,7 +267,20 @@
           ]
         },
         {
-          "name": "New Request",
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.globals.clear(\"TOCKEN\")"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -301,7 +314,7 @@
               },
               "status": "No Content",
               "code": 204,
-              "_postman_previewlanguage": null,
+              "_postman_previewlanguage": "Text",
               "header": [
                 {
                   "key": "Access-Control-Allow-Headers",
@@ -321,7 +334,7 @@
                 }
               ],
               "cookie": [],
-              "body": null
+              "body": ""
             }
           ]
         }
@@ -336,7 +349,15 @@
         "packages": {},
         "requests": {},
         "exec": [
-          ""
+          "if (pm.info.requestName === \"Login\") {\r",
+          "    return;\r",
+          "}\r",
+          "\r",
+          "var token = pm.globals.get(\"TOKEN\")\r",
+          "pm.request.headers.add({\r",
+          "    key: \"Authorization\",\r",
+          "    value: `Bearer ${token}`\r",
+          "});"
         ]
       }
     },
