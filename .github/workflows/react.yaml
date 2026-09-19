@@ -18,11 +18,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd frontend
+          cd web/frontend
           corepack enable
           yarn install
 
       - name: Build
         run: |
-          cd frontend
+          cd web/frontend
           yarn build
