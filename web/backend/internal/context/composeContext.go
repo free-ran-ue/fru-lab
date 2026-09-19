@@ -22,6 +22,8 @@ import (
 	cliflags "github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v2/pkg/api"
 	"github.com/docker/compose/v2/pkg/compose"
+	dockertypes "github.com/docker/docker/api/types"
+	containertypes "github.com/docker/docker/api/types/container"
 	dockernetwork "github.com/docker/docker/api/types/network"
 )
 
@@ -516,7 +518,7 @@ func renderTemplateFS(src fs.FS, dest string, data any) error {
 		if err != nil {
 			return fmt.Errorf("failed to create %s: %v", destPath, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		return tmpl.Execute(f, data)
 	})
@@ -595,4 +597,45 @@ func (c *composeContext) ListUeInstances() ([]string, error) {
 	}
 
 	return instances, nil
+}
+
+func (c *composeContext) ueContainerName(instanceID string) string {
+	return "ue-" + instanceID
+}
+
+// AttachUeShell execs an interactive shell inside a running ue instance's
+// container and returns the raw, bidirectional hijacked stream plus the exec
+// ID (needed for ResizeUeShell). TTY mode means stdout/stderr are already
+// combined into one stream with no framing, so the caller can just copy
+// bytes straight to/from a websocket without any stdcopy demuxing.
+func (c *composeContext) AttachUeShell(ctx context.Context, instanceID string) (dockertypes.HijackedResponse, string, error) {
+	containerName := c.ueContainerName(instanceID)
+	apiClient := c.dockerCli.Client()
+
+	execCreated, err := apiClient.ContainerExecCreate(ctx, containerName, containertypes.ExecOptions{
+		Cmd:          []string{"/bin/sh"},
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          true,
+	})
+	if err != nil {
+		return dockertypes.HijackedResponse{}, "", fmt.Errorf("failed to create shell for ue instance %s: %v", instanceID, err)
+	}
+
+	hijacked, err := apiClient.ContainerExecAttach(ctx, execCreated.ID, containertypes.ExecAttachOptions{Tty: true})
+	if err != nil {
+		return dockertypes.HijackedResponse{}, "", fmt.Errorf("failed to attach shell for ue instance %s: %v", instanceID, err)
+	}
+
+	return hijacked, execCreated.ID, nil
+}
+
+// ResizeUeShell tells the container-side pty about the browser terminal's
+// current size, so full-screen programs (vi, top, ...) render correctly.
+func (c *composeContext) ResizeUeShell(ctx context.Context, execID string, height, width uint) error {
+	return c.dockerCli.Client().ContainerExecResize(ctx, execID, containertypes.ResizeOptions{
+		Height: height,
+		Width:  width,
+	})
 }

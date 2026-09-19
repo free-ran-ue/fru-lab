@@ -8,6 +8,7 @@ import TopologyCanvas from './TopologyCanvas'
 import DetailPanel from './DetailPanel'
 import UePanel from './UePanel'
 import LogsModal from './LogsModal'
+import UeTerminalModal from './UeTerminalModal'
 import { useFree5gcStatus } from './useFree5gcStatus'
 import { useGnbStatus } from './useGnbStatus'
 import { useUeInstances, type UeRow } from './useUeInstances'
@@ -53,6 +54,7 @@ export default function DashboardPage() {
   const [ueLogsInstance, setUeLogsInstance] = useState<string | null>(null)
   const [ueLogLines, setUeLogLines] = useState<string[]>([])
   const [isLoadingUeLogs, setIsLoadingUeLogs] = useState(false)
+  const [ueTerminalInstance, setUeTerminalInstance] = useState<string | null>(null)
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const free5gc = useFree5gcStatus()
@@ -212,6 +214,7 @@ export default function DashboardPage() {
                 onDeploy={handleDeployUe}
                 onStop={handleStopUe}
                 onViewLogs={handleViewUeLogs}
+                onOpenTerminal={setUeTerminalInstance}
               />
             ) : (
               <DetailPanel
@@ -247,6 +250,11 @@ export default function DashboardPage() {
         logLines={ueLogLines}
         isLoading={isLoadingUeLogs}
         onClose={() => setUeLogsInstance(null)}
+      />
+
+      <UeTerminalModal
+        instance={ueTerminalInstance}
+        onClose={() => setUeTerminalInstance(null)}
       />
     </div>
   )

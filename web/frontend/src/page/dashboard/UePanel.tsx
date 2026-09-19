@@ -11,9 +11,10 @@ interface UePanelProps {
   onDeploy: (ueId: string) => void
   onStop: (ueId: string) => void
   onViewLogs: (ueId: string) => void
+  onOpenTerminal: (ueId: string) => void
 }
 
-export default function UePanel({ rows, isLoading, loadError, pendingInstances, onDeploy, onStop, onViewLogs }: UePanelProps) {
+export default function UePanel({ rows, isLoading, loadError, pendingInstances, onDeploy, onStop, onViewLogs, onOpenTerminal }: UePanelProps) {
   return (
     <div className={styles.panel}>
       <div>
@@ -50,6 +51,9 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
                   <div className={ueStyles.instanceActions}>
                     {row.hasBeenDeployed && (
                       <button className={ueStyles.linkButton} onClick={() => onViewLogs(row.ueId)}>Logs</button>
+                    )}
+                    {isRunning && (
+                      <button className={ueStyles.linkButton} onClick={() => onOpenTerminal(row.ueId)}>Terminal</button>
                     )}
                     {isRunning ? (
                       <button className={ueStyles.linkButton} onClick={() => onStop(row.ueId)} disabled={isPending}>
