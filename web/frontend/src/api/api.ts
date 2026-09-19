@@ -116,10 +116,11 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * 
          * @summary Get free5GC container logs
+         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployFree5gcLogs: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        deployFree5gcLogs: async (service?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/deploy/free5gc/logs`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -135,6 +136,10 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication bearerAuth required
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (service !== undefined) {
+                localVarQueryParameter['service'] = service;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -252,10 +257,11 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * 
          * @summary Get gNB container logs
+         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbLogs: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        deployGnbLogs: async (service?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/deploy/gnb/logs`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -271,6 +277,10 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication bearerAuth required
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (service !== undefined) {
+                localVarQueryParameter['service'] = service;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -630,11 +640,12 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary Get free5GC container logs
+         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployFree5gcLogs(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcLogs(options);
+        async deployFree5gcLogs(service?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcLogs(service, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployFree5gcLogs']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -678,11 +689,12 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary Get gNB container logs
+         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbLogs(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(options);
+        async deployGnbLogs(service?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(service, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbLogs']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -822,11 +834,12 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * 
          * @summary Get free5GC container logs
+         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployFree5gcLogs(options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
-            return localVarFp.deployFree5gcLogs(options).then((request) => request(axios, basePath));
+        deployFree5gcLogs(service?: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployFree5gcLogs(service, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -858,11 +871,12 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * 
          * @summary Get gNB container logs
+         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbLogs(options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
-            return localVarFp.deployGnbLogs(options).then((request) => request(axios, basePath));
+        deployGnbLogs(service?: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployGnbLogs(service, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -971,11 +985,12 @@ export class DefaultApi extends BaseAPI {
     /**
      * 
      * @summary Get free5GC container logs
+     * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployFree5gcLogs(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployFree5gcLogs(options).then((request) => request(this.axios, this.basePath));
+    public deployFree5gcLogs(service?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployFree5gcLogs(service, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -1011,11 +1026,12 @@ export class DefaultApi extends BaseAPI {
     /**
      * 
      * @summary Get gNB container logs
+     * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbLogs(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbLogs(options).then((request) => request(this.axios, this.basePath));
+    public deployGnbLogs(service?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbLogs(service, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

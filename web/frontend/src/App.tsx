@@ -4,6 +4,7 @@ import DashboardPage from './page/dashboard/DashboardPage'
 import SubscribersPage from './page/subscribers/SubscribersPage'
 import SubscriberFormPage from './page/subscribers/SubscriberFormPage'
 import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
+import LogsPage from './page/logs/LogsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -55,6 +56,14 @@ export default function App() {
         element={(
           <RequireAuth>
             <SubscriberViewPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/logs"
+        element={(
+          <RequireAuth>
+            <LogsPage />
           </RequireAuth>
         )}
       />

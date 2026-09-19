@@ -80,11 +80,18 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployFree5gcLogs();
+let service: string; //Filter logs down to one compose service (NF), e.g. \"amf\". Omit for every service in the project. (optional) (default to undefined)
+
+const { status, data } = await apiInstance.deployFree5gcLogs(
+    service
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **service** | [**string**] | Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project. | (optional) defaults to undefined|
 
 
 ### Return type
@@ -260,11 +267,18 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployGnbLogs();
+let service: string; //Filter logs down to one compose service (NF), e.g. \"amf\". Omit for every service in the project. (optional) (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbLogs(
+    service
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **service** | [**string**] | Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project. | (optional) defaults to undefined|
 
 
 ### Return type

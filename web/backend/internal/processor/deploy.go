@@ -59,10 +59,10 @@ func (p *Processor) DeployStatus(ctx context.Context, target string) (*model.Res
 	}, nil
 }
 
-func (p *Processor) DeployLogs(ctx context.Context, target string) (*model.ResponseDeployLogs, *model.ErrorDetail) {
-	p.ProcLog.Debugf("Processing deploy logs for target: %s", target)
+func (p *Processor) DeployLogs(ctx context.Context, target string, services []string) (*model.ResponseDeployLogs, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy logs for target: %s (services: %v)", target, services)
 
-	lines, err := p.FlContext.Logs(ctx, target)
+	lines, err := p.FlContext.Logs(ctx, target, services)
 	if err != nil {
 		p.ProcLog.Errorf("Failed to get logs for target %s: %v", target, err)
 		return nil, &model.ErrorDetail{

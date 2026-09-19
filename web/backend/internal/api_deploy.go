@@ -118,8 +118,19 @@ func (b *backend) handleDeployFree5gcDown(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// parseServiceQuery reads the optional ?service= query param used to filter
+// logs down to a single NF (e.g. "amf") instead of every service in the
+// compose project; an empty/missing param means "all services".
+func parseServiceQuery(c *gin.Context) []string {
+	service := c.Query("service")
+	if service == "" {
+		return nil
+	}
+	return []string{service}
+}
+
 func (b *backend) handleDeployFree5gcLogs(c *gin.Context) {
-	response, errDetail := b.Processor.DeployLogs(c.Request.Context(), constant.DEPLOY_TARGET_FREE5GC)
+	response, errDetail := b.Processor.DeployLogs(c.Request.Context(), constant.DEPLOY_TARGET_FREE5GC, parseServiceQuery(c))
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy logs failed for %s: %s", c.ClientIP(), errDetail.Detail)
 		c.JSON(errDetail.HttpStatus, model.ResponseDeployLogs{
@@ -172,7 +183,7 @@ func (b *backend) handleDeployGnbDown(c *gin.Context) {
 }
 
 func (b *backend) handleDeployGnbLogs(c *gin.Context) {
-	response, errDetail := b.Processor.DeployLogs(c.Request.Context(), constant.DEPLOY_TARGET_GNB)
+	response, errDetail := b.Processor.DeployLogs(c.Request.Context(), constant.DEPLOY_TARGET_GNB, parseServiceQuery(c))
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy logs failed for %s: %s", c.ClientIP(), errDetail.Detail)
 		c.JSON(errDetail.HttpStatus, model.ResponseDeployLogs{

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Sidebar from '../../components/sidebar/Sidebar'
 import StatsCard from '../../components/stats/stats-card'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
@@ -7,7 +8,6 @@ import { extractErrorMessage } from '../../apiClient'
 import TopologyCanvas from './TopologyCanvas'
 import DetailPanel from './DetailPanel'
 import UePanel from './UePanel'
-import LogsModal from './LogsModal'
 import UeTerminalModal from './UeTerminalModal'
 import { useFree5gcStatus } from './useFree5gcStatus'
 import { useGnbStatus } from './useGnbStatus'
@@ -49,11 +49,8 @@ function computeUeNode(rows: UeRow[]): DeploymentNode {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [selected, setSelected] = useState<NodeId>('core')
-  const [showLogs, setShowLogs] = useState(false)
-  const [ueLogsInstance, setUeLogsInstance] = useState<string | null>(null)
-  const [ueLogLines, setUeLogLines] = useState<string[]>([])
-  const [isLoadingUeLogs, setIsLoadingUeLogs] = useState(false)
   const [ueTerminalInstance, setUeTerminalInstance] = useState<string | null>(null)
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
@@ -83,17 +80,8 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleViewUeLogs(ueId: string) {
-    setUeLogsInstance(ueId)
-    setIsLoadingUeLogs(true)
-    try {
-      const lines = await ue.fetchLogs(ueId)
-      setUeLogLines(lines)
-    } catch (error) {
-      addError(extractErrorMessage(error, 'Failed to load logs'))
-    } finally {
-      setIsLoadingUeLogs(false)
-    }
+  function handleViewUeLogs(ueId: string) {
+    navigate(`/logs?target=ue&instance=${encodeURIComponent(ueId)}`)
   }
 
   async function handlePrimaryAction() {
@@ -112,15 +100,8 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleViewLogs() {
-    setShowLogs(true)
-    if (!activeTarget) return
-
-    try {
-      await activeTarget.fetchLogs()
-    } catch (error) {
-      addError(extractErrorMessage(error, 'Failed to load logs'))
-    }
+  function handleViewLogs() {
+    navigate(`/logs?target=${selected}`)
   }
 
   const nodes: Record<NodeId, DeploymentNode> = {
@@ -149,7 +130,6 @@ export default function DashboardPage() {
           <h2 className={styles.title}>Lab Dashboard</h2>
           <p className={styles.subtitle}>
             Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator
-            (built-in templates for now, custom parameters coming later)
           </p>
         </header>
 
@@ -228,29 +208,6 @@ export default function DashboardPage() {
           </div>
         </section>
       </main>
-
-      <LogsModal
-        isOpen={showLogs}
-        node={selectedNode}
-        logLines={activeTarget ? activeTarget.logLines : []}
-        isLoading={activeTarget?.isLoadingLogs ?? false}
-        onClose={() => setShowLogs(false)}
-      />
-
-      <LogsModal
-        isOpen={ueLogsInstance !== null}
-        node={{
-          id: 'ue',
-          label: `UE — ${ueLogsInstance}`,
-          sublabel: '',
-          status: 'running',
-          template: '',
-          lastDeployed: '',
-        }}
-        logLines={ueLogLines}
-        isLoading={isLoadingUeLogs}
-        onClose={() => setUeLogsInstance(null)}
-      />
 
       <UeTerminalModal
         instance={ueTerminalInstance}

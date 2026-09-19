@@ -133,6 +133,8 @@ paths:
       operationId: deployFree5gcLogs
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LogService'
       responses:
         '200':
           description: OK
@@ -235,6 +237,8 @@ paths:
       operationId: deployGnbLogs
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LogService'
       responses:
         '200':
           description: OK
@@ -418,6 +422,14 @@ components:
       schema:
         type: string
         example: imsi-208930000000001
+    LogService:
+      name: service
+      in: query
+      required: false
+      description: Filter logs down to one compose service (NF), e.g. "amf". Omit for every service in the project.
+      schema:
+        type: string
+        example: amf
   schemas:
     LoginRequest:
       type: object

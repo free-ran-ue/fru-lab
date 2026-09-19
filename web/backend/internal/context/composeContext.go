@@ -316,21 +316,24 @@ func summariesToStatusResult(summaries []api.ContainerSummary) *ComposeStatusRes
 
 const logTailLines = "200"
 
-func (c *composeContext) Logs(ctx context.Context, target string) ([]string, error) {
+// services filters to specific compose services (e.g. just "amf") - nil or
+// empty means every service in the project, matching the previous behavior.
+func (c *composeContext) Logs(ctx context.Context, target string, services []string) ([]string, error) {
 	project, err := c.loadProject(ctx, target, false)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.fetchLogs(ctx, project)
+	return c.fetchLogs(ctx, project, services)
 }
 
 // fetchLogs is shared by every singleton target and every ue instance.
-func (c *composeContext) fetchLogs(ctx context.Context, project *types.Project) ([]string, error) {
+func (c *composeContext) fetchLogs(ctx context.Context, project *types.Project, services []string) ([]string, error) {
 	consumer := &lineLogConsumer{}
 	if err := c.service.Logs(ctx, project.Name, consumer, api.LogOptions{
-		Project: project,
-		Tail:    logTailLines,
+		Project:  project,
+		Tail:     logTailLines,
+		Services: services,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to get logs for project %s: %v", project.Name, err)
 	}
@@ -571,7 +574,7 @@ func (c *composeContext) LogsUe(ctx context.Context, instanceID string) ([]strin
 		return nil, err
 	}
 
-	return c.fetchLogs(ctx, project)
+	return c.fetchLogs(ctx, project, nil)
 }
 
 // ListUeInstances enumerates every ue instance that has ever been deployed

@@ -27,21 +27,26 @@ export interface UeRow {
 
 export function useUeInstances() {
   const [instancesByUeId, setInstancesByUeId] = useState<Record<string, UeInstanceStatus>>({})
+  const [isLoadingInstances, setIsLoadingInstances] = useState(true)
   const [subscribers, setSubscribers] = useState<Subscriber[]>([])
   const [isLoadingSubscribers, setIsLoadingSubscribers] = useState(true)
   const [subscribersError, setSubscribersError] = useState<string | null>(null)
   const [pendingInstances, setPendingInstances] = useState<Record<string, boolean>>({})
 
   const refreshInstances = useCallback(async () => {
-    const response = await api.deployUeList()
-    const map: Record<string, UeInstanceStatus> = {}
-    for (const item of response.data.instances ?? []) {
-      map[item.instance] = {
-        status: item.status as NodeStatus,
-        lastDeployed: item.lastDeployed ? new Date(item.lastDeployed).toLocaleString() : '—',
+    try {
+      const response = await api.deployUeList()
+      const map: Record<string, UeInstanceStatus> = {}
+      for (const item of response.data.instances ?? []) {
+        map[item.instance] = {
+          status: item.status as NodeStatus,
+          lastDeployed: item.lastDeployed ? new Date(item.lastDeployed).toLocaleString() : '—',
+        }
       }
+      setInstancesByUeId(map)
+    } finally {
+      setIsLoadingInstances(false)
     }
-    setInstancesByUeId(map)
   }, [])
 
   const refreshSubscribers = useCallback(async () => {
@@ -119,6 +124,7 @@ export function useUeInstances() {
   return {
     rows,
     isLoadingSubscribers,
+    isLoadingInstances,
     subscribersError,
     pendingInstances,
     deploy,
