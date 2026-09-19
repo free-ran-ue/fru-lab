@@ -1,6 +1,6 @@
 backend:
   username: "admin"
-  password: "0000"
+  password: "frulab"
 
   port: 8888
 
