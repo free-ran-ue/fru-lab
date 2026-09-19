@@ -6,10 +6,10 @@ FRONTEND_STAMP := build/frontend/.stamp
 
 all: backend frontend
 
-build/system: $(BACKEND_SRC)
+build/fru-lab: $(BACKEND_SRC)
 	@echo "[+] Building backend..."
 	mkdir -p build
-	cd web/backend && go build -o ../../build/system .
+	cd web/backend && go build -o ../../build/fru-lab .
 	@echo "[✔] Backend build finished"
 
 build/frontend: $(FRONTEND_SRC)
@@ -25,13 +25,13 @@ build/frontend: $(FRONTEND_SRC)
 	@touch $(FRONTEND_STAMP)
 
 backend:
-	@if [ -f build/system ]; then \
-		if [ -z "$$(find web/backend -name '*.go' -newer build/system)" ]; then \
+	@if [ -f build/fru-lab ]; then \
+		if [ -z "$$(find web/backend -name '*.go' -newer build/fru-lab)" ]; then \
 			echo "[✔] backend is up-to-date, no build needed"; \
 			exit 0; \
 		fi; \
 	fi; \
-	$(MAKE) build/system
+	$(MAKE) build/fru-lab
 
 frontend:
 	@if [ -f $(FRONTEND_STAMP) ]; then \
@@ -48,7 +48,7 @@ openapi:
 	@echo "[✔] OpenAPI client generated"
 
 run:
-	./build/system -c config.yaml
+	./build/fru-lab -c config.yaml
 
 tidy:
 	cd web/backend && go mod tidy

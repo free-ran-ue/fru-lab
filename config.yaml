@@ -5,7 +5,7 @@ backend:
   port: 8888
 
   jwt:
-    secret: "full-stack-framework"
+    secret: "fru-lab"
     expiresIn: 1h
 
   frontendFilePath: "build/frontend"
