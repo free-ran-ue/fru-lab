@@ -1,0 +1,129 @@
+.panel {
+  width: 340px;
+  flex-shrink: 0;
+  border-left: 1px solid #e2e8f0;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-bottom: 0.375rem;
+}
+
+.nodeLabel {
+  margin: 0 0 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nodeSublabel {
+  margin: 0 0 0.625rem;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.divider {
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.sectionTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 0.625rem;
+}
+
+.nfGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.nfChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.nfDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.infoList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.infoValue {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.metaList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+}
+
+.metaValue {
+  color: #334155;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+}

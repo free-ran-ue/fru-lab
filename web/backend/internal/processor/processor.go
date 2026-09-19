@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+type ProcessorIE struct {
+	Username string
+	Password string
+
+	JwtSecret    string
+	JwtExpiresIn time.Duration
+
+	*logger.BackendLogger
+}
+
 type Processor struct {
 	username string
 	password string
@@ -15,14 +25,14 @@ type Processor struct {
 	*logger.BackendLogger
 }
 
-func NewProcessor(username, password string, jwtSecret string, jwtExpiresIn time.Duration, logger *logger.BackendLogger) *Processor {
+func NewProcessor(ie *ProcessorIE) *Processor {
 	return &Processor{
-		username: username,
-		password: password,
+		username: ie.Username,
+		password: ie.Password,
 
-		jwtSecret:    jwtSecret,
-		jwtExpiresIn: jwtExpiresIn,
+		jwtSecret:    ie.JwtSecret,
+		jwtExpiresIn: ie.JwtExpiresIn,
 
-		BackendLogger: logger,
+		BackendLogger: ie.BackendLogger,
 	}
 }
