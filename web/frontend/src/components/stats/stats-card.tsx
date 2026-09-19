@@ -4,13 +4,14 @@ interface StatsCardProps {
   title: string
   value: number | string
   description?: string
+  valueColor?: string
 }
 
-export default function StatsCard({ title, value, description }: StatsCardProps) {
+export default function StatsCard({ title, value, description, valueColor }: StatsCardProps) {
   return (
     <div className={styles.card}>
       <div className={styles.title}>{title}</div>
-      <div className={styles.value}>{value}</div>
+      <div className={styles.value} style={valueColor ? { color: valueColor } : undefined}>{value}</div>
       {description && <div className={styles.description}>{description}</div>}
     </div>
   )

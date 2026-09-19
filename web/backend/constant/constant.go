@@ -1,6 +1,6 @@
 package constant
 
-// api prefix
+// deploy targets
 const (
-	API_PREFIX = "/api"
+	DEPLOY_TARGET_FREE5GC = "free5gc"
 )

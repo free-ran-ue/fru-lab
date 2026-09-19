@@ -1,14 +1,8 @@
-import type { DeploymentNode, NetworkFunction, NodeId } from './types'
+import type { DeploymentNode, NodeId } from './types'
 
-export const MOCK_NODES: Record<NodeId, DeploymentNode> = {
-  core: {
-    id: 'core',
-    label: 'free5GC Core',
-    sublabel: 'Core Network · 9 network functions',
-    status: 'running',
-    template: 'basic (built-in template)',
-    lastDeployed: '10 minutes ago',
-  },
+// gNB and UE don't have a backend deploy target yet, so they stay mock data
+// until free-ran-ue gets its own composeContext (see the design doc).
+export const MOCK_NODES: Record<Exclude<NodeId, 'core'>, DeploymentNode> = {
   gnb: {
     id: 'gnb',
     label: 'gNB',
@@ -27,36 +21,11 @@ export const MOCK_NODES: Record<NodeId, DeploymentNode> = {
   },
 }
 
-export const MOCK_NETWORK_FUNCTIONS: NetworkFunction[] = [
-  { name: 'NRF', status: 'running' },
-  { name: 'AMF', status: 'running' },
-  { name: 'SMF', status: 'running' },
-  { name: 'UPF', status: 'unhealthy' },
-  { name: 'AUSF', status: 'running' },
-  { name: 'UDM', status: 'running' },
-  { name: 'UDR', status: 'running' },
-  { name: 'PCF', status: 'running' },
-  { name: 'NSSF', status: 'running' },
-]
-
-export function getMockLogLines(nodeId: NodeId): string[] {
-  const composeDir = nodeId === 'core' ? 'free5gc' : 'free-ran-ue'
-  const header = `$ docker compose -f fru-compose/${composeDir}/docker-compose.yaml logs -f`
-
-  if (nodeId === 'core') {
-    return [
-      header,
-      'amf   | [INFO] AMF started, PLMN 208/93, listening on N2',
-      'smf   | [INFO] SMF registered to NRF',
-      'upf   | [WARN] health check failed: N4 association lost',
-      'nrf   | [INFO] AMF profile registered',
-      'ausf  | [INFO] AUSF ready',
-      '...',
-    ]
-  }
-
+// core's logs come from the real API now; this only backs gNB/UE until
+// free-ran-ue has a deploy target too.
+export function getMockLogLines(_nodeId: Exclude<NodeId, 'core'>): string[] {
   return [
-    header,
+    '$ docker compose -f fru-compose/free-ran-ue/docker-compose.yaml logs -f',
     'gnb   | [INFO] gNB simulator connecting to AMF via N2',
     'gnb   | [INFO] NGSetupRequest sent',
     'ue    | [INFO] waiting for gNB broadcast',

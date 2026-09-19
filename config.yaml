@@ -12,6 +12,8 @@ backend:
     type: "bbolt"
     path: "/tmp/frulab.db"
 
+  deploy:
+    workDir: "/tmp/frulab-deploy"
 
   frontendFilePath: "build/frontend"
 

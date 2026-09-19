@@ -9,13 +9,14 @@ import (
 type BackendLogger struct {
 	*loggergo.Logger
 
-	CfgLog  loggergoModel.LoggerInterface
-	AccLog  loggergoModel.LoggerInterface
-	BckLog  loggergoModel.LoggerInterface
-	ProcLog loggergoModel.LoggerInterface
-	GinLog  loggergoModel.LoggerInterface
-	CtxLog  loggergoModel.LoggerInterface
-	DbLog   loggergoModel.LoggerInterface
+	CfgLog    loggergoModel.LoggerInterface
+	AccLog    loggergoModel.LoggerInterface
+	BckLog    loggergoModel.LoggerInterface
+	ProcLog   loggergoModel.LoggerInterface
+	GinLog    loggergoModel.LoggerInterface
+	CtxLog    loggergoModel.LoggerInterface
+	DbLog     loggergoModel.LoggerInterface
+	DeployLog loggergoModel.LoggerInterface
 }
 
 func NewBackendLogger(level loggergoUtil.LogLevelString, filePath string, debugMode bool) *BackendLogger {
@@ -25,12 +26,13 @@ func NewBackendLogger(level loggergoUtil.LogLevelString, filePath string, debugM
 	return &BackendLogger{
 		Logger: logger,
 
-		CfgLog:  logger.WithTags(CFG_LOG),
-		AccLog:  logger.WithTags(ACC_LOG),
-		BckLog:  logger.WithTags(BCK_LOG),
-		ProcLog: logger.WithTags(PROC_LOG),
-		GinLog:  logger.WithTags(API_LOG),
-		CtxLog:  logger.WithTags(CTX_LOG),
-		DbLog:   logger.WithTags(DB_LOG),
+		CfgLog:    logger.WithTags(CFG_LOG),
+		AccLog:    logger.WithTags(ACC_LOG),
+		BckLog:    logger.WithTags(BCK_LOG),
+		ProcLog:   logger.WithTags(PROC_LOG),
+		GinLog:    logger.WithTags(API_LOG),
+		CtxLog:    logger.WithTags(CTX_LOG),
+		DbLog:     logger.WithTags(DB_LOG),
+		DeployLog: logger.WithTags(DEPLOY_LOG),
 	}
 }

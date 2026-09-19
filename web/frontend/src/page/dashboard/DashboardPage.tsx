@@ -2,11 +2,16 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../../components/button/button'
 import StatsCard from '../../components/stats/stats-card'
+import NotificationContainer from '../../components/notifications/NotificationContainer'
+import { useNotifications } from '../../hooks/useNotifications'
+import { extractErrorMessage } from '../../apiClient'
 import TopologyCanvas from './TopologyCanvas'
 import DetailPanel from './DetailPanel'
 import LogsModal from './LogsModal'
-import { MOCK_NODES, MOCK_NETWORK_FUNCTIONS, getMockLogLines } from './mockData'
-import type { NodeId } from './types'
+import { useFree5gcStatus } from './useFree5gcStatus'
+import { getStatusMeta } from './statusMeta'
+import { MOCK_NODES, getMockLogLines } from './mockData'
+import type { DeploymentNode, NodeId } from './types'
 import styles from './dashboard-page.module.css'
 
 export default function DashboardPage() {
@@ -14,18 +19,58 @@ export default function DashboardPage() {
   const [selected, setSelected] = useState<NodeId>('core')
   const [showLogs, setShowLogs] = useState(false)
 
+  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const free5gc = useFree5gcStatus()
+
   function handleLogout() {
     localStorage.removeItem('token')
     navigate('/login', { replace: true })
   }
 
-  const healthyCount = MOCK_NETWORK_FUNCTIONS.filter((nf) => nf.status === 'running').length
-  const totalNfs = MOCK_NETWORK_FUNCTIONS.length
+  async function handlePrimaryAction() {
+    try {
+      if (free5gc.node.status === 'running') {
+        await free5gc.stop()
+        addSuccess('free5GC stopped')
+      } else {
+        await free5gc.deploy()
+        addSuccess('free5GC deploy started')
+      }
+    } catch (error) {
+      addError(extractErrorMessage(error, 'free5GC action failed'))
+    }
+  }
+
+  async function handleViewLogs() {
+    setShowLogs(true)
+    if (selected !== 'core') return
+
+    try {
+      await free5gc.fetchLogs()
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to load logs'))
+    }
+  }
+
+  const nodes: Record<NodeId, DeploymentNode> = {
+    core: free5gc.node,
+    gnb: MOCK_NODES.gnb,
+    ue: MOCK_NODES.ue,
+  }
+  const selectedNode = nodes[selected]
+
+  const healthyCount = free5gc.networkFunctions.filter((nf) => nf.status === 'running').length
+  const totalNfs = free5gc.networkFunctions.length
   const unhealthyCount = totalNfs - healthyCount
-  const selectedNode = MOCK_NODES[selected]
 
   return (
     <div className={styles.layout}>
+      <NotificationContainer
+        errors={errors}
+        successes={successes}
+        onClose={removeNotification}
+      />
+
       <aside className={styles.sidebar}>
         <div>
           <p className={styles.badge}>FRU-LAB</p>
@@ -54,22 +99,25 @@ export default function DashboardPage() {
         <section className={styles.statsGrid}>
           <StatsCard
             title="Core Network"
-            value={getStatusLabel(MOCK_NODES.core.status)}
+            value={getStatusLabel(nodes.core.status)}
             description="free5GC · basic template"
+            valueColor={getStatusMeta(nodes.core.status).color}
           />
           <StatsCard
             title="gNB"
-            value={getStatusLabel(MOCK_NODES.gnb.status)}
+            value={getStatusLabel(nodes.gnb.status)}
             description="free-ran-ue · basic template"
+            valueColor={getStatusMeta(nodes.gnb.status).color}
           />
           <StatsCard
             title="UE"
-            value={getStatusLabel(MOCK_NODES.ue.status)}
+            value={getStatusLabel(nodes.ue.status)}
             description="free-ran-ue · basic template"
+            valueColor={getStatusMeta(nodes.ue.status).color}
           />
           <StatsCard
             title="Healthy NFs"
-            value={`${healthyCount} / ${totalNfs}`}
+            value={totalNfs > 0 ? `${healthyCount} / ${totalNfs}` : '—'}
             description={unhealthyCount > 0
               ? `${unhealthyCount} NF${unhealthyCount === 1 ? '' : 's'} failing health check`
               : 'All network functions healthy'}
@@ -97,13 +145,15 @@ export default function DashboardPage() {
 
           <div className={styles.topologyBody}>
             <div className={styles.canvasWrap}>
-              <TopologyCanvas nodes={MOCK_NODES} selected={selected} onSelect={setSelected} />
+              <TopologyCanvas nodes={nodes} selected={selected} onSelect={setSelected} />
             </div>
 
             <DetailPanel
               node={selectedNode}
-              networkFunctions={MOCK_NETWORK_FUNCTIONS}
-              onViewLogs={() => setShowLogs(true)}
+              networkFunctions={free5gc.networkFunctions}
+              onViewLogs={handleViewLogs}
+              onPrimaryAction={selected === 'core' ? handlePrimaryAction : undefined}
+              isActionPending={selected === 'core' && free5gc.isActionPending}
             />
           </div>
         </section>
@@ -112,7 +162,8 @@ export default function DashboardPage() {
       <LogsModal
         isOpen={showLogs}
         node={selectedNode}
-        logLines={getMockLogLines(selected)}
+        logLines={selected === 'core' ? free5gc.logLines : getMockLogLines(selected)}
+        isLoading={selected === 'core' && free5gc.isLoadingLogs}
         onClose={() => setShowLogs(false)}
       />
     </div>

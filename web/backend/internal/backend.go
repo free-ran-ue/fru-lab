@@ -2,7 +2,6 @@ package internal
 
 import (
 	"backend/config"
-	"backend/constant"
 	flctx "backend/internal/context"
 	"backend/internal/processor"
 	"backend/logger"
@@ -47,6 +46,8 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 		DbType: config.Backend.Db.Type,
 		DbPath: config.Backend.Db.Path,
 
+		DeployWorkDir: config.Backend.Deploy.WorkDir,
+
 		BackendLogger: logger,
 	})
 	if flCtx == nil {
@@ -87,9 +88,12 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
 
-	b.router = util.NewGinRouter(constant.API_PREFIX, b.iniRoutes())
+	b.router = util.NewGinRouter("", nil)
+
+	b.router.UseRawPath = true
 	b.router.NoRoute(b.returnPages())
 
+	addServices(b.router, b)
 	addMiddleware(b.router)
 
 	return b
@@ -147,10 +151,31 @@ func (b *backend) Stop() {
 	b.Processor.Release()
 }
 
-func (b *backend) iniRoutes() util.Routes {
-	routes := make(util.Routes, 0)
+func addServices(router *gin.Engine, b *backend) {
+	router.RedirectTrailingSlash = false
 
-	routes = append(routes, b.getAccountRoutes()...)
+	apiGroup := router.Group("/api")
 
-	return routes
+	authGroup := apiGroup.Group("")
+	authGroup.Use(addAuthMiddleware(b))
+
+	addRoutes(apiGroup, b.getAccountRoutes())
+	addRoutes(authGroup, b.getDeployRoutes())
+}
+
+func addRoutes(group *gin.RouterGroup, routes util.Routes) {
+	for _, route := range routes {
+		switch route.Method {
+		case "GET":
+			group.GET(route.Pattern, route.HandlerFunc)
+		case "POST":
+			group.POST(route.Pattern, route.HandlerFunc)
+		case "PUT":
+			group.PUT(route.Pattern, route.HandlerFunc)
+		case "DELETE":
+			group.DELETE(route.Pattern, route.HandlerFunc)
+		case "PATCH":
+			group.PATCH(route.Pattern, route.HandlerFunc)
+		}
+	}
 }

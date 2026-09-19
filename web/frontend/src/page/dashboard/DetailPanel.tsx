@@ -7,12 +7,18 @@ interface DetailPanelProps {
   node: DeploymentNode
   networkFunctions: NetworkFunction[]
   onViewLogs: () => void
+  onPrimaryAction?: () => void
+  isActionPending?: boolean
 }
 
-export default function DetailPanel({ node, networkFunctions, onViewLogs }: DetailPanelProps) {
+export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false }: DetailPanelProps) {
   const meta = getStatusMeta(node.status)
   const isCore = node.id === 'core'
   const isRunning = node.status === 'running'
+
+  const primaryActionLabel = isActionPending
+    ? (isRunning ? 'Stopping…' : 'Deploying…')
+    : (isRunning ? 'Stop Service' : 'Deploy Service')
 
   return (
     <div className={styles.panel}>
@@ -66,7 +72,9 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs }: Deta
       </div>
 
       <div className={styles.actions}>
-        <Button variant="primary">{isRunning ? 'Stop Service' : 'Deploy Service'}</Button>
+        <Button variant="primary" onClick={onPrimaryAction} disabled={!onPrimaryAction || isActionPending}>
+          {primaryActionLabel}
+        </Button>
         <Button variant="secondary" onClick={onViewLogs}>View Logs</Button>
       </div>
     </div>

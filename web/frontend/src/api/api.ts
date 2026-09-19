@@ -23,6 +23,16 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+export interface DeployLogsResponse {
+    'target': string;
+    'lines': Array<string>;
+}
+export interface DeployStatusResponse {
+    'target': string;
+    'status': string;
+    'services'?: Array<ServiceStatus>;
+    'lastDeployed'?: string;
+}
 export interface LoginRequest {
     'username': string;
     'password': string;
@@ -34,12 +44,152 @@ export interface LoginResponse {
 export interface MessageResponse {
     'message'?: string;
 }
+export interface ServiceStatus {
+    'name': string;
+    'status': string;
+}
 
 /**
  * DefaultApi - axios parameter creator
  */
 export const DefaultApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
+        /**
+         * 
+         * @summary Stop free5GC
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcDown: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/free5gc`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get free5GC container logs
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcLogs: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/free5gc/logs`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get free5GC deploy status
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcStatus: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/free5gc/status`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Deploy free5GC
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcUp: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/free5gc`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
         /**
          * 
          * @summary Login
@@ -115,6 +265,54 @@ export const DefaultApiFp = function(configuration?: Configuration) {
     return {
         /**
          * 
+         * @summary Stop free5GC
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployFree5gcDown(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcDown(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployFree5gcDown']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get free5GC container logs
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployFree5gcLogs(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcLogs(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployFree5gcLogs']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get free5GC deploy status
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployFree5gcStatus(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcStatus(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployFree5gcStatus']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Deploy free5GC
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployFree5gcUp(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcUp(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployFree5gcUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -149,6 +347,42 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
     return {
         /**
          * 
+         * @summary Stop free5GC
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcDown(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployFree5gcDown(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get free5GC container logs
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcLogs(options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployFree5gcLogs(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get free5GC deploy status
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcStatus(options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
+            return localVarFp.deployFree5gcStatus(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Deploy free5GC
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployFree5gcUp(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployFree5gcUp(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -173,6 +407,46 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
  * DefaultApi - object-oriented interface
  */
 export class DefaultApi extends BaseAPI {
+    /**
+     * 
+     * @summary Stop free5GC
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployFree5gcDown(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployFree5gcDown(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get free5GC container logs
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployFree5gcLogs(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployFree5gcLogs(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get free5GC deploy status
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployFree5gcStatus(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployFree5gcStatus(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Deploy free5GC
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployFree5gcUp(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployFree5gcUp(options).then((request) => request(this.axios, this.basePath));
+    }
+
     /**
      * 
      * @summary Login

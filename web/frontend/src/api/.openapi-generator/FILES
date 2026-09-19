@@ -1,13 +1,15 @@
 .gitignore
 .npmignore
-.openapi-generator-ignore
 api.ts
 base.ts
 common.ts
 configuration.ts
 docs/DefaultApi.md
+docs/DeployLogsResponse.md
+docs/DeployStatusResponse.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/MessageResponse.md
+docs/ServiceStatus.md
 git_push.sh
 index.ts

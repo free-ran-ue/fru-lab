@@ -1,6 +1,6 @@
-# full-stack-framework
+# fru Lab
 
-This is framework project for quickly build a website with full-stack (React + go).
+Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator
 
 ## Develop Environment
 
@@ -13,40 +13,12 @@ This is framework project for quickly build a website with full-stack (React + g
 
 ## Make
 
-- Backend and Frontend
-
-    ```bash
-    make
-    ```
-
-    This will build the backend binary executable file and frontend resource under `build` directory.
-
-- Backend only
-
-    ```bash
-    make backend
-    ```
-
-- Frontend only
-
-    ```bash
-    make frontend
-    ```
-
-## Execute
-
-Setup the configuration file: [config.yaml](./config.yaml)
-
-And run:
-
-```bash
-./build/system -c config.yaml
-```
-
-## Develop Steps
-
-1. Add APIs in backend.
-2. Updaet APIs in postman and export the json file
-3. Update the openapi.yaml with your postman json
-4. Use openapi-generator-docker.sh to generate the api typescript file in frontend
-5. Go to make!
+| Type | Command |
+| - | - |
+| Make all | `make` |
+| Backend | `make backend` |
+| Frontend | `make frontend` |
+| Run | `make run` |
+| Tidy | `make tidy` |
+| Lint | `make lint` |
+| Generate frontend openapi | `make openapi` |

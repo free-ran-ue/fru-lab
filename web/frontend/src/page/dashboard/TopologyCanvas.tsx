@@ -47,7 +47,7 @@ export default function TopologyCanvas({ nodes, selected, onSelect }: TopologyCa
               <span className={styles.dragHandle} aria-hidden="true">⠿</span>
             </div>
             <div className={styles.nodeLabel}>{node.label}</div>
-            <div className={styles.nodeSublabel}>{id === 'core' ? '9 network functions' : 'free-ran-ue'}</div>
+            <div className={styles.nodeSublabel}>{node.sublabel}</div>
             <span className={styles.statusPill} style={{ background: meta.bg, color: meta.color, borderColor: meta.border }}>
               <span className={styles.statusDot} style={{ background: meta.dot }} />
               {meta.text}

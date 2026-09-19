@@ -6,11 +6,14 @@ type FlCotextIE struct {
 	DbType string
 	DbPath string
 
+	DeployWorkDir string
+
 	*logger.BackendLogger
 }
 
 type FlContext struct {
 	*dbContext
+	*composeContext
 
 	*logger.BackendLogger
 }
@@ -27,8 +30,19 @@ func NewFlContext(ie *FlCotextIE) *FlContext {
 		return nil
 	}
 
+	composeContext, err := newComposeContext(&composeContextIE{
+		WorkDir: ie.DeployWorkDir,
+
+		BackendLogger: ie.BackendLogger,
+	})
+	if err != nil {
+		ie.BackendLogger.CtxLog.Errorf("Failed to create composeContext: %v", err)
+		return nil
+	}
+
 	return &FlContext{
-		dbContext: dbContext,
+		dbContext:      dbContext,
+		composeContext: composeContext,
 
 		BackendLogger: ie.BackendLogger,
 	}
@@ -38,6 +52,7 @@ func (ctx *FlContext) Release() {
 	ctx.CtxLog.Infoln("Release FlContext...")
 
 	ctx.dbContext.release()
+	ctx.composeContext.release()
 
 	ctx.CtxLog.Infoln("FlContext released")
 }

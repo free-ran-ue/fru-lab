@@ -51,7 +51,114 @@ paths:
         '204':
           description: No Content
 
+  /api/deploy/free5gc:
+    post:
+      summary: Deploy free5GC
+      operationId: deployFree5gcUp
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Stop free5GC
+      operationId: deployFree5gcDown
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/free5gc/status:
+    get:
+      summary: Get free5GC deploy status
+      operationId: deployFree5gcStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+
+  /api/deploy/free5gc/logs:
+    get:
+      summary: Get free5GC container logs
+      operationId: deployFree5gcLogs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     LoginRequest:
       type: object
@@ -80,3 +187,49 @@ components:
       properties:
         message:
           type: string
+    DeployStatusResponse:
+      type: object
+      required:
+        - target
+        - status
+      properties:
+        target:
+          type: string
+          example: free5gc
+        status:
+          type: string
+          example: running
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+        lastDeployed:
+          type: string
+          format: date-time
+    ServiceStatus:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+          example: amf
+        status:
+          type: string
+          example: running
+    DeployLogsResponse:
+      type: object
+      required:
+        - target
+        - lines
+      properties:
+        target:
+          type: string
+          example: free5gc
+        lines:
+          type: array
+          items:
+            type: string
+          example:
+            - 'amf         | [INFO] AMF started, PLMN 208/93, listening on N2'
