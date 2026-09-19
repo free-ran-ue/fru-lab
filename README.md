@@ -1,6 +1,6 @@
 # fru Lab
 
-Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator
+Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator.
 
 ## Develop Environment
 
