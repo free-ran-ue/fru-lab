@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"backend/constant"
 	flctx "backend/internal/context"
 	"backend/model"
 	"context"
@@ -9,6 +10,10 @@ import (
 
 func (p *Processor) DeployUp(ctx context.Context, target string) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	p.ProcLog.Debugf("Processing deploy up for target: %s", target)
+
+	if detail := p.checkDeployPrerequisite(ctx, target); detail != nil {
+		return nil, detail
+	}
 
 	if err := p.FlContext.Up(ctx, target); err != nil {
 		p.ProcLog.Errorf("Failed to deploy up target %s: %v", target, err)
@@ -25,6 +30,10 @@ func (p *Processor) DeployUp(ctx context.Context, target string) (*model.Respons
 
 func (p *Processor) DeployDown(ctx context.Context, target string) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	p.ProcLog.Debugf("Processing deploy down for target: %s", target)
+
+	if detail := p.checkStopDependents(ctx, target); detail != nil {
+		return nil, detail
+	}
 
 	if err := p.FlContext.Down(ctx, target); err != nil {
 		p.ProcLog.Errorf("Failed to deploy down target %s: %v", target, err)
@@ -79,6 +88,16 @@ func (p *Processor) DeployLogs(ctx context.Context, target string, services []st
 
 func (p *Processor) DeployUeUp(ctx context.Context, instance string, req *model.RequestDeployUe) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	p.ProcLog.Debugf("Processing deploy up for ue instance: %s", instance)
+
+	gnbStatus, err := p.targetStatus(ctx, constant.DEPLOY_TARGET_GNB)
+	if err != nil {
+		p.ProcLog.Warnf("Failed to check gnb status before deploying ue instance %s: %v", instance, err)
+	} else if gnbStatus != "running" {
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusConflict,
+			Detail:     "Deploy gNB before deploying a UE instance",
+		}
+	}
 
 	cfg := &flctx.UeInstanceConfig{
 		Mcc:          req.Mcc,
@@ -191,6 +210,104 @@ func (p *Processor) DeployUeList(ctx context.Context) (*model.ResponseDeployUeLi
 	return &model.ResponseDeployUeList{
 		Instances: instances,
 	}, nil
+}
+
+// checkStopDependents enforces the network's actual dependency order: a UE
+// dials a specific gNB, and a gNB registers against the core's AMF/UPF, so
+// stopping a lower layer out from under a still-running upper layer doesn't
+// just leave it stuck - it breaks the upper layer's live connection and
+// crashes it. Blocking the stop up front is much clearer than letting that
+// happen and leaving the operator to wonder why a UE container "disappeared"
+// on its own.
+func (p *Processor) checkStopDependents(ctx context.Context, target string) *model.ErrorDetail {
+	switch target {
+	case constant.DEPLOY_TARGET_FREE5GC:
+		running, err := p.isTargetRunning(ctx, constant.DEPLOY_TARGET_GNB)
+		if err != nil {
+			p.ProcLog.Warnf("Failed to check gnb status before stopping core: %v", err)
+			return nil
+		}
+		if running {
+			return &model.ErrorDetail{
+				HttpStatus: http.StatusConflict,
+				Detail:     "Stop gNB before stopping the core network",
+			}
+		}
+	case constant.DEPLOY_TARGET_GNB:
+		running, err := p.anyUeRunning(ctx)
+		if err != nil {
+			p.ProcLog.Warnf("Failed to check ue instances before stopping gnb: %v", err)
+			return nil
+		}
+		if running {
+			return &model.ErrorDetail{
+				HttpStatus: http.StatusConflict,
+				Detail:     "Stop all UE instances before stopping gNB",
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkDeployPrerequisite enforces the same dependency chain in the opposite
+// direction: deploying an upper layer before its lower layer is actually up
+// just means it immediately fails to connect (a gNB with no core to
+// register against, a UE with no gNB to dial) - blocking it up front avoids
+// a confusing failed-deploy state that looks like a real bug.
+func (p *Processor) checkDeployPrerequisite(ctx context.Context, target string) *model.ErrorDetail {
+	if target != constant.DEPLOY_TARGET_GNB {
+		return nil
+	}
+
+	status, err := p.targetStatus(ctx, constant.DEPLOY_TARGET_FREE5GC)
+	if err != nil {
+		p.ProcLog.Warnf("Failed to check core status before deploying gnb: %v", err)
+		return nil
+	}
+	if status != "running" {
+		return &model.ErrorDetail{
+			HttpStatus: http.StatusConflict,
+			Detail:     "Deploy the core network before deploying gNB",
+		}
+	}
+
+	return nil
+}
+
+func (p *Processor) targetStatus(ctx context.Context, target string) (string, error) {
+	result, err := p.FlContext.Status(ctx, target)
+	if err != nil {
+		return "", err
+	}
+	return aggregateServiceStatus(result.Services), nil
+}
+
+func (p *Processor) isTargetRunning(ctx context.Context, target string) (bool, error) {
+	status, err := p.targetStatus(ctx, target)
+	if err != nil {
+		return false, err
+	}
+	return status != "stopped", nil
+}
+
+func (p *Processor) anyUeRunning(ctx context.Context) (bool, error) {
+	instanceIDs, err := p.FlContext.ListUeInstances()
+	if err != nil {
+		return false, err
+	}
+
+	for _, instance := range instanceIDs {
+		result, err := p.FlContext.StatusUe(ctx, instance)
+		if err != nil {
+			return false, err
+		}
+		if aggregateServiceStatus(result.Services) != "stopped" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func aggregateServiceStatus(services []model.ServiceStatus) string {

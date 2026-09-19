@@ -80,10 +80,6 @@ export default function DashboardPage() {
     }
   }
 
-  function handleViewUeLogs(ueId: string) {
-    navigate(`/logs?target=ue&instance=${encodeURIComponent(ueId)}`)
-  }
-
   async function handlePrimaryAction() {
     if (!activeTarget) return
 
@@ -110,6 +106,18 @@ export default function DashboardPage() {
     ue: computeUeNode(ue.rows),
   }
   const selectedNode = nodes[selected]
+
+  // mirrors the backend's own dependency-order enforcement (Processor.
+  // checkStopDependents / checkDeployPrerequisite), just so the button is
+  // disabled with a reason instead of only erroring after a click.
+  const anyUeRunning = ue.rows.some((row) => row.status !== 'stopped')
+  const actionBlockedReason = selected === 'core' && nodes.core.status === 'running' && nodes.gnb.status !== 'stopped'
+    ? 'Stop gNB before stopping the core network'
+    : selected === 'gnb' && nodes.gnb.status === 'running' && anyUeRunning
+      ? 'Stop all UE instances before stopping gNB'
+      : selected === 'gnb' && nodes.gnb.status !== 'running' && nodes.core.status !== 'running'
+        ? 'Deploy the core network before deploying gNB'
+        : undefined
 
   const healthyCount = free5gc.networkFunctions.filter((nf) => nf.status === 'running').length
   const totalNfs = free5gc.networkFunctions.length
@@ -193,8 +201,8 @@ export default function DashboardPage() {
                 pendingInstances={ue.pendingInstances}
                 onDeploy={handleDeployUe}
                 onStop={handleStopUe}
-                onViewLogs={handleViewUeLogs}
                 onOpenTerminal={setUeTerminalInstance}
+                deployBlockedReason={nodes.gnb.status !== 'running' ? 'Deploy gNB before deploying a UE instance' : undefined}
               />
             ) : (
               <DetailPanel
@@ -203,6 +211,7 @@ export default function DashboardPage() {
                 onViewLogs={handleViewLogs}
                 onPrimaryAction={activeTarget ? handlePrimaryAction : undefined}
                 isActionPending={activeTarget?.isActionPending ?? false}
+                actionBlockedReason={actionBlockedReason}
               />
             )}
           </div>

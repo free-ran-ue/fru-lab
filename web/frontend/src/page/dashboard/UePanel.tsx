@@ -10,11 +10,14 @@ interface UePanelProps {
   pendingInstances: Record<string, boolean>
   onDeploy: (ueId: string) => void
   onStop: (ueId: string) => void
-  onViewLogs: (ueId: string) => void
   onOpenTerminal: (ueId: string) => void
+  // set when gNB isn't running - deploying a UE now would just fail to dial
+  // it, so every "Deploy" button is disabled with this as the reason.
+  deployBlockedReason?: string
 }
 
-export default function UePanel({ rows, isLoading, loadError, pendingInstances, onDeploy, onStop, onViewLogs, onOpenTerminal }: UePanelProps) {
+export default function UePanel({ rows, isLoading, loadError, pendingInstances, onDeploy, onStop, onOpenTerminal, deployBlockedReason }: UePanelProps) {
+  const isDeployBlocked = Boolean(deployBlockedReason)
   return (
     <div className={styles.panel}>
       <div>
@@ -27,6 +30,9 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
 
       <div>
         <div className={styles.sectionTitle}>UE Instances</div>
+        {isDeployBlocked && (
+          <p className={styles.blockedHint}>{deployBlockedReason}</p>
+        )}
         {isLoading ? (
           <p className={ueStyles.emptyState}>Loading subscribers…</p>
         ) : loadError ? (
@@ -49,9 +55,6 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
                     </span>
                   </div>
                   <div className={ueStyles.instanceActions}>
-                    {row.hasBeenDeployed && (
-                      <button className={ueStyles.linkButton} onClick={() => onViewLogs(row.ueId)}>Logs</button>
-                    )}
                     {isRunning && (
                       <button className={ueStyles.linkButton} onClick={() => onOpenTerminal(row.ueId)}>Terminal</button>
                     )}
@@ -60,8 +63,8 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
                         {isPending ? 'Stopping…' : 'Stop'}
                       </button>
                     ) : (
-                      <button className={ueStyles.linkButton} onClick={() => onDeploy(row.ueId)} disabled={isPending}>
-                        {isPending ? 'Deploying…' : row.hasBeenDeployed ? 'Redeploy' : 'Deploy'}
+                      <button className={ueStyles.linkButton} onClick={() => onDeploy(row.ueId)} disabled={isPending || isDeployBlocked}>
+                        {isPending ? 'Deploying…' : 'Deploy'}
                       </button>
                     )}
                   </div>

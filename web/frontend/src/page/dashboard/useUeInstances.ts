@@ -50,11 +50,14 @@ export function useUeInstances() {
   }, [])
 
   const refreshSubscribers = useCallback(async () => {
-    setIsLoadingSubscribers(true)
-    setSubscribersError(null)
+    // isLoadingSubscribers only ever needs to gate the *first* load - once
+    // it flips false it stays false, so background poll ticks update
+    // `subscribers`/`subscribersError` silently instead of flashing
+    // "Loading…" (or briefly clearing a real error) every 4s.
     try {
       const response = await webconsoleApi.getSubscribers()
       setSubscribers(response.data)
+      setSubscribersError(null)
     } catch (error) {
       setSubscribersError(extractWebconsoleErrorMessage(
         error,
@@ -66,12 +69,15 @@ export function useUeInstances() {
   }, [])
 
   useEffect(() => {
-    refreshInstances().catch(() => {
-      // transient poll failures shouldn't blank out the last known state
-    })
+    // transient poll failures shouldn't blank out the last known state
+    refreshInstances().catch(() => {})
     refreshSubscribers().catch(() => {})
     const timer = setInterval(() => {
       refreshInstances().catch(() => {})
+      // webconsole isn't reachable until the core is deployed, so this must
+      // keep retrying too - otherwise the UE panel never notices new
+      // subscribers (or webconsole coming up) without a manual page refresh.
+      refreshSubscribers().catch(() => {})
     }, POLL_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [refreshInstances, refreshSubscribers])

@@ -122,6 +122,15 @@
   font-weight: 600;
 }
 
+.blockedHint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+
 .actions {
   display: flex;
   flex-direction: column;

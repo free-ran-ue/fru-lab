@@ -78,6 +78,7 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
     delete:
       summary: Stop free5GC
+      description: Fails with 409 if gNB is still running - gNB must be stopped first.
       operationId: deployFree5gcDown
       security:
         - bearerAuth: []
@@ -90,6 +91,12 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - gNB is still running
           content:
             application/json:
               schema:
@@ -158,6 +165,7 @@ paths:
   /api/deploy/gnb:
     post:
       summary: Deploy gNB
+      description: Fails with 409 if the core network isn't running yet - deploy free5gc first.
       operationId: deployGnbUp
       security:
         - bearerAuth: []
@@ -174,6 +182,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the core network isn't running yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
         '500':
           description: Internal Server Error
           content:
@@ -182,6 +196,7 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
     delete:
       summary: Stop gNB
+      description: Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
       operationId: deployGnbDown
       security:
         - bearerAuth: []
@@ -194,6 +209,12 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a UE instance is still running
           content:
             application/json:
               schema:
@@ -288,6 +309,7 @@ paths:
   /api/deploy/ue/{instance}:
     post:
       summary: Deploy a UE instance for one subscriber
+      description: Fails with 409 if gNB isn't running yet - deploy gNB first.
       operationId: deployUeUp
       security:
         - bearerAuth: []
@@ -314,6 +336,12 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - gNB isn't running yet
           content:
             application/json:
               schema:

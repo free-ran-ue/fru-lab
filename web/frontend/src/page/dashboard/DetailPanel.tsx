@@ -9,11 +9,17 @@ interface DetailPanelProps {
   onViewLogs: () => void
   onPrimaryAction?: () => void
   isActionPending?: boolean
+  // set when the currently-shown primary action (deploy or stop) would
+  // violate the network's dependency order - e.g. stopping a gNB a UE is
+  // still dialing, or deploying a gNB before the core is up. Disables the
+  // button and explains why instead of only erroring after the click.
+  actionBlockedReason?: string
 }
 
-export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false }: DetailPanelProps) {
+export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false, actionBlockedReason }: DetailPanelProps) {
   const meta = getStatusMeta(node.status)
   const isRunning = node.status === 'running'
+  const isActionBlocked = Boolean(actionBlockedReason)
 
   const primaryActionLabel = isActionPending
     ? (isRunning ? 'Stopping…' : 'Deploying…')
@@ -58,7 +64,10 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrim
       </div>
 
       <div className={styles.actions}>
-        <Button variant="primary" onClick={onPrimaryAction} disabled={!onPrimaryAction || isActionPending}>
+        {isActionBlocked && (
+          <p className={styles.blockedHint}>{actionBlockedReason}</p>
+        )}
+        <Button variant="primary" onClick={onPrimaryAction} disabled={!onPrimaryAction || isActionPending || isActionBlocked}>
           {primaryActionLabel}
         </Button>
         <Button variant="secondary" onClick={onViewLogs}>View Logs</Button>
