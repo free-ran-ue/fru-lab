@@ -13,7 +13,6 @@ interface DetailPanelProps {
 
 export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false }: DetailPanelProps) {
   const meta = getStatusMeta(node.status)
-  const isCore = node.id === 'core'
   const isRunning = node.status === 'running'
 
   const primaryActionLabel = isActionPending
@@ -34,33 +33,20 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrim
 
       <div className={styles.divider} />
 
-      {isCore ? (
-        <div>
-          <div className={styles.sectionTitle}>Network Functions</div>
-          <div className={styles.nfGrid}>
-            {networkFunctions.map((nf) => {
-              const nfMeta = getStatusMeta(nf.status)
-              return (
-                <div key={nf.name} className={styles.nfChip} style={{ background: nfMeta.bg, color: nfMeta.color, borderColor: nfMeta.border }}>
-                  <span className={styles.nfDot} style={{ background: nfMeta.dot }} />
-                  {nf.name}
-                </div>
-              )
-            })}
-          </div>
+      <div>
+        <div className={styles.sectionTitle}>Services</div>
+        <div className={styles.nfGrid}>
+          {networkFunctions.map((nf) => {
+            const nfMeta = getStatusMeta(nf.status)
+            return (
+              <div key={nf.name} className={styles.nfChip} style={{ background: nfMeta.bg, color: nfMeta.color, borderColor: nfMeta.border }}>
+                <span className={styles.nfDot} style={{ background: nfMeta.dot }} />
+                {nf.name}
+              </div>
+            )
+          })}
         </div>
-      ) : (
-        <div className={styles.infoList}>
-          <div className={styles.infoRow}>
-            <span>Container</span>
-            <span className={styles.infoValue}>{`fru-${node.id}-1`}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span>Image</span>
-            <span className={styles.infoValue}>{`free-ran-ue:${node.id}`}</span>
-          </div>
-        </div>
-      )}
+      </div>
 
       <div className={styles.divider} />
 

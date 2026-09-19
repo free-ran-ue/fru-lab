@@ -153,12 +153,271 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployLogsResponse'
 
+  /api/deploy/gnb:
+    post:
+      summary: Deploy gNB
+      operationId: deployGnbUp
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Stop gNB
+      operationId: deployGnbDown
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/gnb/status:
+    get:
+      summary: Get gNB deploy status
+      operationId: deployGnbStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+
+  /api/deploy/gnb/logs:
+    get:
+      summary: Get gNB container logs
+      operationId: deployGnbLogs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+
+  /api/deploy/ue:
+    get:
+      summary: List all deployed UE instances
+      operationId: deployUeList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployUeListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployUeListResponse'
+
+  /api/deploy/ue/{instance}:
+    post:
+      summary: Deploy a UE instance for one subscriber
+      operationId: deployUeUp
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UeInstance'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployUeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Stop a UE instance
+      operationId: deployUeDown
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UeInstance'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/ue/{instance}/status:
+    get:
+      summary: Get a UE instance's deploy status
+      operationId: deployUeStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UeInstance'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployUeStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployUeStatusResponse'
+
+  /api/deploy/ue/{instance}/logs:
+    get:
+      summary: Get a UE instance's container logs
+      operationId: deployUeLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UeInstance'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployUeLogsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployUeLogsResponse'
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    UeInstance:
+      name: instance
+      in: path
+      required: true
+      description: The subscriber's UE ID (IMSI), used as the UE instance identifier.
+      schema:
+        type: string
+        example: imsi-208930000000001
   schemas:
     LoginRequest:
       type: object
@@ -233,3 +492,85 @@ components:
             type: string
           example:
             - 'amf         | [INFO] AMF started, PLMN 208/93, listening on N2'
+    DeployUeRequest:
+      type: object
+      required:
+        - mcc
+        - mnc
+        - msin
+        - permanentKey
+        - opValue
+        - amf
+        - sqn
+        - dnn
+        - sst
+      properties:
+        mcc:
+          type: string
+          example: '208'
+        mnc:
+          type: string
+          example: '93'
+        msin:
+          type: string
+          example: '0000000001'
+        permanentKey:
+          type: string
+          example: 8baf473f2f8fd09487cccbd7097c6862
+        opValue:
+          type: string
+          example: 8e27b6af0e692e750f32667a3b14605d
+        amf:
+          type: string
+          example: '8000'
+        sqn:
+          type: string
+          example: '000000000023'
+        dnn:
+          type: string
+          example: internet
+        sst:
+          type: string
+          example: '1'
+        sd:
+          type: string
+          example: '010203'
+    DeployUeStatusResponse:
+      type: object
+      required:
+        - instance
+        - status
+      properties:
+        instance:
+          type: string
+          example: imsi-208930000000001
+        status:
+          type: string
+          example: running
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+        lastDeployed:
+          type: string
+          format: date-time
+    DeployUeLogsResponse:
+      type: object
+      required:
+        - instance
+        - lines
+      properties:
+        instance:
+          type: string
+          example: imsi-208930000000001
+        lines:
+          type: array
+          items:
+            type: string
+    DeployUeListResponse:
+      type: object
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeployUeStatusResponse'

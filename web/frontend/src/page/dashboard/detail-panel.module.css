@@ -1,6 +1,7 @@
 .panel {
   width: 340px;
   flex-shrink: 0;
+  min-height: 0;
   border-left: 1px solid #e2e8f0;
   padding: 1.5rem;
   display: flex;

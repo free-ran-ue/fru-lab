@@ -1,0 +1,22 @@
+services:
+  ue:
+    container_name: ue-{{.InstanceID}}
+    image: alonza0314/free-ran-ue:latest
+    command: ./free-ran-ue ue -c ./uecfg.yaml
+    volumes:
+      - ./config/uecfg.yaml:/free-ran-ue/uecfg.yaml
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      # shared with the gnb target; must already exist before this project is
+      # brought up. No static ipv4_address here on purpose: every UE instance
+      # attaches to this same subnet, so each one gets Docker's own
+      # auto-assigned address instead of colliding on a single fixed IP.
+      ran-ue: {}
+
+networks:
+  ran-ue:
+    external: true
+    name: frulab-ran-ue

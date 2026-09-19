@@ -1,0 +1,47 @@
+ue:
+  # The gNB's control/data-plane IP is fixed regardless of which subscriber
+  # this UE instance represents (see gnb/docker-compose.yaml's static
+  # ran-ue IP) - every UE instance dials the same, single deployed gNB.
+  ranControlPlaneIp: "10.0.2.3"
+  ranDataPlaneIp: "10.0.2.3"
+
+  ranControlPlanePort: 31413
+  ranDataPlanePort: 31414
+
+  plmnId:
+    mcc: "{{.Mcc}}"
+    mnc: "{{.Mnc}}"
+  msin: "{{.Msin}}"
+
+  authenticationSubscription:
+    encPermanentKey: "{{.PermanentKey}}"
+    encOpcKey: "{{.OpValue}}"
+    authenticationManagementField: "{{.Amf}}"
+    sequenceNumber: "{{.Sqn}}"
+
+  integrityAlgorithm:
+    nia0: false
+    nia1: false
+    nia2: true
+    nia3: false
+  cipheringAlgorithm:
+    nea0: true
+    nea1: false
+    nea2: false
+    nea3: false
+
+  pduSession:
+    dnn: "{{.Dnn}}"
+    snssai:
+      sst: "{{.Sst}}"
+      sd: "{{.Sd}}"
+
+  accessType: "3GPP_ACCESS" # 3GPP_ACCESS, NON_3GPP_ACCESS
+
+  nrdc:
+    enable: false
+
+  ueTunnelDevice: "ueTun"
+
+logger:
+  level: "info" # error, warn, info, debug, trace

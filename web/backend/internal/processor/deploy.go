@@ -1,6 +1,7 @@
 package processor
 
 import (
+	flctx "backend/internal/context"
 	"backend/model"
 	"context"
 	"net/http"
@@ -73,6 +74,122 @@ func (p *Processor) DeployLogs(ctx context.Context, target string) (*model.Respo
 	return &model.ResponseDeployLogs{
 		Target: target,
 		Lines:  lines,
+	}, nil
+}
+
+func (p *Processor) DeployUeUp(ctx context.Context, instance string, req *model.RequestDeployUe) (*model.ResponseDeployAction, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy up for ue instance: %s", instance)
+
+	cfg := &flctx.UeInstanceConfig{
+		Mcc:          req.Mcc,
+		Mnc:          req.Mnc,
+		Msin:         req.Msin,
+		PermanentKey: req.PermanentKey,
+		OpValue:      req.OpValue,
+		Amf:          req.Amf,
+		Sqn:          req.Sqn,
+		Dnn:          req.Dnn,
+		Sst:          req.Sst,
+		Sd:           req.Sd,
+	}
+
+	if err := p.FlContext.UpUe(ctx, instance, cfg); err != nil {
+		p.ProcLog.Errorf("Failed to deploy up ue instance %s: %v", instance, err)
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusInternalServerError,
+			Detail:     "Failed to deploy ue " + instance,
+		}
+	}
+
+	return &model.ResponseDeployAction{
+		Message: "Deploy started for ue " + instance,
+	}, nil
+}
+
+func (p *Processor) DeployUeDown(ctx context.Context, instance string) (*model.ResponseDeployAction, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy down for ue instance: %s", instance)
+
+	if err := p.FlContext.DownUe(ctx, instance); err != nil {
+		p.ProcLog.Errorf("Failed to deploy down ue instance %s: %v", instance, err)
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusInternalServerError,
+			Detail:     "Failed to stop ue " + instance,
+		}
+	}
+
+	return &model.ResponseDeployAction{
+		Message: "Stopped ue " + instance,
+	}, nil
+}
+
+func (p *Processor) DeployUeStatus(ctx context.Context, instance string) (*model.ResponseDeployUeStatus, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy status for ue instance: %s", instance)
+
+	result, err := p.FlContext.StatusUe(ctx, instance)
+	if err != nil {
+		p.ProcLog.Errorf("Failed to get status for ue instance %s: %v", instance, err)
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusInternalServerError,
+			Detail:     "Failed to get status for ue " + instance,
+		}
+	}
+
+	return &model.ResponseDeployUeStatus{
+		Instance:     instance,
+		Status:       aggregateServiceStatus(result.Services),
+		Services:     result.Services,
+		LastDeployed: result.LastDeployed,
+	}, nil
+}
+
+func (p *Processor) DeployUeLogs(ctx context.Context, instance string) (*model.ResponseDeployUeLogs, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy logs for ue instance: %s", instance)
+
+	lines, err := p.FlContext.LogsUe(ctx, instance)
+	if err != nil {
+		p.ProcLog.Errorf("Failed to get logs for ue instance %s: %v", instance, err)
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusInternalServerError,
+			Detail:     "Failed to get logs for ue " + instance,
+		}
+	}
+
+	return &model.ResponseDeployUeLogs{
+		Instance: instance,
+		Lines:    lines,
+	}, nil
+}
+
+func (p *Processor) DeployUeList(ctx context.Context) (*model.ResponseDeployUeList, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy list for ue instances")
+
+	instanceIDs, err := p.FlContext.ListUeInstances()
+	if err != nil {
+		p.ProcLog.Errorf("Failed to list ue instances: %v", err)
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusInternalServerError,
+			Detail:     "Failed to list ue instances",
+		}
+	}
+
+	instances := make([]model.ResponseDeployUeStatus, 0, len(instanceIDs))
+	for _, instance := range instanceIDs {
+		result, err := p.FlContext.StatusUe(ctx, instance)
+		if err != nil {
+			p.ProcLog.Warnf("Failed to get status for ue instance %s: %v", instance, err)
+			continue
+		}
+
+		instances = append(instances, model.ResponseDeployUeStatus{
+			Instance:     instance,
+			Status:       aggregateServiceStatus(result.Services),
+			Services:     result.Services,
+			LastDeployed: result.LastDeployed,
+		})
+	}
+
+	return &model.ResponseDeployUeList{
+		Instances: instances,
 	}, nil
 }
 

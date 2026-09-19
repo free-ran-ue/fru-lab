@@ -39,3 +39,12 @@
 .secondary:hover {
   background-color: #cbd5e1;
 }
+
+.danger {
+  background-color: #dc2626;
+  color: white;
+}
+
+.danger:hover {
+  background-color: #b91c1c;
+}

@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/compose-spec/compose-go/v2/loader"
@@ -84,9 +85,19 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 				templateFS:  free5gcTemplateFS,
 				templateDir: "templates/free5gc",
 			},
+			constant.DEPLOY_TARGET_GNB: {
+				projectName: "frulab-gnb",
+				templateFS:  gnbTemplateFS,
+				templateDir: "templates/gnb",
+			},
 		},
 		sharedNetworks: []sharedNetwork{
+			// free5gc (amf/upf) <-> gnb
 			{name: "frulab-cn-ran", subnet: "10.0.1.0/24", bridgeName: "docker-cn-ran"},
+			// gnb <-> ue (ue isn't a deploy target yet, but the network is
+			// shared infrastructure independent of either target's lifecycle,
+			// same reasoning as cn-ran, so it's created up front too)
+			{name: "frulab-ran-ue", subnet: "10.0.2.0/24", bridgeName: "docker-ran-ue"},
 		},
 
 		BackendLogger: ie.BackendLogger,
@@ -190,11 +201,17 @@ func (c *composeContext) loadProject(ctx context.Context, target string, forceMa
 		return nil, fmt.Errorf("failed to load compose project for target %s: %v", target, err)
 	}
 
-	// the loader alone doesn't stamp the standard com.docker.compose.*
-	// labels onto each service; docker compose's own CLI does this itself
-	// after loading (cmd/compose ProjectOptions.ToProject), so we have to
-	// do it too, or the compose engine can't find its own containers again
-	// once they're created.
+	stampComposeLabels(project)
+
+	return project, nil
+}
+
+// stampComposeLabels stamps the standard com.docker.compose.* labels onto
+// every service in project - the loader alone doesn't do this (docker
+// compose's own CLI does it itself after loading, in cmd/compose
+// ProjectOptions.ToProject), so without it the compose engine can't find its
+// own containers again once they're created.
+func stampComposeLabels(project *types.Project) {
 	for name, service := range project.Services {
 		service.CustomLabels = map[string]string{
 			api.ProjectLabel:     project.Name,
@@ -206,8 +223,6 @@ func (c *composeContext) loadProject(ctx context.Context, target string, forceMa
 		}
 		project.Services[name] = service
 	}
-
-	return project, nil
 }
 
 // restoreScriptPermissions makes every *.sh file under dir executable.
@@ -266,6 +281,13 @@ func (c *composeContext) Status(ctx context.Context, target string) (*ComposeSta
 		return nil, fmt.Errorf("failed to get status for target %s: %v", target, err)
 	}
 
+	return summariesToStatusResult(summaries), nil
+}
+
+// summariesToStatusResult maps a raw `docker compose ps` result into our own
+// status shape, shared by both the singleton targets (free5gc/gnb) and every
+// per-instance ue deployment.
+func summariesToStatusResult(summaries []api.ContainerSummary) *ComposeStatusResult {
 	result := &ComposeStatusResult{
 		Services: make([]model.ServiceStatus, 0, len(summaries)),
 	}
@@ -287,7 +309,7 @@ func (c *composeContext) Status(ctx context.Context, target string) (*ComposeSta
 		result.LastDeployed = &deployedAt
 	}
 
-	return result, nil
+	return result
 }
 
 const logTailLines = "200"
@@ -298,12 +320,17 @@ func (c *composeContext) Logs(ctx context.Context, target string) ([]string, err
 		return nil, err
 	}
 
+	return c.fetchLogs(ctx, project)
+}
+
+// fetchLogs is shared by every singleton target and every ue instance.
+func (c *composeContext) fetchLogs(ctx context.Context, project *types.Project) ([]string, error) {
 	consumer := &lineLogConsumer{}
 	if err := c.service.Logs(ctx, project.Name, consumer, api.LogOptions{
 		Project: project,
 		Tail:    logTailLines,
 	}); err != nil {
-		return nil, fmt.Errorf("failed to get logs for target %s: %v", target, err)
+		return nil, fmt.Errorf("failed to get logs for project %s: %v", project.Name, err)
 	}
 
 	return consumer.lines, nil
@@ -358,4 +385,214 @@ func (c *composeContext) release() {
 	}
 
 	c.CtxLog.Infoln("composeContext released")
+}
+
+// UeInstanceConfig carries the subscriber-derived fields that get templated
+// into one UE instance's uecfg.yaml at deploy time. The gNB's own IP is
+// fixed regardless of which subscriber this is (the UE always dials the one
+// deployed gNB's static address), so it's never part of this - only the
+// subscriber's own identity/auth material and slice/DNN selection vary.
+type UeInstanceConfig struct {
+	Mcc          string
+	Mnc          string
+	Msin         string
+	PermanentKey string
+	OpValue      string
+	Amf          string
+	Sqn          string
+	Dnn          string
+	Sst          string
+	Sd           string
+}
+
+// ue deployments are multi-instance - one per subscriber - unlike free5gc/gnb
+// which are process-wide singletons, so they can't reuse c.targets (keyed
+// only by target name) or loadProject (which does a static, untemplated
+// file copy). Every ue instance gets its own working directory and compose
+// project name, keyed by instanceID (the subscriber's ueId).
+
+func (c *composeContext) ueWorkingDir(instanceID string) string {
+	return filepath.Join(c.workDir, constant.DEPLOY_TARGET_UE, instanceID)
+}
+
+func (c *composeContext) ueProjectName(instanceID string) string {
+	return "frulab-ue-" + instanceID
+}
+
+// loadUeProject mirrors loadProject's materialize-then-load approach, but
+// renders the ue template's *.tmpl files against cfg instead of copying them
+// verbatim, since every instance needs its own container name/config. cfg is
+// only required (and only used) when forceMaterialize actually needs to
+// write fresh files; Down/Status/Logs pass nil and reuse whatever is already
+// on disk, same reasoning as loadProject.
+func (c *composeContext) loadUeProject(ctx context.Context, instanceID string, cfg *UeInstanceConfig, forceMaterialize bool) (*types.Project, error) {
+	workingDir := c.ueWorkingDir(instanceID)
+
+	c.materializeMu.Lock()
+	defer c.materializeMu.Unlock()
+
+	composeFilePath := filepath.Join(workingDir, "docker-compose.yaml")
+	alreadyMaterialized := false
+	if _, err := os.Stat(composeFilePath); err == nil {
+		alreadyMaterialized = true
+	}
+
+	if forceMaterialize || !alreadyMaterialized {
+		if cfg == nil {
+			return nil, fmt.Errorf("ue instance %s has not been deployed yet", instanceID)
+		}
+		if err := os.RemoveAll(workingDir); err != nil {
+			return nil, fmt.Errorf("failed to clean working dir %s: %v", workingDir, err)
+		}
+		if err := os.MkdirAll(workingDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create working dir %s: %v", workingDir, err)
+		}
+
+		templateFS, err := fs.Sub(ueTemplateFS, "templates/ue")
+		if err != nil {
+			return nil, fmt.Errorf("failed to open ue template: %v", err)
+		}
+		if err := renderTemplateFS(templateFS, workingDir, struct {
+			InstanceID string
+			*UeInstanceConfig
+		}{InstanceID: instanceID, UeInstanceConfig: cfg}); err != nil {
+			return nil, fmt.Errorf("failed to materialize ue instance %s: %v", instanceID, err)
+		}
+		if err := restoreScriptPermissions(workingDir); err != nil {
+			return nil, fmt.Errorf("failed to restore script permissions for ue instance %s: %v", instanceID, err)
+		}
+	}
+
+	project, err := loader.LoadWithContext(ctx, types.ConfigDetails{
+		WorkingDir: workingDir,
+		ConfigFiles: []types.ConfigFile{
+			{Filename: filepath.Join(workingDir, "docker-compose.yaml")},
+		},
+	}, func(o *loader.Options) {
+		o.SetProjectName(c.ueProjectName(instanceID), true)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load compose project for ue instance %s: %v", instanceID, err)
+	}
+
+	stampComposeLabels(project)
+
+	return project, nil
+}
+
+// renderTemplateFS walks every file under src, rendering *.tmpl files as Go
+// templates against data (writing the result without the .tmpl suffix) and
+// copying every other file verbatim into dest.
+func renderTemplateFS(src fs.FS, dest string, data any) error {
+	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		content, err := fs.ReadFile(src, path)
+		if err != nil {
+			return fmt.Errorf("failed to read template file %s: %v", path, err)
+		}
+
+		destPath := filepath.Join(dest, path)
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return err
+		}
+
+		if !strings.HasSuffix(path, ".tmpl") {
+			return os.WriteFile(destPath, content, 0644)
+		}
+
+		destPath = strings.TrimSuffix(destPath, ".tmpl")
+		tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
+		if err != nil {
+			return fmt.Errorf("failed to parse template file %s: %v", path, err)
+		}
+
+		f, err := os.Create(destPath)
+		if err != nil {
+			return fmt.Errorf("failed to create %s: %v", destPath, err)
+		}
+		defer f.Close()
+
+		return tmpl.Execute(f, data)
+	})
+}
+
+func (c *composeContext) UpUe(ctx context.Context, instanceID string, cfg *UeInstanceConfig) error {
+	project, err := c.loadUeProject(ctx, instanceID, cfg, true)
+	if err != nil {
+		return err
+	}
+
+	c.CtxLog.Infof("Deploying ue instance %s (project %s)", instanceID, project.Name)
+	return c.service.Up(ctx, project, api.UpOptions{
+		Create: api.CreateOptions{},
+		Start: api.StartOptions{
+			Project: project,
+		},
+	})
+}
+
+func (c *composeContext) DownUe(ctx context.Context, instanceID string) error {
+	project, err := c.loadUeProject(ctx, instanceID, nil, false)
+	if err != nil {
+		return err
+	}
+
+	c.CtxLog.Infof("Stopping ue instance %s (project %s)", instanceID, project.Name)
+	return c.service.Down(ctx, project.Name, api.DownOptions{
+		Project: project,
+	})
+}
+
+func (c *composeContext) StatusUe(ctx context.Context, instanceID string) (*ComposeStatusResult, error) {
+	project, err := c.loadUeProject(ctx, instanceID, nil, false)
+	if err != nil {
+		return nil, err
+	}
+
+	summaries, err := c.service.Ps(ctx, project.Name, api.PsOptions{Project: project, All: true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get status for ue instance %s: %v", instanceID, err)
+	}
+
+	return summariesToStatusResult(summaries), nil
+}
+
+func (c *composeContext) LogsUe(ctx context.Context, instanceID string) ([]string, error) {
+	project, err := c.loadUeProject(ctx, instanceID, nil, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.fetchLogs(ctx, project)
+}
+
+// ListUeInstances enumerates every ue instance that has ever been deployed
+// (running or stopped) by reading the instance subdirectories materialized
+// under <workDir>/ue - mirrors how a stopped free5gc/gnb still reports a
+// "stopped" status rather than disappearing.
+func (c *composeContext) ListUeInstances() ([]string, error) {
+	dir := filepath.Join(c.workDir, constant.DEPLOY_TARGET_UE)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("failed to list ue instances: %v", err)
+	}
+
+	instances := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			instances = append(instances, entry.Name())
+		}
+	}
+
+	return instances, nil
 }

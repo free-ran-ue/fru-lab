@@ -7,6 +7,10 @@ configuration.ts
 docs/DefaultApi.md
 docs/DeployLogsResponse.md
 docs/DeployStatusResponse.md
+docs/DeployUeListResponse.md
+docs/DeployUeLogsResponse.md
+docs/DeployUeRequest.md
+docs/DeployUeStatusResponse.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/MessageResponse.md

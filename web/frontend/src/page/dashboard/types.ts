@@ -13,4 +13,7 @@ export interface DeploymentNode {
   status: NodeStatus
   template: string
   lastDeployed: string
+  // overrides the status pill's text (e.g. "2 / 3" for a multi-instance
+  // target like ue); falls back to the generic status word when unset.
+  statusLabel?: string
 }

@@ -1,4 +1,4 @@
-.PHONY: backend frontend openapi run  tidy lint clean
+.PHONY: backend frontend openapi openapi-webconsole run  tidy lint clean
 
 BACKEND_SRC := $(shell find web/backend -name "*.go")
 FRONTEND_SRC := $(shell find web/frontend -type f ! -path "web/frontend/dist/*" ! -path "web/frontend/node_modules/*")
@@ -46,6 +46,11 @@ openapi:
 	@echo "[+] Generating OpenAPI client..."
 	cd web && ./openapi-generator-docker.sh
 	@echo "[✔] OpenAPI client generated"
+
+openapi-webconsole:
+	@echo "[+] Generating webconsole OpenAPI client..."
+	cd web && ./webconsole-openapi-generator-docker.sh
+	@echo "[✔] webconsole OpenAPI client generated"
 
 run:
 	./build/fru-lab -c config.yaml

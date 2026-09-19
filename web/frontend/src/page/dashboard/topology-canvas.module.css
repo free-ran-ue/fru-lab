@@ -1,7 +1,12 @@
 .canvas {
-  position: relative;
-  width: 800px;
-  height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+  min-height: 260px;
+  padding: 32px 24px;
+  box-sizing: border-box;
   border-radius: 14px;
   background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
   background-size: 20px 20px;
@@ -9,16 +14,10 @@
   border: 1px solid #eef2f7;
 }
 
-.lines {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
 .node {
-  position: absolute;
-  top: 150px;
-  width: 190px;
+  flex: 1 1 200px;
+  max-width: 260px;
+  min-width: 160px;
   padding: 16px 16px 14px;
   border-radius: 14px;
   background: #ffffff;
@@ -28,18 +27,6 @@
   text-align: left;
   font-family: inherit;
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
-}
-
-.ue {
-  left: 30px;
-}
-
-.gnb {
-  left: 305px;
-}
-
-.core {
-  left: 580px;
 }
 
 .nodeSelected {
@@ -107,4 +94,44 @@
   height: 7px;
   border-radius: 999px;
   display: inline-block;
+}
+
+.connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 1 64px;
+  min-width: 32px;
+  padding: 0 4px;
+}
+
+.connectorLabel {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+.connectorLine {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.connectorLine::before {
+  content: '';
+  flex: 1;
+  min-width: 12px;
+  height: 2px;
+  background: #94a3b8;
+}
+
+.connectorLine::after {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid #94a3b8;
 }

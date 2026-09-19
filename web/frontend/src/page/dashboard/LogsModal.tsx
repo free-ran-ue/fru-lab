@@ -12,6 +12,8 @@ interface LogsModalProps {
 export default function LogsModal({ isOpen, node, logLines, isLoading = false, onClose }: LogsModalProps) {
   if (!isOpen) return null
 
+  const lines = logLines ?? []
+
   return (
     <div className={styles.overlay}>
       <div className={styles.modal}>
@@ -22,10 +24,10 @@ export default function LogsModal({ isOpen, node, logLines, isLoading = false, o
         <div className={styles.body}>
           {isLoading ? (
             <div className={styles.line}>Loading…</div>
-          ) : logLines.length === 0 ? (
+          ) : lines.length === 0 ? (
             <div className={styles.line}>No log output yet.</div>
           ) : (
-            logLines.map((line, index) => (
+            lines.map((line, index) => (
               <div key={index} className={styles.line}>{line}</div>
             ))
           )}

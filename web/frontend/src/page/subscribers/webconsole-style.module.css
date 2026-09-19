@@ -1,0 +1,294 @@
+/* Layout modeled after free5GC webconsole's own Subscriber pages (hero band,
+   floating-label outlined fields, nested slice/DNN/flow-rule cards), recolored
+   to fru-lab's own palette (indigo/purple accent, rounded cards, existing
+   danger/neutral tones) so it fits the rest of the app. */
+
+.layout {
+  min-height: 100vh;
+  display: flex;
+  background: #f8fafc;
+}
+
+.content {
+  flex-grow: 1;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.heroBand {
+  position: relative;
+  overflow: hidden;
+  padding: 2.5rem 2.5rem 2rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.heroBlobPink {
+  position: absolute;
+  top: -60px;
+  left: -80px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(147, 51, 234, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.heroBlobBlue {
+  position: absolute;
+  top: -120px;
+  right: -100px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.16), transparent 70%);
+  pointer-events: none;
+}
+
+.heroInner {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #4338ca;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.body {
+  padding: 2rem 2.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  padding: 1.75rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1rem;
+}
+
+.sectionHeading h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem 1.25rem;
+}
+
+/* Floating-label outlined field, matching webconsole's layout but in fru-lab's tones */
+.field {
+  position: relative;
+  margin-top: 0.6rem;
+  min-width: 0;
+}
+
+.field label {
+  position: absolute;
+  top: -0.55rem;
+  left: 0.7rem;
+  background: #ffffff;
+  padding: 0 0.35rem;
+  font-size: 0.72rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.field .required {
+  color: #dc2626;
+}
+
+.input,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.92rem;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+}
+
+.input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  color: #1e293b;
+}
+
+.checkboxRow input[type='checkbox'] {
+  accent-color: #4f46e5;
+  width: 1rem;
+  height: 1rem;
+}
+
+.nestedCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  background: #f8fafc;
+}
+
+.nestedCard + .nestedCard {
+  margin-top: 1.25rem;
+}
+
+.sliceList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Buttons, recolored to fru-lab's palette (indigo/purple primary, existing
+   danger red, ghost indigo for "add", plain Button component reused where
+   a full button component makes sense). */
+.btnAdd {
+  border: 1px dashed #a5b4fc;
+  border-radius: 10px;
+  background: transparent;
+  color: #4338ca;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+}
+
+.btnAdd:hover {
+  background: #eef2ff;
+  border-color: #818cf8;
+}
+
+.btnLink {
+  border: none;
+  background: transparent;
+  color: #4338ca;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.4rem 0;
+  cursor: pointer;
+}
+
+.btnLink:hover {
+  text-decoration: underline;
+}
+
+.actionsRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.actionsGroup {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.table td {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.emptyState {
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.kvTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kvTable tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.kvTable tr:last-child {
+  border-bottom: none;
+}
+
+.kvTable th {
+  width: 40%;
+  text-align: left;
+  padding: 0.7rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.kvTable td {
+  padding: 0.7rem 0;
+  font-size: 0.9rem;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    flex-direction: column;
+  }
+}

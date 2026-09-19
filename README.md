@@ -22,3 +22,4 @@ Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulat
 | Tidy | `make tidy` |
 | Lint | `make lint` |
 | Generate frontend openapi | `make openapi` |
+| Generate frontend openapi for free5GC webconsole | `make openapi-webconsole` |

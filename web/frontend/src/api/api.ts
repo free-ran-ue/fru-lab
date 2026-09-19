@@ -33,6 +33,31 @@ export interface DeployStatusResponse {
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
 }
+export interface DeployUeListResponse {
+    'instances'?: Array<DeployUeStatusResponse>;
+}
+export interface DeployUeLogsResponse {
+    'instance': string;
+    'lines': Array<string>;
+}
+export interface DeployUeRequest {
+    'mcc': string;
+    'mnc': string;
+    'msin': string;
+    'permanentKey': string;
+    'opValue': string;
+    'amf': string;
+    'sqn': string;
+    'dnn': string;
+    'sst': string;
+    'sd'?: string;
+}
+export interface DeployUeStatusResponse {
+    'instance': string;
+    'status': string;
+    'services'?: Array<ServiceStatus>;
+    'lastDeployed'?: string;
+}
 export interface LoginRequest {
     'username': string;
     'password': string;
@@ -192,6 +217,333 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
+         * @summary Stop gNB
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbDown: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/gnb`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get gNB container logs
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbLogs: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/gnb/logs`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get gNB deploy status
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbStatus: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/gnb/status`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Deploy gNB
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbUp: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/gnb`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Stop a UE instance
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeDown: async (instance: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'instance' is not null or undefined
+            assertParamExists('deployUeDown', 'instance', instance)
+            const localVarPath = `/api/deploy/ue/{instance}`
+                .replace('{instance}', encodeURIComponent(String(instance)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary List all deployed UE instances
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/ue`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get a UE instance\'s container logs
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeLogs: async (instance: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'instance' is not null or undefined
+            assertParamExists('deployUeLogs', 'instance', instance)
+            const localVarPath = `/api/deploy/ue/{instance}/logs`
+                .replace('{instance}', encodeURIComponent(String(instance)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get a UE instance\'s deploy status
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeStatus: async (instance: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'instance' is not null or undefined
+            assertParamExists('deployUeStatus', 'instance', instance)
+            const localVarPath = `/api/deploy/ue/{instance}/status`
+                .replace('{instance}', encodeURIComponent(String(instance)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Deploy a UE instance for one subscriber
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {DeployUeRequest} deployUeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeUp: async (instance: string, deployUeRequest: DeployUeRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'instance' is not null or undefined
+            assertParamExists('deployUeUp', 'instance', instance)
+            // verify required parameter 'deployUeRequest' is not null or undefined
+            assertParamExists('deployUeUp', 'deployUeRequest', deployUeRequest)
+            const localVarPath = `/api/deploy/ue/{instance}`
+                .replace('{instance}', encodeURIComponent(String(instance)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deployUeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -313,6 +665,119 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary Stop gNB
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbDown(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbDown(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbDown']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get gNB container logs
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbLogs(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbLogs']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get gNB deploy status
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbStatus(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbStatus(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbStatus']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Deploy gNB
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbUp(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Stop a UE instance
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeDown(instance: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeDown(instance, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeDown']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary List all deployed UE instances
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployUeListResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get a UE instance\'s container logs
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeLogs(instance: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployUeLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeLogs(instance, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeLogs']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get a UE instance\'s deploy status
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeStatus(instance: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployUeStatusResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeStatus(instance, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeStatus']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Deploy a UE instance for one subscriber
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {DeployUeRequest} deployUeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeUp(instance, deployUeRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -383,6 +848,92 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
+         * @summary Stop gNB
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbDown(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbDown(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get gNB container logs
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbLogs(options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployGnbLogs(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get gNB deploy status
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbStatus(options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
+            return localVarFp.deployGnbStatus(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Deploy gNB
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbUp(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbUp(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Stop a UE instance
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeDown(instance: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployUeDown(instance, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary List all deployed UE instances
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeList(options?: RawAxiosRequestConfig): AxiosPromise<DeployUeListResponse> {
+            return localVarFp.deployUeList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get a UE instance\'s container logs
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeLogs(instance: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployUeLogsResponse> {
+            return localVarFp.deployUeLogs(instance, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get a UE instance\'s deploy status
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeStatus(instance: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployUeStatusResponse> {
+            return localVarFp.deployUeStatus(instance, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Deploy a UE instance for one subscriber
+         * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+         * @param {DeployUeRequest} deployUeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployUeUp(instance, deployUeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -445,6 +996,101 @@ export class DefaultApi extends BaseAPI {
      */
     public deployFree5gcUp(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).deployFree5gcUp(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Stop gNB
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbDown(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbDown(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get gNB container logs
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbLogs(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbLogs(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get gNB deploy status
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbStatus(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbStatus(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Deploy gNB
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbUp(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbUp(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Stop a UE instance
+     * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeDown(instance: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeDown(instance, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary List all deployed UE instances
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get a UE instance\'s container logs
+     * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeLogs(instance: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeLogs(instance, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get a UE instance\'s deploy status
+     * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeStatus(instance: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeStatus(instance, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Deploy a UE instance for one subscriber
+     * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
+     * @param {DeployUeRequest} deployUeRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeUp(instance, deployUeRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
