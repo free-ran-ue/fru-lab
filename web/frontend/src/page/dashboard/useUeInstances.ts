@@ -122,6 +122,31 @@ export function useUeInstances() {
     [withPending],
   )
 
+  const stopAll = useCallback(async () => {
+    const runningIds = rows.filter((row) => row.status !== 'stopped').map((row) => row.ueId)
+    if (runningIds.length === 0) return
+
+    setPendingInstances((current) => {
+      const next = { ...current }
+      for (const ueId of runningIds) next[ueId] = true
+      return next
+    })
+    try {
+      const results = await Promise.allSettled(runningIds.map((ueId) => api.deployUeDown(ueId)))
+      const failedCount = results.filter((result) => result.status === 'rejected').length
+      if (failedCount > 0) {
+        throw new Error(`Failed to stop ${failedCount} of ${runningIds.length} UE instance(s)`)
+      }
+    } finally {
+      await refreshInstances()
+      setPendingInstances((current) => {
+        const next = { ...current }
+        for (const ueId of runningIds) next[ueId] = false
+        return next
+      })
+    }
+  }, [rows, refreshInstances])
+
   const fetchLogs = useCallback(async (ueId: string): Promise<string[]> => {
     const response = await api.deployUeLogs(ueId)
     return response.data.lines ?? []
@@ -135,6 +160,7 @@ export function useUeInstances() {
     pendingInstances,
     deploy,
     stop,
+    stopAll,
     fetchLogs,
   }
 }

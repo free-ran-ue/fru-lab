@@ -6,6 +6,7 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
 import TopologyCanvas from './TopologyCanvas'
+import DetailedTopology from './DetailedTopology'
 import DetailPanel from './DetailPanel'
 import UePanel from './UePanel'
 import UeTerminalModal from './UeTerminalModal'
@@ -77,6 +78,15 @@ export default function DashboardPage() {
       addSuccess(`UE ${ueId} stopped`)
     } catch (error) {
       addError(extractErrorMessage(error, `Failed to stop UE ${ueId}`))
+    }
+  }
+
+  async function handleStopAllUe() {
+    try {
+      await ue.stopAll()
+      addSuccess('All UE instances stopped')
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to stop all UE instances'))
     }
   }
 
@@ -201,6 +211,7 @@ export default function DashboardPage() {
                 pendingInstances={ue.pendingInstances}
                 onDeploy={handleDeployUe}
                 onStop={handleStopUe}
+                onStopAll={handleStopAllUe}
                 onOpenTerminal={setUeTerminalInstance}
                 deployBlockedReason={nodes.gnb.status !== 'running' ? 'Deploy gNB before deploying a UE instance' : undefined}
               />
@@ -215,6 +226,21 @@ export default function DashboardPage() {
               />
             )}
           </div>
+        </section>
+
+        <section className={styles.topologySection}>
+          <div className={styles.topologyHeader}>
+            <div>
+              <h3>Detailed Network Topology</h3>
+              <p>The core's SBI service mesh, N2/N3 to the gNB, and Uu to each UE currently attached.</p>
+            </div>
+          </div>
+
+          <DetailedTopology
+            free5gcNfs={free5gc.networkFunctions}
+            gnbStatus={nodes.gnb.status}
+            ueRows={ue.rows}
+          />
         </section>
       </main>
 

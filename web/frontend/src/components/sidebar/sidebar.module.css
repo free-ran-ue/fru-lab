@@ -1,6 +1,11 @@
 .sidebar {
   width: 260px;
   flex-shrink: 0;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   background: #ffffff;
   border-right: 1px solid #e2e8f0;
   padding: 2rem 1.5rem;
@@ -53,6 +58,8 @@
 @media (max-width: 900px) {
   .sidebar {
     width: 100%;
+    height: auto;
+    position: static;
     border-right: 0;
     border-bottom: 1px solid #e2e8f0;
   }

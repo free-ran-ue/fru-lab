@@ -10,14 +10,17 @@ interface UePanelProps {
   pendingInstances: Record<string, boolean>
   onDeploy: (ueId: string) => void
   onStop: (ueId: string) => void
+  onStopAll: () => void
   onOpenTerminal: (ueId: string) => void
   // set when gNB isn't running - deploying a UE now would just fail to dial
   // it, so every "Deploy" button is disabled with this as the reason.
   deployBlockedReason?: string
 }
 
-export default function UePanel({ rows, isLoading, loadError, pendingInstances, onDeploy, onStop, onOpenTerminal, deployBlockedReason }: UePanelProps) {
+export default function UePanel({ rows, isLoading, loadError, pendingInstances, onDeploy, onStop, onStopAll, onOpenTerminal, deployBlockedReason }: UePanelProps) {
   const isDeployBlocked = Boolean(deployBlockedReason)
+  const runningRows = rows.filter((row) => row.status !== 'stopped')
+  const isAnyPending = runningRows.some((row) => pendingInstances[row.ueId])
   return (
     <div className={styles.panel}>
       <div>
@@ -29,7 +32,14 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
       <div className={styles.divider} />
 
       <div>
-        <div className={styles.sectionTitle}>UE Instances</div>
+        <div className={ueStyles.sectionHeader}>
+          <div className={styles.sectionTitle}>UE Instances</div>
+          {runningRows.length > 0 && (
+            <button className={ueStyles.stopAllButton} onClick={onStopAll} disabled={isAnyPending}>
+              {isAnyPending ? 'Stopping…' : 'Stop All'}
+            </button>
+          )}
+        </div>
         {isDeployBlocked && (
           <p className={styles.blockedHint}>{deployBlockedReason}</p>
         )}
