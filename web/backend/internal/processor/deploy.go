@@ -8,14 +8,30 @@ import (
 	"net/http"
 )
 
-func (p *Processor) DeployUp(ctx context.Context, target string) (*model.ResponseDeployAction, *model.ErrorDetail) {
-	p.ProcLog.Debugf("Processing deploy up for target: %s", target)
+// DeployUp deploys target. templateVariant only matters for
+// constant.DEPLOY_TARGET_FREE5GC - it picks which of free5gc's compose
+// templates (basic, ulcl, ...) to materialize; every other target ignores
+// it entirely.
+func (p *Processor) DeployUp(ctx context.Context, target string, templateVariant string) (*model.ResponseDeployAction, *model.ErrorDetail) {
+	p.ProcLog.Debugf("Processing deploy up for target: %s (template: %s)", target, templateVariant)
+
+	if target == constant.DEPLOY_TARGET_FREE5GC {
+		if templateVariant == "" {
+			templateVariant = constant.FREE5GC_TEMPLATE_BASIC
+		}
+		if templateVariant != constant.FREE5GC_TEMPLATE_BASIC && templateVariant != constant.FREE5GC_TEMPLATE_ULCL {
+			return nil, &model.ErrorDetail{
+				HttpStatus: http.StatusBadRequest,
+				Detail:     "Unknown free5gc template " + templateVariant,
+			}
+		}
+	}
 
 	if detail := p.checkDeployPrerequisite(ctx, target); detail != nil {
 		return nil, detail
 	}
 
-	if err := p.FlContext.Up(ctx, target); err != nil {
+	if err := p.FlContext.Up(ctx, target, templateVariant); err != nil {
 		p.ProcLog.Errorf("Failed to deploy up target %s: %v", target, err)
 		return nil, &model.ErrorDetail{
 			HttpStatus: http.StatusInternalServerError,

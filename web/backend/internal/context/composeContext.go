@@ -27,13 +27,36 @@ import (
 	dockernetwork "github.com/docker/docker/api/types/network"
 )
 
-// composeTarget describes one deployable docker compose stack: where its
-// built-in template lives (embedded fs) and what compose project name to
-// use when driving it through the Docker Engine API.
-type composeTarget struct {
-	projectName string
+// composeTemplate is one materializable template: where it lives in the
+// embedded fs.
+type composeTemplate struct {
 	templateFS  embed.FS
 	templateDir string
+}
+
+// composeTarget describes one deployable docker compose stack: its default
+// template and what compose project name to use when driving it through the
+// Docker Engine API. Most targets only ever have one template; free5gc is
+// the exception, with a named variant per entry in variants (see
+// DeployUp/Up's templateVariant parameter).
+type composeTarget struct {
+	projectName string
+	composeTemplate
+	variants map[string]composeTemplate
+}
+
+// template resolves which template to materialize for a deploy: the named
+// variant if the target has one by that name, otherwise the target's
+// default. An unknown/empty variant silently falls back to the default
+// rather than erroring, since most targets (gnb, and free5gc's own
+// Down/Status/Logs calls) never pass one at all.
+func (t composeTarget) template(variant string) composeTemplate {
+	if variant != "" {
+		if v, ok := t.variants[variant]; ok {
+			return v
+		}
+	}
+	return t.composeTemplate
 }
 
 // sharedNetwork describes a docker network that is not owned by any single
@@ -84,13 +107,27 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		targets: map[string]composeTarget{
 			constant.DEPLOY_TARGET_FREE5GC: {
 				projectName: "frulab-free5gc",
-				templateFS:  free5gcTemplateFS,
-				templateDir: "templates/free5gc",
+				composeTemplate: composeTemplate{
+					templateFS:  free5gcTemplateFS,
+					templateDir: "templates/free5gc",
+				},
+				variants: map[string]composeTemplate{
+					constant.FREE5GC_TEMPLATE_BASIC: {
+						templateFS:  free5gcTemplateFS,
+						templateDir: "templates/free5gc",
+					},
+					constant.FREE5GC_TEMPLATE_ULCL: {
+						templateFS:  free5gcUlclTemplateFS,
+						templateDir: "templates/free5gc-ulcl",
+					},
+				},
 			},
 			constant.DEPLOY_TARGET_GNB: {
 				projectName: "frulab-gnb",
-				templateFS:  gnbTemplateFS,
-				templateDir: "templates/gnb",
+				composeTemplate: composeTemplate{
+					templateFS:  gnbTemplateFS,
+					templateDir: "templates/gnb",
+				},
 			},
 		},
 		sharedNetworks: []sharedNetwork{
@@ -151,7 +188,14 @@ func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
 // disk rather than wipe and rewrite it out from under a running mount
 // (os.CopyFS also refuses to write over files that already exist, so a
 // re-materialize always needs a clean directory first).
-func (c *composeContext) loadProject(ctx context.Context, target string, forceMaterialize bool) (*types.Project, error) {
+//
+// variant only matters when a (re)materialize actually happens: Down,
+// Status and Logs always pass "" and get the target's default template
+// whenever nothing is materialized yet (an edge case - e.g. polling status
+// before ever deploying - where the choice is arbitrary since nothing is
+// running). Only Up passes a real variant, since it's the only caller that
+// forces a fresh materialize on every call.
+func (c *composeContext) loadProject(ctx context.Context, target string, variant string, forceMaterialize bool) (*types.Project, error) {
 	t, ok := c.targets[target]
 	if !ok {
 		return nil, fmt.Errorf("unsupported deploy target: %s", target)
@@ -176,7 +220,8 @@ func (c *composeContext) loadProject(ctx context.Context, target string, forceMa
 			return nil, fmt.Errorf("failed to create working dir %s: %v", workingDir, err)
 		}
 
-		templateFS, err := fs.Sub(t.templateFS, t.templateDir)
+		tmpl := t.template(variant)
+		templateFS, err := fs.Sub(tmpl.templateFS, tmpl.templateDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open template for target %s: %v", target, err)
 		}
@@ -240,13 +285,13 @@ func restoreScriptPermissions(dir string) error {
 	})
 }
 
-func (c *composeContext) Up(ctx context.Context, target string) error {
-	project, err := c.loadProject(ctx, target, true)
+func (c *composeContext) Up(ctx context.Context, target string, templateVariant string) error {
+	project, err := c.loadProject(ctx, target, templateVariant, true)
 	if err != nil {
 		return err
 	}
 
-	c.CtxLog.Infof("Deploying target %s (project %s)", target, project.Name)
+	c.CtxLog.Infof("Deploying target %s (project %s, template %s)", target, project.Name, templateVariant)
 	return c.service.Up(ctx, project, api.UpOptions{
 		Create: api.CreateOptions{},
 		Start: api.StartOptions{
@@ -256,7 +301,7 @@ func (c *composeContext) Up(ctx context.Context, target string) error {
 }
 
 func (c *composeContext) Down(ctx context.Context, target string) error {
-	project, err := c.loadProject(ctx, target, false)
+	project, err := c.loadProject(ctx, target, "", false)
 	if err != nil {
 		return err
 	}
@@ -273,7 +318,7 @@ type ComposeStatusResult struct {
 }
 
 func (c *composeContext) Status(ctx context.Context, target string) (*ComposeStatusResult, error) {
-	project, err := c.loadProject(ctx, target, false)
+	project, err := c.loadProject(ctx, target, "", false)
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +364,7 @@ const logTailLines = "200"
 // services filters to specific compose services (e.g. just "amf") - nil or
 // empty means every service in the project, matching the previous behavior.
 func (c *composeContext) Logs(ctx context.Context, target string, services []string) ([]string, error) {
-	project, err := c.loadProject(ctx, target, false)
+	project, err := c.loadProject(ctx, target, "", false)
 	if err != nil {
 		return nil, err
 	}

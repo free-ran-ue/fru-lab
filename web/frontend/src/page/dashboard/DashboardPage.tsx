@@ -14,6 +14,7 @@ import { useFree5gcStatus } from './useFree5gcStatus'
 import { useGnbStatus } from './useGnbStatus'
 import { useUeInstances, type UeRow } from './useUeInstances'
 import { getStatusMeta } from './statusMeta'
+import { FREE5GC_TEMPLATE_OPTIONS, detectFree5gcTemplate, type Free5gcTemplate } from './free5gcTemplate'
 import type { DeploymentNode, NodeId, NodeStatus } from './types'
 import styles from './dashboard-page.module.css'
 
@@ -53,6 +54,10 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [selected, setSelected] = useState<NodeId>('core')
   const [ueTerminalInstance, setUeTerminalInstance] = useState<string | null>(null)
+  // which free5gc template to deploy next time - only relevant while core
+  // is stopped; once running, the actual template is read back from its
+  // live services instead (see detectFree5gcTemplate).
+  const [selectedTemplate, setSelectedTemplate] = useState<Free5gcTemplate>('basic')
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const free5gc = useFree5gcStatus()
@@ -98,7 +103,7 @@ export default function DashboardPage() {
         await activeTarget.stop()
         addSuccess(`${activeTarget.node.label} stopped`)
       } else {
-        await activeTarget.deploy()
+        await activeTarget.deploy(selected === 'core' ? selectedTemplate : undefined)
         addSuccess(`${activeTarget.node.label} deploy started`)
       }
     } catch (error) {
@@ -132,6 +137,9 @@ export default function DashboardPage() {
   const healthyCount = free5gc.networkFunctions.filter((nf) => nf.status === 'running').length
   const totalNfs = free5gc.networkFunctions.length
   const unhealthyCount = totalNfs - healthyCount
+  // while nothing is deployed yet, describe what the dropdown is about to
+  // deploy; once something's actually running, describe what's really there.
+  const coreTemplateLabel = FREE5GC_TEMPLATE_OPTIONS.find((option) => option.value === (detectFree5gcTemplate(free5gc.networkFunctions) ?? selectedTemplate))?.label ?? 'Basic'
 
   return (
     <div className={styles.layout}>
@@ -155,7 +163,7 @@ export default function DashboardPage() {
           <StatsCard
             title="Core Network"
             value={getStatusLabel(nodes.core.status)}
-            description="free5GC · basic template"
+            description={`free5GC · ${coreTemplateLabel} template`}
             valueColor={getStatusMeta(nodes.core.status).color}
           />
           <StatsCard
@@ -223,6 +231,9 @@ export default function DashboardPage() {
                 onPrimaryAction={activeTarget ? handlePrimaryAction : undefined}
                 isActionPending={activeTarget?.isActionPending ?? false}
                 actionBlockedReason={actionBlockedReason}
+                templateOptions={selected === 'core' ? FREE5GC_TEMPLATE_OPTIONS : undefined}
+                selectedTemplate={selected === 'core' ? selectedTemplate : undefined}
+                onTemplateChange={selected === 'core' ? (value) => setSelectedTemplate(value as Free5gcTemplate) : undefined}
               />
             )}
           </div>

@@ -170,23 +170,32 @@ This endpoint does not have any parameters.
 # **deployFree5gcUp**
 > MessageResponse deployFree5gcUp()
 
+Deploys one of free5gc\'s compose templates (see RequestDeployFree5gc.template). Omitting the request body deploys \"basic\".
 
 ### Example
 
 ```typescript
 import {
     DefaultApi,
-    Configuration
+    Configuration,
+    RequestDeployFree5gc
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployFree5gcUp();
+let requestDeployFree5gc: RequestDeployFree5gc; // (optional)
+
+const { status, data } = await apiInstance.deployFree5gcUp(
+    requestDeployFree5gc
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **requestDeployFree5gc** | **RequestDeployFree5gc**|  | |
 
 
 ### Return type
@@ -199,7 +208,7 @@ This endpoint does not have any parameters.
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 
@@ -207,6 +216,7 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+|**400** | Bad Request - unknown template |  -  |
 |**401** | Unauthorized |  -  |
 |**500** | Internal Server Error |  -  |
 

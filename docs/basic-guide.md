@@ -28,7 +28,14 @@ If the current state doesn't satisfy the order, the corresponding button is disa
 
 ## 4. Deploy Core / gNB
 
-Click the Core or gNB node in the topology to see its current status and container details, with Deploy / Stop buttons. Once Core is deployed, its 9 network functions (AMF, SMF, UPF, etc.) show their health below.
+Click the Core or gNB node in the topology to see its current status and container details, with Deploy / Stop buttons. Once Core is deployed, its network functions (AMF, SMF, UPF, etc.) show their health below.
+
+While Core is stopped, a "Template" dropdown appears next to "Deploy Service" so you can pick which compose template to deploy:
+
+- **Basic** - a single UPF (default).
+- **ULCL** - the data plane is split into an Intermediate UPF (I-UPF) and a PDU Session Anchor UPF (PSA-UPF), chained over N9.
+
+The dropdown is only shown while stopped - once deployed, which template is running is shown in the "Core Network" stats card and reflected in the detailed topology below.
 
 ![Core detail panel](./images/core-detail-panel.png)
 
@@ -46,7 +53,7 @@ Back on the Dashboard, click the UE node to see all subscribers listed on the ri
 
 ## 7. Detailed network topology
 
-Below the main topology, a more detailed diagram shows the live SBI service mesh, N2/N3 links, and the Uu link between gNB and each currently running UE.
+Below the main topology, a more detailed diagram shows the live SBI service mesh, N2/N3 links, and the Uu link between gNB and each currently running UE. It automatically adapts to whichever Core template is deployed - with the ULCL template, it shows the I-UPF / PSA-UPF chain and the N9 link between them instead of a single UPF.
 
 ![Detailed network topology](./images/detailed-topology.png)
 

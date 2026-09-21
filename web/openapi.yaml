@@ -54,12 +54,25 @@ paths:
   /api/deploy/free5gc:
     post:
       summary: Deploy free5GC
+      description: Deploys one of free5gc's compose templates (see RequestDeployFree5gc.template). Omitting the request body deploys "basic".
       operationId: deployFree5gcUp
       security:
         - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestDeployFree5gc'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Bad Request - unknown template
           content:
             application/json:
               schema:
@@ -637,6 +650,16 @@ components:
             type: string
           example:
             - 'amf         | [INFO] AMF started, PLMN 208/93, listening on N2'
+    RequestDeployFree5gc:
+      type: object
+      properties:
+        template:
+          type: string
+          description: Which free5gc compose template to deploy. Defaults to "basic" when omitted.
+          enum:
+            - basic
+            - ulcl
+          example: basic
     DeployUeRequest:
       type: object
       required:

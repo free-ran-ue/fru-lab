@@ -14,9 +14,14 @@ interface DetailPanelProps {
   // still dialing, or deploying a gNB before the core is up. Disables the
   // button and explains why instead of only erroring after the click.
   actionBlockedReason?: string
+  // only free5gc has more than one deploy template right now - every other
+  // target leaves these unset, and the picker doesn't render at all.
+  templateOptions?: { value: string; label: string }[]
+  selectedTemplate?: string
+  onTemplateChange?: (value: string) => void
 }
 
-export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false, actionBlockedReason }: DetailPanelProps) {
+export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false, actionBlockedReason, templateOptions, selectedTemplate, onTemplateChange }: DetailPanelProps) {
   const meta = getStatusMeta(node.status)
   const isRunning = node.status === 'running'
   const isActionBlocked = Boolean(actionBlockedReason)
@@ -64,6 +69,21 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrim
       </div>
 
       <div className={styles.actions}>
+        {templateOptions && !isRunning && (
+          <label className={styles.templateSelector}>
+            <span>Template</span>
+            <select
+              className={styles.templateSelect}
+              value={selectedTemplate}
+              onChange={(event) => onTemplateChange?.(event.target.value)}
+              disabled={isActionPending}
+            >
+              {templateOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {isActionBlocked && (
           <p className={styles.blockedHint}>{actionBlockedReason}</p>
         )}

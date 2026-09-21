@@ -137,3 +137,28 @@
   gap: 0.5rem;
   margin-top: auto;
 }
+
+.templateSelector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.templateSelect {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1e293b;
+  background: #ffffff;
+}
+
+.templateSelect:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}

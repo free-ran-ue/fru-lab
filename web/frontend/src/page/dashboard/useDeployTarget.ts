@@ -6,7 +6,9 @@ import type { DeploymentNode, NetworkFunction, NodeId, NodeStatus } from './type
 const POLL_INTERVAL_MS = 4000
 
 interface DeployApi {
-  up: () => AxiosPromise<MessageResponse>
+  // variant is ignored by targets that only ever have one template (gnb) -
+  // only free5gc's `up` actually reads it.
+  up: (variant?: string) => AxiosPromise<MessageResponse>
   down: () => AxiosPromise<MessageResponse>
   status: () => AxiosPromise<DeployStatusResponse>
   logs: () => AxiosPromise<DeployLogsResponse>
@@ -64,10 +66,10 @@ export function useDeployTarget(
     return () => clearInterval(timer)
   }, [refresh])
 
-  const deploy = useCallback(async () => {
+  const deploy = useCallback(async (variant?: string) => {
     setIsActionPending(true)
     try {
-      await deployApi.up()
+      await deployApi.up(variant)
       await refresh()
     } finally {
       setIsActionPending(false)

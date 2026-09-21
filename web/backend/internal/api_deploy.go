@@ -3,6 +3,8 @@ package internal
 import (
 	"backend/constant"
 	"backend/model"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/free-ran-ue/util"
@@ -93,7 +95,16 @@ func (b *backend) getDeployRoutes() util.Routes {
 }
 
 func (b *backend) handleDeployFree5gcUp(c *gin.Context) {
-	response, errDetail := b.Processor.DeployUp(c.Request.Context(), constant.DEPLOY_TARGET_FREE5GC)
+	var req model.RequestDeployFree5gc
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		b.DeployLog.Warnf("Deploy up failed for %s: invalid request body: %v", c.ClientIP(), err)
+		c.JSON(http.StatusBadRequest, model.ResponseDeployAction{
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	response, errDetail := b.Processor.DeployUp(c.Request.Context(), constant.DEPLOY_TARGET_FREE5GC, req.Template)
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy up failed for %s: %s", c.ClientIP(), errDetail.Detail)
 		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{
@@ -157,7 +168,7 @@ func (b *backend) handleDeployFree5gcStatus(c *gin.Context) {
 }
 
 func (b *backend) handleDeployGnbUp(c *gin.Context) {
-	response, errDetail := b.Processor.DeployUp(c.Request.Context(), constant.DEPLOY_TARGET_GNB)
+	response, errDetail := b.Processor.DeployUp(c.Request.Context(), constant.DEPLOY_TARGET_GNB, "")
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy up failed for %s: %s", c.ClientIP(), errDetail.Detail)
 		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{

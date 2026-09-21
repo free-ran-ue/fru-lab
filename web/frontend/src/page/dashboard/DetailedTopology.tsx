@@ -1,4 +1,5 @@
 import { getStatusMeta } from './statusMeta'
+import { detectFree5gcTemplate } from './free5gcTemplate'
 import type { NetworkFunction, NodeStatus } from './types'
 import type { UeRow } from './useUeInstances'
 import styles from './detailed-topology.module.css'
@@ -10,10 +11,10 @@ interface DetailedTopologyProps {
 }
 
 // The 9 SBI-connected control-plane NFs, split across the two rows that
-// straddle the SBI bus line. UPF is deliberately excluded - it's the data
-// plane, controlled over N4 (PFCP), not part of the SBI mesh the others
-// talk over. SMF/AMF sit in row 2 (closest to the bus/RAN side) so their
-// N4/N2 drops down to UPF/gNB stay short.
+// straddle the SBI bus line. The data-plane UPF(s) are deliberately
+// excluded - they're controlled over N4 (PFCP), not part of the SBI mesh
+// the others talk over, and rendered separately in row 3 below. SMF/AMF sit
+// in row 2 (closest to the bus/RAN side) so their N4/N2 drops stay short.
 const ROW1_NFS = ['AUSF', 'UDM', 'UDR', 'NRF', 'NSSF']
 const ROW2_NFS = ['PCF', 'AMF', 'SMF', 'CHF']
 
@@ -26,6 +27,7 @@ const BUS_Y = 92
 const ROW2_Y = 128
 const ROW3_Y = 216
 const ROW3_H = 40
+const ROW3_GAP = 90
 const ROW4_Y = 320
 const UE_BOX = { width: 74, height: 32 }
 
@@ -68,19 +70,25 @@ function InterfaceLabel({ x, y, text }: { x: number; y: number; text: string }) 
 
 export default function DetailedTopology({ free5gcNfs, gnbStatus, ueRows }: DetailedTopologyProps) {
   const nfStatusByName = new Map(free5gcNfs.map((nf) => [nf.name, nf.status]))
-  const upfStatus = nfStatusByName.get('UPF') ?? 'stopped'
+
+  // ULCL splits the data plane into an intermediate UPF (N3-facing) and a
+  // PDU session anchor UPF (N6-facing), chained by N9.
+  const isUlcl = detectFree5gcTemplate(free5gcNfs) === 'ulcl'
 
   const smfIndex = ROW2_NFS.indexOf('SMF')
   const amfIndex = ROW2_NFS.indexOf('AMF')
   const smfCenterX = rowBoxCenterX(smfIndex, ROW2_NFS.length)
   const amfCenterX = rowBoxCenterX(amfIndex, ROW2_NFS.length)
 
-  // Row 3 reads left to right as gNB, UPF, DN: gNB sits under AMF (short N2
-  // drop), UPF sits under SMF (short N4 drop) and to gNB's right (N3), and
-  // DN hangs off UPF's far right (N6).
+  // Row 3 reads left to right as gNB, UPF(s), DN: gNB sits under AMF (short
+  // N2 drop), the first UPF sits under SMF (short N4 drop) and to gNB's
+  // right (N3). In ULCL mode a second UPF (the PSA) chains off the first
+  // via N9, and DN hangs off whichever UPF is last (N6).
   const gnbBox = { x: amfCenterX - 50, y: ROW3_Y, width: 100, height: ROW3_H }
-  const upfBox = { x: smfCenterX - 42, y: ROW3_Y, width: 84, height: ROW3_H }
-  const dnBox = { x: Math.min(VIEWBOX_WIDTH - NF_MARGIN_X - 70, upfBox.x + upfBox.width + 90), y: ROW3_Y, width: 70, height: ROW3_H }
+  const iUpfBox = { x: smfCenterX - 42, y: ROW3_Y, width: 84, height: ROW3_H }
+  const psaUpfBox = { x: iUpfBox.x + iUpfBox.width + ROW3_GAP, y: ROW3_Y, width: 84, height: ROW3_H }
+  const lastUpfBox = isUlcl ? psaUpfBox : iUpfBox
+  const dnBox = { x: Math.min(VIEWBOX_WIDTH - NF_MARGIN_X - 70, lastUpfBox.x + lastUpfBox.width + ROW3_GAP), y: ROW3_Y, width: 70, height: ROW3_H }
 
   const gnbCenterX = gnbBox.x + gnbBox.width / 2
   const gnbBottomY = gnbBox.y + gnbBox.height
@@ -130,27 +138,50 @@ export default function DetailedTopology({ free5gcNfs, gnbStatus, ueRows }: Deta
           )
         })}
 
-        {/* N4: SMF -> UPF */}
-        <line x1={smfCenterX} y1={ROW2_Y + NF_BOX.height} x2={upfBox.x + upfBox.width / 2} y2={upfBox.y} className={styles.connectorLine} />
-        <InterfaceLabel x={smfCenterX + 14} y={(ROW2_Y + NF_BOX.height + upfBox.y) / 2} text="N4" />
+        {/* N4: SMF -> first UPF (I-UPF in ULCL mode, the sole UPF otherwise) */}
+        <line x1={smfCenterX} y1={ROW2_Y + NF_BOX.height} x2={iUpfBox.x + iUpfBox.width / 2} y2={iUpfBox.y} className={styles.connectorLine} />
+        <InterfaceLabel x={smfCenterX + 14} y={(ROW2_Y + NF_BOX.height + iUpfBox.y) / 2} text="N4" />
+
+        {/* N4: SMF -> PSA-UPF too, ULCL only - a real PFCP session, same as the I-UPF one */}
+        {isUlcl && (
+          <>
+            <line x1={smfCenterX} y1={ROW2_Y + NF_BOX.height} x2={psaUpfBox.x + psaUpfBox.width / 2} y2={psaUpfBox.y} className={styles.connectorLine} />
+            <InterfaceLabel x={(smfCenterX + psaUpfBox.x + psaUpfBox.width / 2) / 2} y={ROW2_Y + NF_BOX.height + 14} text="N4" />
+          </>
+        )}
 
         {/* N2: AMF -> gNB */}
         <line x1={amfCenterX} y1={ROW2_Y + NF_BOX.height} x2={gnbCenterX} y2={gnbBox.y} className={styles.connectorLine} />
         <InterfaceLabel x={amfCenterX + 14} y={(ROW2_Y + NF_BOX.height + gnbBox.y) / 2} text="N2" />
 
-        {/* N3: gNB -> UPF (row 3, side by side) */}
-        <line x1={gnbBox.x + gnbBox.width} y1={gnbBox.y + gnbBox.height / 2} x2={upfBox.x} y2={upfBox.y + upfBox.height / 2} className={styles.connectorLine} />
-        <InterfaceLabel x={(gnbBox.x + gnbBox.width + upfBox.x) / 2} y={upfBox.y + upfBox.height / 2 - 8} text="N3" />
+        {/* N3: gNB -> first UPF (row 3, side by side) */}
+        <line x1={gnbBox.x + gnbBox.width} y1={gnbBox.y + gnbBox.height / 2} x2={iUpfBox.x} y2={iUpfBox.y + iUpfBox.height / 2} className={styles.connectorLine} />
+        <InterfaceLabel x={(gnbBox.x + gnbBox.width + iUpfBox.x) / 2} y={iUpfBox.y + iUpfBox.height / 2 - 8} text="N3" />
 
-        {/* N6: UPF -> DN (external, always shown as a static endpoint) */}
-        <line x1={upfBox.x + upfBox.width} y1={upfBox.y + upfBox.height / 2} x2={dnBox.x} y2={dnBox.y + dnBox.height / 2} className={styles.connectorLineDashed} />
-        <InterfaceLabel x={(upfBox.x + upfBox.width + dnBox.x) / 2} y={upfBox.y + upfBox.height / 2 - 8} text="N6" />
+        {/* N9: I-UPF -> PSA-UPF, ULCL only */}
+        {isUlcl && (
+          <>
+            <line x1={iUpfBox.x + iUpfBox.width} y1={iUpfBox.y + iUpfBox.height / 2} x2={psaUpfBox.x} y2={psaUpfBox.y + psaUpfBox.height / 2} className={styles.connectorLine} />
+            <InterfaceLabel x={(iUpfBox.x + iUpfBox.width + psaUpfBox.x) / 2} y={psaUpfBox.y + psaUpfBox.height / 2 - 8} text="N9" />
+          </>
+        )}
+
+        {/* N6: last UPF -> DN (external, always shown as a static endpoint) */}
+        <line x1={lastUpfBox.x + lastUpfBox.width} y1={lastUpfBox.y + lastUpfBox.height / 2} x2={dnBox.x} y2={dnBox.y + dnBox.height / 2} className={styles.connectorLineDashed} />
+        <InterfaceLabel x={(lastUpfBox.x + lastUpfBox.width + dnBox.x) / 2} y={lastUpfBox.y + lastUpfBox.height / 2 - 8} text="N6" />
         <g>
           <rect x={dnBox.x} y={dnBox.y} width={dnBox.width} height={dnBox.height} rx={7} className={styles.dnBox} />
           <text x={dnBox.x + dnBox.width / 2} y={dnBox.y + dnBox.height / 2} dominantBaseline="middle" textAnchor="middle" className={styles.dnLabel}>DN</text>
         </g>
 
-        <NodeBox x={upfBox.x} y={upfBox.y} width={upfBox.width} height={upfBox.height} label="UPF" status={upfStatus} />
+        {isUlcl ? (
+          <>
+            <NodeBox x={iUpfBox.x} y={iUpfBox.y} width={iUpfBox.width} height={iUpfBox.height} label="I-UPF" status={nfStatusByName.get('I-UPF') ?? 'stopped'} />
+            <NodeBox x={psaUpfBox.x} y={psaUpfBox.y} width={psaUpfBox.width} height={psaUpfBox.height} label="PSA-UPF" status={nfStatusByName.get('PSA-UPF') ?? 'stopped'} />
+          </>
+        ) : (
+          <NodeBox x={iUpfBox.x} y={iUpfBox.y} width={iUpfBox.width} height={iUpfBox.height} label="UPF" status={nfStatusByName.get('UPF') ?? 'stopped'} />
+        )}
         <NodeBox x={gnbBox.x} y={gnbBox.y} width={gnbBox.width} height={gnbBox.height} label="gNB" status={gnbStatus} />
 
         {/* Uu: gNB -> each currently-up UE */}

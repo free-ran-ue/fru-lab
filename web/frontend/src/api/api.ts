@@ -90,6 +90,20 @@ export interface LoginResponse {
 export interface MessageResponse {
     'message'?: string;
 }
+export interface RequestDeployFree5gc {
+    /**
+     * Which free5gc compose template to deploy. Defaults to \"basic\" when omitted.
+     */
+    'template'?: RequestDeployFree5gcTemplateEnum;
+}
+
+export const RequestDeployFree5gcTemplateEnum = {
+    Basic: 'basic',
+    Ulcl: 'ulcl',
+} as const;
+
+export type RequestDeployFree5gcTemplateEnum = typeof RequestDeployFree5gcTemplateEnum[keyof typeof RequestDeployFree5gcTemplateEnum];
+
 export interface ServiceStatus {
     'name': string;
     'status': string;
@@ -208,12 +222,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         * Deploys one of free5gc\'s compose templates (see RequestDeployFree5gc.template). Omitting the request body deploys \"basic\".
          * @summary Deploy free5GC
+         * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployFree5gcUp: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        deployFree5gcUp: async (requestDeployFree5gc?: RequestDeployFree5gc, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/deploy/free5gc`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -230,11 +245,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
+            localVarHeaderParameter['Content-Type'] = 'application/json';
             localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestDeployFree5gc, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -794,13 +811,14 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * Deploys one of free5gc\'s compose templates (see RequestDeployFree5gc.template). Omitting the request body deploys \"basic\".
          * @summary Deploy free5GC
+         * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployFree5gcUp(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcUp(options);
+        async deployFree5gcUp(requestDeployFree5gc?: RequestDeployFree5gc, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployFree5gcUp(requestDeployFree5gc, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployFree5gcUp']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1020,13 +1038,14 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployFree5gcStatus(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * Deploys one of free5gc\'s compose templates (see RequestDeployFree5gc.template). Omitting the request body deploys \"basic\".
          * @summary Deploy free5GC
+         * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployFree5gcUp(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployFree5gcUp(options).then((request) => request(axios, basePath));
+        deployFree5gcUp(requestDeployFree5gc?: RequestDeployFree5gc, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployFree5gcUp(requestDeployFree5gc, options).then((request) => request(axios, basePath));
         },
         /**
          * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
@@ -1202,13 +1221,14 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     * Deploys one of free5gc\'s compose templates (see RequestDeployFree5gc.template). Omitting the request body deploys \"basic\".
      * @summary Deploy free5GC
+     * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployFree5gcUp(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployFree5gcUp(options).then((request) => request(this.axios, this.basePath));
+    public deployFree5gcUp(requestDeployFree5gc?: RequestDeployFree5gc, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployFree5gcUp(requestDeployFree5gc, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

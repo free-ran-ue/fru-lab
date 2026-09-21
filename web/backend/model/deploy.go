@@ -6,6 +6,13 @@ type ResponseDeployAction struct {
 	Message string `json:"message"`
 }
 
+// RequestDeployFree5gc selects which of free5gc's compose templates to
+// deploy (e.g. "basic", "ulcl"). Omitting Template (or the whole body)
+// defaults to "basic".
+type RequestDeployFree5gc struct {
+	Template string `json:"template"`
+}
+
 type ServiceStatus struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`

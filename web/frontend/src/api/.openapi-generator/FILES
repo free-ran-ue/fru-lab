@@ -16,6 +16,7 @@ docs/ImageListResponse.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/MessageResponse.md
+docs/RequestDeployFree5gc.md
 docs/ServiceStatus.md
 git_push.sh
 index.ts
