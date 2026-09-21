@@ -29,3 +29,4 @@ Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulat
 ## Guide
 
 - [Basic Guide](docs/basic-guide.md) - how to log in and perform the core deploy / monitor workflow.
+- [Images Guide](docs/images-guide.md) - how to check, pull, and clear the docker images this app deploys.

@@ -24,6 +24,7 @@ export default function Sidebar() {
           <NavLink to="/" end className={navItemClassName}>Dashboard</NavLink>
           <NavLink to="/subscribers" className={navItemClassName}>5G Subscriber</NavLink>
           <NavLink to="/logs" className={navItemClassName}>Logs</NavLink>
+          <NavLink to="/images" className={navItemClassName}>Images</NavLink>
         </nav>
       </div>
 

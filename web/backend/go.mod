@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/Alonza0314/logger-go/v2 v2.1.0
 	github.com/compose-spec/compose-go/v2 v2.9.1
+	github.com/containerd/errdefs v1.0.0
 	github.com/docker/cli v28.5.1+incompatible
 	github.com/docker/compose/v2 v2.40.3
 	github.com/docker/docker v28.5.1+incompatible
@@ -47,7 +48,6 @@ require (
 	github.com/containerd/containerd/api v1.9.0 // indirect
 	github.com/containerd/containerd/v2 v2.1.4 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v1.0.0-rc.1 // indirect

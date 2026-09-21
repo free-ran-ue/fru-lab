@@ -58,6 +58,27 @@ export interface DeployUeStatusResponse {
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
 }
+export interface ImageInfo {
+    'key': string;
+    'name': string;
+    'image': string;
+    'group': string;
+    /**
+     * Whether the image is currently present in the local docker image cache.
+     */
+    'present': boolean;
+    /**
+     * Image size in bytes. Omitted when not present locally.
+     */
+    'size'?: number;
+    /**
+     * When the locally cached image was built. Omitted when not present locally.
+     */
+    'createdAt'?: string;
+}
+export interface ImageListResponse {
+    'images'?: Array<ImageInfo>;
+}
 export interface LoginRequest {
     'username': string;
     'password': string;
@@ -80,7 +101,7 @@ export interface ServiceStatus {
 export const DefaultApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
         /**
-         * 
+         * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -221,7 +242,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
          * @summary Stop gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -328,7 +349,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
          * @summary Deploy gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -510,7 +531,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         * Fails with 409 if gNB isn\'t running yet - deploy gNB first.
          * @summary Deploy a UE instance for one subscriber
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
          * @param {DeployUeRequest} deployUeRequest 
@@ -546,6 +567,116 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(deployUeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
+         * @summary List the images this app deploys
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        imageList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/images`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Re-pulls the image\'s pinned tag from its registry.
+         * @summary Pull an image
+         * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        imagePull: async (key: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'key' is not null or undefined
+            assertParamExists('imagePull', 'key', key)
+            const localVarPath = `/api/images/{key}/pull`
+                .replace('{key}', encodeURIComponent(String(key)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Removes the image from the local docker image cache, forcing the next deploy to pull it fresh. Fails if a container is currently using it.
+         * @summary Clear a locally cached image
+         * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        imageRemove: async (key: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'key' is not null or undefined
+            assertParamExists('imageRemove', 'key', key)
+            const localVarPath = `/api/images/{key}`
+                .replace('{key}', encodeURIComponent(String(key)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -626,7 +757,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = DefaultApiAxiosParamCreator(configuration)
     return {
         /**
-         * 
+         * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -675,7 +806,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
          * @summary Stop gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -712,7 +843,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
          * @summary Deploy gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -775,7 +906,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * Fails with 409 if gNB isn\'t running yet - deploy gNB first.
          * @summary Deploy a UE instance for one subscriber
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
          * @param {DeployUeRequest} deployUeRequest 
@@ -786,6 +917,44 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeUp(instance, deployUeRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
+         * @summary List the images this app deploys
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async imageList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ImageListResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.imageList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.imageList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Re-pulls the image\'s pinned tag from its registry.
+         * @summary Pull an image
+         * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async imagePull(key: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.imagePull(key, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.imagePull']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Removes the image from the local docker image cache, forcing the next deploy to pull it fresh. Fails if a container is currently using it.
+         * @summary Clear a locally cached image
+         * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async imageRemove(key: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.imageRemove(key, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.imageRemove']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -823,7 +992,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
     const localVarFp = DefaultApiFp(configuration)
     return {
         /**
-         * 
+         * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -860,7 +1029,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployFree5gcUp(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
          * @summary Stop gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -888,7 +1057,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployGnbStatus(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
          * @summary Deploy gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -936,7 +1105,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployUeStatus(instance, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * Fails with 409 if gNB isn\'t running yet - deploy gNB first.
          * @summary Deploy a UE instance for one subscriber
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
          * @param {DeployUeRequest} deployUeRequest 
@@ -945,6 +1114,35 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
             return localVarFp.deployUeUp(instance, deployUeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
+         * @summary List the images this app deploys
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        imageList(options?: RawAxiosRequestConfig): AxiosPromise<ImageListResponse> {
+            return localVarFp.imageList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Re-pulls the image\'s pinned tag from its registry.
+         * @summary Pull an image
+         * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        imagePull(key: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.imagePull(key, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Removes the image from the local docker image cache, forcing the next deploy to pull it fresh. Fails if a container is currently using it.
+         * @summary Clear a locally cached image
+         * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        imageRemove(key: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.imageRemove(key, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -973,7 +1171,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
  */
 export class DefaultApi extends BaseAPI {
     /**
-     * 
+     * Fails with 409 if gNB is still running - gNB must be stopped first.
      * @summary Stop free5GC
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1014,7 +1212,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
      * @summary Stop gNB
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1045,7 +1243,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
      * @summary Deploy gNB
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1098,7 +1296,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     * Fails with 409 if gNB isn\'t running yet - deploy gNB first.
      * @summary Deploy a UE instance for one subscriber
      * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
      * @param {DeployUeRequest} deployUeRequest 
@@ -1107,6 +1305,38 @@ export class DefaultApi extends BaseAPI {
      */
     public deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).deployUeUp(instance, deployUeRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
+     * @summary List the images this app deploys
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public imageList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).imageList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Re-pulls the image\'s pinned tag from its registry.
+     * @summary Pull an image
+     * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public imagePull(key: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).imagePull(key, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Removes the image from the local docker image cache, forcing the next deploy to pull it fresh. Fails if a container is currently using it.
+     * @summary Clear a locally cached image
+     * @param {string} key The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;).
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public imageRemove(key: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).imageRemove(key, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

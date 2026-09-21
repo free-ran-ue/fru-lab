@@ -17,12 +17,16 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**deployUeLogs**](#deployuelogs) | **GET** /api/deploy/ue/{instance}/logs | Get a UE instance\&#39;s container logs|
 |[**deployUeStatus**](#deployuestatus) | **GET** /api/deploy/ue/{instance}/status | Get a UE instance\&#39;s deploy status|
 |[**deployUeUp**](#deployueup) | **POST** /api/deploy/ue/{instance} | Deploy a UE instance for one subscriber|
+|[**imageList**](#imagelist) | **GET** /api/images | List the images this app deploys|
+|[**imagePull**](#imagepull) | **POST** /api/images/{key}/pull | Pull an image|
+|[**imageRemove**](#imageremove) | **DELETE** /api/images/{key} | Clear a locally cached image|
 |[**login**](#login) | **POST** /api/login | Login|
 |[**logout**](#logout) | **POST** /api/logout | Logout|
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()
 
+Fails with 409 if gNB is still running - gNB must be stopped first.
 
 ### Example
 
@@ -61,6 +65,7 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
 |**401** | Unauthorized |  -  |
+|**409** | Conflict - gNB is still running |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -210,6 +215,7 @@ This endpoint does not have any parameters.
 # **deployGnbDown**
 > MessageResponse deployGnbDown()
 
+Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
 
 ### Example
 
@@ -248,6 +254,7 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
 |**401** | Unauthorized |  -  |
+|**409** | Conflict - a UE instance is still running |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -352,6 +359,7 @@ This endpoint does not have any parameters.
 # **deployGnbUp**
 > MessageResponse deployGnbUp()
 
+Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
 
 ### Example
 
@@ -390,6 +398,7 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
 |**401** | Unauthorized |  -  |
+|**409** | Conflict - the core network isn\&#39;t running yet |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -598,6 +607,7 @@ const { status, data } = await apiInstance.deployUeStatus(
 # **deployUeUp**
 > MessageResponse deployUeUp(deployUeRequest)
 
+Fails with 409 if gNB isn\'t running yet - deploy gNB first.
 
 ### Example
 
@@ -648,6 +658,161 @@ const { status, data } = await apiInstance.deployUeUp(
 |**200** | OK |  -  |
 |**400** | Bad Request |  -  |
 |**401** | Unauthorized |  -  |
+|**409** | Conflict - gNB isn\&#39;t running yet |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **imageList**
+> ImageListResponse imageList()
+
+Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.imageList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**ImageListResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **imagePull**
+> MessageResponse imagePull()
+
+Re-pulls the image\'s pinned tag from its registry.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let key: string; //The image\'s stable route key, as returned by GET /api/images (e.g. \"amf\", \"mongo\", \"free-ran-ue\"). (default to undefined)
+
+const { status, data } = await apiInstance.imagePull(
+    key
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **key** | [**string**] | The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;). | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**404** | Not Found - unknown image key |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **imageRemove**
+> MessageResponse imageRemove()
+
+Removes the image from the local docker image cache, forcing the next deploy to pull it fresh. Fails if a container is currently using it.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let key: string; //The image\'s stable route key, as returned by GET /api/images (e.g. \"amf\", \"mongo\", \"free-ran-ue\"). (default to undefined)
+
+const { status, data } = await apiInstance.imageRemove(
+    key
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **key** | [**string**] | The image\&#39;s stable route key, as returned by GET /api/images (e.g. \&quot;amf\&quot;, \&quot;mongo\&quot;, \&quot;free-ran-ue\&quot;). | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**404** | Not Found - unknown image key |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

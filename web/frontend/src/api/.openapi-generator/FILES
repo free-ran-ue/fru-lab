@@ -11,6 +11,8 @@ docs/DeployUeListResponse.md
 docs/DeployUeLogsResponse.md
 docs/DeployUeRequest.md
 docs/DeployUeStatusResponse.md
+docs/ImageInfo.md
+docs/ImageListResponse.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/MessageResponse.md

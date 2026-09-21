@@ -435,6 +435,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployUeLogsResponse'
 
+  /api/images:
+    get:
+      summary: List the images this app deploys
+      description: Reports every image pinned by the compose templates (free5gc's NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
+      operationId: imageList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageListResponse'
+
+  /api/images/{key}:
+    delete:
+      summary: Clear a locally cached image
+      description: Removes the image from the local docker image cache, forcing the next deploy to pull it fresh. Fails if a container is currently using it.
+      operationId: imageRemove
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ImageKey'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found - unknown image key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/images/{key}/pull:
+    post:
+      summary: Pull an image
+      description: Re-pulls the image's pinned tag from its registry.
+      operationId: imagePull
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ImageKey'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found - unknown image key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -455,6 +552,14 @@ components:
       in: query
       required: false
       description: Filter logs down to one compose service (NF), e.g. "amf". Omit for every service in the project.
+      schema:
+        type: string
+        example: amf
+    ImageKey:
+      name: key
+      in: path
+      required: true
+      description: The image's stable route key, as returned by GET /api/images (e.g. "amf", "mongo", "free-ran-ue").
       schema:
         type: string
         example: amf
@@ -614,3 +719,42 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeployUeStatusResponse'
+    ImageInfo:
+      type: object
+      required:
+        - key
+        - name
+        - image
+        - group
+        - present
+      properties:
+        key:
+          type: string
+          example: amf
+        name:
+          type: string
+          example: AMF
+        image:
+          type: string
+          example: free5gc/amf:latest
+        group:
+          type: string
+          example: free5gc
+        present:
+          type: boolean
+          description: Whether the image is currently present in the local docker image cache.
+        size:
+          type: integer
+          format: int64
+          description: Image size in bytes. Omitted when not present locally.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the locally cached image was built. Omitted when not present locally.
+    ImageListResponse:
+      type: object
+      properties:
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageInfo'
