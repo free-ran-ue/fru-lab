@@ -1,0 +1,24 @@
+services:
+  gnb:
+    container_name: gnb-slice1
+    image: alonza0314/free-ran-ue:latest
+    command: ./free-ran-ue gnb -c ./gnbcfg.yaml
+    volumes:
+      - ./config/gnbcfg.yaml:/free-ran-ue/gnbcfg.yaml
+    networks:
+      # shared with the free5gc target's amf/i-upf-1 services; must already
+      # exist before this project is brought up
+      cn-ran:
+        ipv4_address: 10.0.1.2
+      # shared with the ue target; must already exist before this project
+      # is brought up. Distinct from gnb-slice2's so both can run at once.
+      ran-ue:
+        ipv4_address: 10.0.2.3
+
+networks:
+  cn-ran:
+    external: true
+    name: frulab-cn-ran
+  ran-ue:
+    external: true
+    name: frulab-ran-ue

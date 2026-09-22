@@ -120,6 +120,10 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 						templateFS:  free5gcUlclTemplateFS,
 						templateDir: "templates/free5gc-ulcl",
 					},
+					constant.FREE5GC_TEMPLATE_ULCL_2SLICE: {
+						templateFS:  free5gcUlcl2SliceTemplateFS,
+						templateDir: "templates/free5gc-ulcl-2slice",
+					},
 				},
 			},
 			constant.DEPLOY_TARGET_GNB: {
@@ -127,6 +131,24 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 				composeTemplate: composeTemplate{
 					templateFS:  gnbTemplateFS,
 					templateDir: "templates/gnb",
+				},
+			},
+			// gnb-slice1/gnb-slice2 are independent targets (own compose
+			// project, own container, own cn-ran/ran-ue IPs) rather than
+			// variants of gnb, since under FREE5GC_TEMPLATE_ULCL_2SLICE both
+			// need to be deployable at the same time.
+			constant.DEPLOY_TARGET_GNB_SLICE1: {
+				projectName: "frulab-gnb-slice1",
+				composeTemplate: composeTemplate{
+					templateFS:  gnbSlice1TemplateFS,
+					templateDir: "templates/gnb-slice1",
+				},
+			},
+			constant.DEPLOY_TARGET_GNB_SLICE2: {
+				projectName: "frulab-gnb-slice2",
+				composeTemplate: composeTemplate{
+					templateFS:  gnbSlice2TemplateFS,
+					templateDir: "templates/gnb-slice2",
 				},
 			},
 		},
@@ -438,10 +460,11 @@ func (c *composeContext) release() {
 }
 
 // UeInstanceConfig carries the subscriber-derived fields that get templated
-// into one UE instance's uecfg.yaml at deploy time. The gNB's own IP is
-// fixed regardless of which subscriber this is (the UE always dials the one
-// deployed gNB's static address), so it's never part of this - only the
-// subscriber's own identity/auth material and slice/DNN selection vary.
+// into one UE instance's uecfg.yaml at deploy time. RanIp is the one
+// exception - it's not subscriber data, it's which gNB this UE should dial,
+// resolved by the processor layer from the subscriber's own Sd (see
+// Processor.resolveUeGnbTarget) since under FREE5GC_TEMPLATE_ULCL_2SLICE
+// more than one gNB can be up at once and only one of them is this UE's.
 type UeInstanceConfig struct {
 	Mcc          string
 	Mnc          string
@@ -453,6 +476,7 @@ type UeInstanceConfig struct {
 	Dnn          string
 	Sst          string
 	Sd           string
+	RanIp        string
 }
 
 // ue deployments are multi-instance - one per subscriber - unlike free5gc/gnb

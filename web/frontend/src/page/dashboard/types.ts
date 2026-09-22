@@ -7,7 +7,10 @@ export interface NetworkFunction {
 }
 
 export interface DeploymentNode {
-  id: NodeId
+  // not constrained to NodeId - some deploy targets (gnb-slice1/gnb-slice2)
+  // have their own hook/status but aren't a selectable canvas node in their
+  // own right, since the gNB card represents both at once.
+  id: string
   label: string
   sublabel: string
   status: NodeStatus

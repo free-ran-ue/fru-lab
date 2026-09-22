@@ -100,6 +100,7 @@ export interface RequestDeployFree5gc {
 export const RequestDeployFree5gcTemplateEnum = {
     Basic: 'basic',
     Ulcl: 'ulcl',
+    Ulcl2slice: 'ulcl-2slice',
 } as const;
 
 export type RequestDeployFree5gcTemplateEnum = typeof RequestDeployFree5gcTemplateEnum[keyof typeof RequestDeployFree5gcTemplateEnum];
@@ -332,6 +333,158 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+         * @summary Stop a gNB slice (ulcl-2slice only)
+         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceDown: async (slice: DeployGnbSliceDownSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'slice' is not null or undefined
+            assertParamExists('deployGnbSliceDown', 'slice', slice)
+            const localVarPath = `/api/deploy/gnb-slice/{slice}`
+                .replace('{slice}', encodeURIComponent(String(slice)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get a gNB slice\'s container logs
+         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceLogs: async (slice: DeployGnbSliceLogsSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'slice' is not null or undefined
+            assertParamExists('deployGnbSliceLogs', 'slice', slice)
+            const localVarPath = `/api/deploy/gnb-slice/{slice}/logs`
+                .replace('{slice}', encodeURIComponent(String(slice)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Get a gNB slice\'s deploy status
+         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceStatus: async (slice: DeployGnbSliceStatusSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'slice' is not null or undefined
+            assertParamExists('deployGnbSliceStatus', 'slice', slice)
+            const localVarPath = `/api/deploy/gnb-slice/{slice}/status`
+                .replace('{slice}', encodeURIComponent(String(slice)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
+         * @summary Deploy a gNB slice (ulcl-2slice only)
+         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceUp: async (slice: DeployGnbSliceUpSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'slice' is not null or undefined
+            assertParamExists('deployGnbSliceUp', 'slice', slice)
+            const localVarPath = `/api/deploy/gnb-slice/{slice}`
+                .replace('{slice}', encodeURIComponent(String(slice)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get gNB deploy status
          * @param {*} [options] Override http request option.
@@ -366,7 +519,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
+         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
          * @summary Deploy gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -849,6 +1002,58 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+         * @summary Stop a gNB slice (ulcl-2slice only)
+         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceDown(slice, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceDown']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get a gNB slice\'s container logs
+         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceLogs(slice, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceLogs']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get a gNB slice\'s deploy status
+         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceStatus(slice, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceStatus']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
+         * @summary Deploy a gNB slice (ulcl-2slice only)
+         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceUp(slice, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get gNB deploy status
          * @param {*} [options] Override http request option.
@@ -861,7 +1066,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
+         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
          * @summary Deploy gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1067,6 +1272,46 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployGnbLogs(service, options).then((request) => request(axios, basePath));
         },
         /**
+         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+         * @summary Stop a gNB slice (ulcl-2slice only)
+         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbSliceDown(slice, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get a gNB slice\'s container logs
+         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployGnbSliceLogs(slice, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Get a gNB slice\'s deploy status
+         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
+            return localVarFp.deployGnbSliceStatus(slice, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
+         * @summary Deploy a gNB slice (ulcl-2slice only)
+         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbSliceUp(slice, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get gNB deploy status
          * @param {*} [options] Override http request option.
@@ -1076,7 +1321,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployGnbStatus(options).then((request) => request(axios, basePath));
         },
         /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
+         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
          * @summary Deploy gNB
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1253,6 +1498,50 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+     * @summary Stop a gNB slice (ulcl-2slice only)
+     * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbSliceDown(slice, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get a gNB slice\'s container logs
+     * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbSliceLogs(slice, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Get a gNB slice\'s deploy status
+     * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbSliceStatus(slice, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
+     * @summary Deploy a gNB slice (ulcl-2slice only)
+     * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbSliceUp(slice, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * 
      * @summary Get gNB deploy status
      * @param {*} [options] Override http request option.
@@ -1263,7 +1552,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
+     * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
      * @summary Deploy gNB
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1381,5 +1670,25 @@ export class DefaultApi extends BaseAPI {
     }
 }
 
+export const DeployGnbSliceDownSliceEnum = {
+    Slice1: 'slice1',
+    Slice2: 'slice2',
+} as const;
+export type DeployGnbSliceDownSliceEnum = typeof DeployGnbSliceDownSliceEnum[keyof typeof DeployGnbSliceDownSliceEnum];
+export const DeployGnbSliceLogsSliceEnum = {
+    Slice1: 'slice1',
+    Slice2: 'slice2',
+} as const;
+export type DeployGnbSliceLogsSliceEnum = typeof DeployGnbSliceLogsSliceEnum[keyof typeof DeployGnbSliceLogsSliceEnum];
+export const DeployGnbSliceStatusSliceEnum = {
+    Slice1: 'slice1',
+    Slice2: 'slice2',
+} as const;
+export type DeployGnbSliceStatusSliceEnum = typeof DeployGnbSliceStatusSliceEnum[keyof typeof DeployGnbSliceStatusSliceEnum];
+export const DeployGnbSliceUpSliceEnum = {
+    Slice1: 'slice1',
+    Slice2: 'slice2',
+} as const;
+export type DeployGnbSliceUpSliceEnum = typeof DeployGnbSliceUpSliceEnum[keyof typeof DeployGnbSliceUpSliceEnum];
 
 

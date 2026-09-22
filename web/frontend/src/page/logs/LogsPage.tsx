@@ -5,9 +5,10 @@ import Button from '../../components/button/button'
 import { api, extractErrorMessage } from '../../apiClient'
 import { useFree5gcStatus } from '../dashboard/useFree5gcStatus'
 import { useUeInstances } from '../dashboard/useUeInstances'
+import { detectFree5gcTemplate } from '../dashboard/free5gcTemplate'
 import styles from './logs-page.module.css'
 
-type LogTargetKind = 'core' | 'gnb' | 'ue'
+type LogTargetKind = 'core' | 'gnb' | 'gnb-slice1' | 'gnb-slice2' | 'ue'
 
 interface LogTarget {
   kind: LogTargetKind
@@ -33,11 +34,21 @@ export default function LogsPage() {
   // real logs on disk - the backend errors on a never-deployed instance.
   const deployedUeRows = useMemo(() => ue.rows.filter((row) => row.hasBeenDeployed), [ue.rows])
 
+  // gnb-slice1/gnb-slice2 are independent, concurrently deployable gNBs
+  // under the ulcl-2slice template - shown instead of the single "gNB"
+  // entry, same condition the Dashboard's canvas uses.
+  const isTwoSliceCore = detectFree5gcTemplate(free5gc.networkFunctions) === 'ulcl-2slice'
+
   const targets: LogTarget[] = useMemo(() => [
     { kind: 'core', id: 'core', label: 'free5GC Core' },
-    { kind: 'gnb', id: 'gnb', label: 'gNB' },
+    ...(isTwoSliceCore
+      ? [
+        { kind: 'gnb-slice1' as const, id: 'gnb-slice1', label: 'gNB Slice 1' },
+        { kind: 'gnb-slice2' as const, id: 'gnb-slice2', label: 'gNB Slice 2' },
+      ]
+      : [{ kind: 'gnb' as const, id: 'gnb', label: 'gNB' }]),
     ...deployedUeRows.map((row): LogTarget => ({ kind: 'ue', id: row.ueId, label: `UE — ${row.ueId}` })),
-  ], [deployedUeRows])
+  ], [deployedUeRows, isTwoSliceCore])
 
   const [selected, setSelected] = useState<LogTarget | null>(null)
   const [lines, setLines] = useState<string[]>([])
@@ -52,7 +63,11 @@ export default function LogsPage() {
         ? await api.deployFree5gcLogs(nf ? nf.toLowerCase() : undefined)
         : target.kind === 'gnb'
           ? await api.deployGnbLogs()
-          : await api.deployUeLogs(target.id)
+          : target.kind === 'gnb-slice1'
+            ? await api.deployGnbSliceLogs('slice1')
+            : target.kind === 'gnb-slice2'
+              ? await api.deployGnbSliceLogs('slice2')
+              : await api.deployUeLogs(target.id)
       setLines(response.data.lines ?? [])
     } catch (err) {
       setError(extractErrorMessage(err, 'Failed to load logs'))
@@ -74,7 +89,7 @@ export default function LogsPage() {
     const requestedInstance = searchParams.get('instance')
     const match = requestedKind === 'ue' && requestedInstance
       ? targets.find((target) => target.kind === 'ue' && target.id === requestedInstance)
-      : requestedKind === 'core' || requestedKind === 'gnb'
+      : requestedKind === 'core' || requestedKind === 'gnb' || requestedKind === 'gnb-slice1' || requestedKind === 'gnb-slice2'
         ? targets.find((target) => target.kind === requestedKind)
         : undefined
 

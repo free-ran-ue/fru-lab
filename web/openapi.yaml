@@ -178,7 +178,7 @@ paths:
   /api/deploy/gnb:
     post:
       summary: Deploy gNB
-      description: Fails with 409 if the core network isn't running yet - deploy free5gc first.
+      description: Fails with 409 if the core network isn't running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
       operationId: deployGnbUp
       security:
         - bearerAuth: []
@@ -286,6 +286,154 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+
+  /api/deploy/gnb-slice/{slice}:
+    post:
+      summary: Deploy a gNB slice (ulcl-2slice only)
+      description: Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn't running yet.
+      operationId: deployGnbSliceUp
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GnbSlice'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found - unknown slice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the core network isn't running yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Stop a gNB slice (ulcl-2slice only)
+      description: Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+      operationId: deployGnbSliceDown
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GnbSlice'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found - unknown slice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a UE instance is still running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/gnb-slice/{slice}/status:
+    get:
+      summary: Get a gNB slice's deploy status
+      operationId: deployGnbSliceStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GnbSlice'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found - unknown slice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployStatusResponse'
+
+  /api/deploy/gnb-slice/{slice}/logs:
+    get:
+      summary: Get a gNB slice's container logs
+      operationId: deployGnbSliceLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GnbSlice'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found - unknown slice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
         '500':
           description: Internal Server Error
           content:
@@ -576,6 +724,17 @@ components:
       schema:
         type: string
         example: amf
+    GnbSlice:
+      name: slice
+      in: path
+      required: true
+      description: Which ulcl-2slice slice's gNB to act on.
+      schema:
+        type: string
+        enum:
+          - slice1
+          - slice2
+        example: slice1
   schemas:
     LoginRequest:
       type: object
@@ -659,6 +818,7 @@ components:
           enum:
             - basic
             - ulcl
+            - ulcl-2slice
           example: basic
     DeployUeRequest:
       type: object

@@ -10,6 +10,10 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**deployFree5gcUp**](#deployfree5gcup) | **POST** /api/deploy/free5gc | Deploy free5GC|
 |[**deployGnbDown**](#deploygnbdown) | **DELETE** /api/deploy/gnb | Stop gNB|
 |[**deployGnbLogs**](#deploygnblogs) | **GET** /api/deploy/gnb/logs | Get gNB container logs|
+|[**deployGnbSliceDown**](#deploygnbslicedown) | **DELETE** /api/deploy/gnb-slice/{slice} | Stop a gNB slice (ulcl-2slice only)|
+|[**deployGnbSliceLogs**](#deploygnbslicelogs) | **GET** /api/deploy/gnb-slice/{slice}/logs | Get a gNB slice\&#39;s container logs|
+|[**deployGnbSliceStatus**](#deploygnbslicestatus) | **GET** /api/deploy/gnb-slice/{slice}/status | Get a gNB slice\&#39;s deploy status|
+|[**deployGnbSliceUp**](#deploygnbsliceup) | **POST** /api/deploy/gnb-slice/{slice} | Deploy a gNB slice (ulcl-2slice only)|
 |[**deployGnbStatus**](#deploygnbstatus) | **GET** /api/deploy/gnb/status | Get gNB deploy status|
 |[**deployGnbUp**](#deploygnbup) | **POST** /api/deploy/gnb | Deploy gNB|
 |[**deployUeDown**](#deployuedown) | **DELETE** /api/deploy/ue/{instance} | Stop a UE instance|
@@ -321,6 +325,222 @@ const { status, data } = await apiInstance.deployGnbLogs(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **deployGnbSliceDown**
+> MessageResponse deployGnbSliceDown()
+
+Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbSliceDown(
+    slice
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**404** | Not Found - unknown slice |  -  |
+|**409** | Conflict - a UE instance is still running |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deployGnbSliceLogs**
+> DeployLogsResponse deployGnbSliceLogs()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbSliceLogs(
+    slice
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
+
+
+### Return type
+
+**DeployLogsResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**404** | Not Found - unknown slice |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deployGnbSliceStatus**
+> DeployStatusResponse deployGnbSliceStatus()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbSliceStatus(
+    slice
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
+
+
+### Return type
+
+**DeployStatusResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**404** | Not Found - unknown slice |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deployGnbSliceUp**
+> MessageResponse deployGnbSliceUp()
+
+Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbSliceUp(
+    slice
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**404** | Not Found - unknown slice |  -  |
+|**409** | Conflict - the core network isn\&#39;t running yet |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **deployGnbStatus**
 > DeployStatusResponse deployGnbStatus()
 
@@ -369,7 +589,7 @@ This endpoint does not have any parameters.
 # **deployGnbUp**
 > MessageResponse deployGnbUp()
 
-Fails with 409 if the core network isn\'t running yet - deploy free5gc first.
+Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
 
 ### Example
 

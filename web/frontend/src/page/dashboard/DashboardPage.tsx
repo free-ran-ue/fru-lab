@@ -12,10 +12,11 @@ import UePanel from './UePanel'
 import UeTerminalModal from './UeTerminalModal'
 import { useFree5gcStatus } from './useFree5gcStatus'
 import { useGnbStatus } from './useGnbStatus'
+import { useGnbSliceStatus } from './useGnbSliceStatus'
 import { useUeInstances, type UeRow } from './useUeInstances'
 import { getStatusMeta } from './statusMeta'
 import { FREE5GC_TEMPLATE_OPTIONS, detectFree5gcTemplate, type Free5gcTemplate } from './free5gcTemplate'
-import type { DeploymentNode, NodeId, NodeStatus } from './types'
+import type { DeploymentNode, NetworkFunction, NodeId, NodeStatus } from './types'
 import styles from './dashboard-page.module.css'
 
 // UE's count is driven by subscribers, not by who happens to be deployed
@@ -50,6 +51,30 @@ function computeUeNode(rows: UeRow[]): DeploymentNode {
   }
 }
 
+// gNB stays one card/node in the topology regardless of core's template -
+// under ulcl-2slice, "deploy"/"stop" on that one card just fans out to both
+// slice targets at once (see handlePrimaryAction), and this aggregates
+// their two statuses into the single status the card shows.
+function computeGnbAggregateNode(slice1: DeploymentNode, slice2: DeploymentNode): DeploymentNode {
+  const statuses = [slice1.status, slice2.status]
+  const status: NodeStatus = statuses.includes('unhealthy')
+    ? 'unhealthy'
+    : statuses.includes('deploying')
+      ? 'deploying'
+      : statuses.some((s) => s === 'running')
+        ? 'running'
+        : 'stopped'
+
+  return {
+    id: 'gnb',
+    label: 'gNB',
+    sublabel: 'free-ran-ue · slice1 + slice2',
+    status,
+    template: 'ulcl-2slice (two slices)',
+    lastDeployed: slice1.lastDeployed !== '—' ? slice1.lastDeployed : slice2.lastDeployed,
+  }
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate()
   const [selected, setSelected] = useState<NodeId>('core')
@@ -62,10 +87,19 @@ export default function DashboardPage() {
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const free5gc = useFree5gcStatus()
   const gnb = useGnbStatus()
+  const gnbSlice1 = useGnbSliceStatus('slice1')
+  const gnbSlice2 = useGnbSliceStatus('slice2')
   const ue = useUeInstances()
 
-  // core and gnb are single-instance targets with a uniform deploy/stop/logs
-  // shape; ue is multi-instance (one per subscriber) and gets its own panel.
+  const coreTemplate = detectFree5gcTemplate(free5gc.networkFunctions) ?? selectedTemplate
+  const coreTemplateLabel = FREE5GC_TEMPLATE_OPTIONS.find((option) => option.value === coreTemplate)?.label ?? 'Basic'
+  const isTwoSliceCore = coreTemplate === 'ulcl-2slice'
+
+  // core and gnb (as one card) are single-instance targets with a uniform
+  // deploy/stop/logs shape; ue is multi-instance (one per subscriber) and
+  // gets its own panel. Under two-slice core, gnb's own deploy/stop aren't
+  // actually used (handlePrimaryAction fans out to both slices instead) -
+  // activeTarget just needs to be non-null so the button renders/enables.
   const activeTarget = selected === 'core' ? free5gc : selected === 'gnb' ? gnb : null
 
   async function handleDeployUe(ueId: string) {
@@ -96,6 +130,24 @@ export default function DashboardPage() {
   }
 
   async function handlePrimaryAction() {
+    // gNB stays a single card, but under two-slice core, deploying/stopping
+    // it fans out to both independent slice targets at once.
+    if (selected === 'gnb' && isTwoSliceCore) {
+      const running = gnbSlice1.node.status !== 'stopped' || gnbSlice2.node.status !== 'stopped'
+      try {
+        if (running) {
+          await Promise.allSettled([gnbSlice1.stop(), gnbSlice2.stop()])
+          addSuccess('gNB stopped')
+        } else {
+          await Promise.allSettled([gnbSlice1.deploy(), gnbSlice2.deploy()])
+          addSuccess('gNB deploy started')
+        }
+      } catch (error) {
+        addError(extractErrorMessage(error, 'gNB action failed'))
+      }
+      return
+    }
+
     if (!activeTarget) return
 
     try {
@@ -115,18 +167,31 @@ export default function DashboardPage() {
     navigate(`/logs?target=${selected}`)
   }
 
+  const gnbDisplayNode = isTwoSliceCore ? computeGnbAggregateNode(gnbSlice1.node, gnbSlice2.node) : gnb.node
+
   const nodes: Record<NodeId, DeploymentNode> = {
     core: free5gc.node,
-    gnb: gnb.node,
+    gnb: gnbDisplayNode,
     ue: computeUeNode(ue.rows),
   }
   const selectedNode = nodes[selected]
+
+  // when the gNB card represents both slices, show both slices' own
+  // services in the panel instead of a single ambiguous "GNB" entry.
+  const gnbNetworkFunctions: NetworkFunction[] = isTwoSliceCore
+    ? [
+      ...gnbSlice1.networkFunctions.map((nf) => ({ ...nf, name: `SLICE1-${nf.name}` })),
+      ...gnbSlice2.networkFunctions.map((nf) => ({ ...nf, name: `SLICE2-${nf.name}` })),
+    ]
+    : gnb.networkFunctions
+
+  const anyGnbRunning = nodes.gnb.status !== 'stopped'
 
   // mirrors the backend's own dependency-order enforcement (Processor.
   // checkStopDependents / checkDeployPrerequisite), just so the button is
   // disabled with a reason instead of only erroring after a click.
   const anyUeRunning = ue.rows.some((row) => row.status !== 'stopped')
-  const actionBlockedReason = selected === 'core' && nodes.core.status === 'running' && nodes.gnb.status !== 'stopped'
+  const actionBlockedReason = selected === 'core' && nodes.core.status === 'running' && anyGnbRunning
     ? 'Stop gNB before stopping the core network'
     : selected === 'gnb' && nodes.gnb.status === 'running' && anyUeRunning
       ? 'Stop all UE instances before stopping gNB'
@@ -137,9 +202,6 @@ export default function DashboardPage() {
   const healthyCount = free5gc.networkFunctions.filter((nf) => nf.status === 'running').length
   const totalNfs = free5gc.networkFunctions.length
   const unhealthyCount = totalNfs - healthyCount
-  // while nothing is deployed yet, describe what the dropdown is about to
-  // deploy; once something's actually running, describe what's really there.
-  const coreTemplateLabel = FREE5GC_TEMPLATE_OPTIONS.find((option) => option.value === (detectFree5gcTemplate(free5gc.networkFunctions) ?? selectedTemplate))?.label ?? 'Basic'
 
   return (
     <div className={styles.layout}>
@@ -169,7 +231,7 @@ export default function DashboardPage() {
           <StatsCard
             title="gNB"
             value={getStatusLabel(nodes.gnb.status)}
-            description="free-ran-ue · basic template"
+            description={isTwoSliceCore ? 'free-ran-ue · slice1 + slice2' : 'free-ran-ue · basic template'}
             valueColor={getStatusMeta(nodes.gnb.status).color}
           />
           <StatsCard
@@ -221,15 +283,19 @@ export default function DashboardPage() {
                 onStop={handleStopUe}
                 onStopAll={handleStopAllUe}
                 onOpenTerminal={setUeTerminalInstance}
-                deployBlockedReason={nodes.gnb.status !== 'running' ? 'Deploy gNB before deploying a UE instance' : undefined}
+                deployBlockedReason={!anyGnbRunning ? 'Deploy gNB before deploying a UE instance' : undefined}
               />
             ) : (
               <DetailPanel
                 node={selectedNode}
-                networkFunctions={activeTarget ? activeTarget.networkFunctions : []}
+                networkFunctions={selected === 'gnb' ? gnbNetworkFunctions : (activeTarget ? activeTarget.networkFunctions : [])}
                 onViewLogs={handleViewLogs}
                 onPrimaryAction={activeTarget ? handlePrimaryAction : undefined}
-                isActionPending={activeTarget?.isActionPending ?? false}
+                isActionPending={
+                  selected === 'gnb' && isTwoSliceCore
+                    ? (gnbSlice1.isActionPending || gnbSlice2.isActionPending)
+                    : (activeTarget?.isActionPending ?? false)
+                }
                 actionBlockedReason={actionBlockedReason}
                 templateOptions={selected === 'core' ? FREE5GC_TEMPLATE_OPTIONS : undefined}
                 selectedTemplate={selected === 'core' ? selectedTemplate : undefined}
@@ -250,6 +316,8 @@ export default function DashboardPage() {
           <DetailedTopology
             free5gcNfs={free5gc.networkFunctions}
             gnbStatus={nodes.gnb.status}
+            gnbSlice1Status={gnbSlice1.node.status}
+            gnbSlice2Status={gnbSlice2.node.status}
             ueRows={ue.rows}
           />
         </section>

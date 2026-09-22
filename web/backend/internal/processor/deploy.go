@@ -8,10 +8,17 @@ import (
 	"net/http"
 )
 
+// knownFree5gcTemplates are the free5gc compose templates DeployUp accepts.
+var knownFree5gcTemplates = map[string]bool{
+	constant.FREE5GC_TEMPLATE_BASIC:       true,
+	constant.FREE5GC_TEMPLATE_ULCL:        true,
+	constant.FREE5GC_TEMPLATE_ULCL_2SLICE: true,
+}
+
 // DeployUp deploys target. templateVariant only matters for
 // constant.DEPLOY_TARGET_FREE5GC - it picks which of free5gc's compose
-// templates (basic, ulcl, ...) to materialize; every other target ignores
-// it entirely.
+// templates (basic, ulcl, ulcl-2slice) to materialize; every other target
+// ignores it entirely.
 func (p *Processor) DeployUp(ctx context.Context, target string, templateVariant string) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	p.ProcLog.Debugf("Processing deploy up for target: %s (template: %s)", target, templateVariant)
 
@@ -19,7 +26,7 @@ func (p *Processor) DeployUp(ctx context.Context, target string, templateVariant
 		if templateVariant == "" {
 			templateVariant = constant.FREE5GC_TEMPLATE_BASIC
 		}
-		if templateVariant != constant.FREE5GC_TEMPLATE_BASIC && templateVariant != constant.FREE5GC_TEMPLATE_ULCL {
+		if !knownFree5gcTemplates[templateVariant] {
 			return nil, &model.ErrorDetail{
 				HttpStatus: http.StatusBadRequest,
 				Detail:     "Unknown free5gc template " + templateVariant,
@@ -105,10 +112,11 @@ func (p *Processor) DeployLogs(ctx context.Context, target string, services []st
 func (p *Processor) DeployUeUp(ctx context.Context, instance string, req *model.RequestDeployUe) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	p.ProcLog.Debugf("Processing deploy up for ue instance: %s", instance)
 
-	gnbStatus, err := p.targetStatus(ctx, constant.DEPLOY_TARGET_GNB)
+	gnbTarget, err := p.resolveUeGnbTarget(ctx, req.Sd)
 	if err != nil {
-		p.ProcLog.Warnf("Failed to check gnb status before deploying ue instance %s: %v", instance, err)
-	} else if gnbStatus != "running" {
+		p.ProcLog.Warnf("Failed to resolve gnb target before deploying ue instance %s: %v", instance, err)
+		gnbTarget = constant.DEPLOY_TARGET_GNB // fail open, best-effort fallback
+	} else if gnbTarget == "" {
 		return nil, &model.ErrorDetail{
 			HttpStatus: http.StatusConflict,
 			Detail:     "Deploy gNB before deploying a UE instance",
@@ -126,6 +134,7 @@ func (p *Processor) DeployUeUp(ctx context.Context, instance string, req *model.
 		Dnn:          req.Dnn,
 		Sst:          req.Sst,
 		Sd:           req.Sd,
+		RanIp:        gnbRanIp(gnbTarget),
 	}
 
 	if err := p.FlContext.UpUe(ctx, instance, cfg); err != nil {
@@ -235,10 +244,28 @@ func (p *Processor) DeployUeList(ctx context.Context) (*model.ResponseDeployUeLi
 // crashes it. Blocking the stop up front is much clearer than letting that
 // happen and leaving the operator to wonder why a UE container "disappeared"
 // on its own.
+// gnbTargets are every target that materializes a gNB container - the
+// legacy singleton (basic/ulcl) plus the two independent, concurrently
+// deployable slice targets (ulcl-2slice).
+var gnbTargets = []string{
+	constant.DEPLOY_TARGET_GNB,
+	constant.DEPLOY_TARGET_GNB_SLICE1,
+	constant.DEPLOY_TARGET_GNB_SLICE2,
+}
+
+func isGnbTarget(target string) bool {
+	for _, t := range gnbTargets {
+		if t == target {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Processor) checkStopDependents(ctx context.Context, target string) *model.ErrorDetail {
-	switch target {
-	case constant.DEPLOY_TARGET_FREE5GC:
-		running, err := p.isTargetRunning(ctx, constant.DEPLOY_TARGET_GNB)
+	switch {
+	case target == constant.DEPLOY_TARGET_FREE5GC:
+		running, err := p.anyGnbRunning(ctx)
 		if err != nil {
 			p.ProcLog.Warnf("Failed to check gnb status before stopping core: %v", err)
 			return nil
@@ -249,7 +276,7 @@ func (p *Processor) checkStopDependents(ctx context.Context, target string) *mod
 				Detail:     "Stop gNB before stopping the core network",
 			}
 		}
-	case constant.DEPLOY_TARGET_GNB:
+	case isGnbTarget(target):
 		running, err := p.anyUeRunning(ctx)
 		if err != nil {
 			p.ProcLog.Warnf("Failed to check ue instances before stopping gnb: %v", err)
@@ -272,7 +299,7 @@ func (p *Processor) checkStopDependents(ctx context.Context, target string) *mod
 // register against, a UE with no gNB to dial) - blocking it up front avoids
 // a confusing failed-deploy state that looks like a real bug.
 func (p *Processor) checkDeployPrerequisite(ctx context.Context, target string) *model.ErrorDetail {
-	if target != constant.DEPLOY_TARGET_GNB {
+	if !isGnbTarget(target) {
 		return nil
 	}
 
@@ -305,6 +332,65 @@ func (p *Processor) isTargetRunning(ctx context.Context, target string) (bool, e
 		return false, err
 	}
 	return status != "stopped", nil
+}
+
+func (p *Processor) anyGnbRunning(ctx context.Context) (bool, error) {
+	for _, target := range gnbTargets {
+		running, err := p.isTargetRunning(ctx, target)
+		if err != nil {
+			return false, err
+		}
+		if running {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// resolveUeGnbTarget picks which gNB target a UE with the given slice
+// differentiator should dial. Under ulcl-2slice, gnb-slice1/gnb-slice2 can
+// both be running at once, so sd disambiguates which is actually this UE's;
+// otherwise (basic/ulcl, or ulcl-2slice with neither slice deployed yet)
+// falls back to the legacy singleton gnb. Returns ("", nil) - not an error -
+// when nothing matching is running, so the caller can turn that into a 409
+// rather than a fail-open pass.
+func (p *Processor) resolveUeGnbTarget(ctx context.Context, sd string) (string, error) {
+	slice1Running, err := p.isTargetRunning(ctx, constant.DEPLOY_TARGET_GNB_SLICE1)
+	if err != nil {
+		return "", err
+	}
+	slice2Running, err := p.isTargetRunning(ctx, constant.DEPLOY_TARGET_GNB_SLICE2)
+	if err != nil {
+		return "", err
+	}
+
+	if slice1Running || slice2Running {
+		if sd == constant.SLICE1_SD && slice1Running {
+			return constant.DEPLOY_TARGET_GNB_SLICE1, nil
+		}
+		if sd == constant.SLICE2_SD && slice2Running {
+			return constant.DEPLOY_TARGET_GNB_SLICE2, nil
+		}
+		return "", nil
+	}
+
+	running, err := p.isTargetRunning(ctx, constant.DEPLOY_TARGET_GNB)
+	if err != nil {
+		return "", err
+	}
+	if !running {
+		return "", nil
+	}
+	return constant.DEPLOY_TARGET_GNB, nil
+}
+
+// gnbRanIp is the ran-ue static IP a UE dials for a given gNB target - see
+// the gnb/gnb-slice1/gnb-slice2 compose templates' own ran-ue ipv4_address.
+func gnbRanIp(target string) string {
+	if target == constant.DEPLOY_TARGET_GNB_SLICE2 {
+		return "10.0.2.5"
+	}
+	return "10.0.2.3"
 }
 
 func (p *Processor) anyUeRunning(ctx context.Context) (bool, error) {

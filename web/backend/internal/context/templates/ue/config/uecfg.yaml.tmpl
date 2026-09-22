@@ -1,9 +1,9 @@
 ue:
-  # The gNB's control/data-plane IP is fixed regardless of which subscriber
-  # this UE instance represents (see gnb/docker-compose.yaml's static
-  # ran-ue IP) - every UE instance dials the same, single deployed gNB.
-  ranControlPlaneIp: "10.0.2.3"
-  ranDataPlaneIp: "10.0.2.3"
+  # Which gNB this UE dials - resolved server-side from this subscriber's
+  # own slice (Sd), since under the two-slice ULCL template more than one
+  # gNB can be up at once and this UE only belongs to one of them.
+  ranControlPlaneIp: "{{.RanIp}}"
+  ranDataPlaneIp: "{{.RanIp}}"
 
   ranControlPlanePort: 31413
   ranDataPlanePort: 31414

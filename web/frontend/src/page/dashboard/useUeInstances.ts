@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../apiClient'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import type { Subscriber } from '../../webconsoleApi'
 import { subscriptionToUeDeployRequest } from './ueDeployFromSubscription'
+import { fromSubscription } from '../subscribers/subscriberForm'
 import type { NodeStatus } from './types'
 
 const POLL_INTERVAL_MS = 4000
@@ -23,6 +24,10 @@ export interface UeRow {
   status: NodeStatus
   hasBeenDeployed: boolean
   lastDeployed: string
+  // this subscriber's first S-NSSAI session's sd - only used to pick which
+  // gNB slice's box the detailed topology draws this UE's Uu line from
+  // under ulcl-2slice; '' until its detail fetch resolves.
+  sd: string
 }
 
 export function useUeInstances() {
@@ -32,6 +37,8 @@ export function useUeInstances() {
   const [isLoadingSubscribers, setIsLoadingSubscribers] = useState(true)
   const [subscribersError, setSubscribersError] = useState<string | null>(null)
   const [pendingInstances, setPendingInstances] = useState<Record<string, boolean>>({})
+  const [sdByUeId, setSdByUeId] = useState<Record<string, string>>({})
+  const fetchedSdRef = useRef<Set<string>>(new Set())
 
   const refreshInstances = useCallback(async () => {
     try {
@@ -82,6 +89,29 @@ export function useUeInstances() {
     return () => clearInterval(timer)
   }, [refreshInstances, refreshSubscribers])
 
+  // fetches each subscriber's sd once (fetchedSdRef tracks who's already
+  // been fetched, so this doesn't re-fetch every 4s poll tick) - only the
+  // detailed topology view needs this, to know which gNB slice's box a UE's
+  // Uu line should be drawn from under ulcl-2slice.
+  useEffect(() => {
+    const missing = subscribers.filter((subscriber) => !fetchedSdRef.current.has(subscriber.ueId))
+    if (missing.length === 0) return
+    for (const subscriber of missing) fetchedSdRef.current.add(subscriber.ueId)
+
+    Promise.allSettled(missing.map(async (subscriber) => {
+      const response = await webconsoleApi.getSubscriberByID(subscriber.ueId, subscriber.plmnID)
+      return { ueId: subscriber.ueId, sd: fromSubscription(response.data).sessions[0]?.sd || '' }
+    })).then((results) => {
+      setSdByUeId((current) => {
+        const next = { ...current }
+        for (const result of results) {
+          if (result.status === 'fulfilled') next[result.value.ueId] = result.value.sd
+        }
+        return next
+      })
+    })
+  }, [subscribers])
+
   const rows: UeRow[] = useMemo(() => subscribers.map((subscriber) => {
     const instance = instancesByUeId[subscriber.ueId]
     return {
@@ -91,8 +121,9 @@ export function useUeInstances() {
       status: instance?.status ?? 'stopped',
       hasBeenDeployed: Boolean(instance),
       lastDeployed: instance?.lastDeployed ?? '—',
+      sd: sdByUeId[subscriber.ueId] ?? '',
     }
-  }), [subscribers, instancesByUeId])
+  }), [subscribers, instancesByUeId, sdByUeId])
 
   const withPending = useCallback(async (ueId: string, action: () => Promise<void>) => {
     setPendingInstances((current) => ({ ...current, [ueId]: true }))

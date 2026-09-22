@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AxiosPromise } from 'axios'
 import type { DeployStatusResponse, DeployLogsResponse, MessageResponse } from '../../api'
-import type { DeploymentNode, NetworkFunction, NodeId, NodeStatus } from './types'
+import type { DeploymentNode, NetworkFunction, NodeStatus } from './types'
 
 const POLL_INTERVAL_MS = 4000
 
@@ -18,7 +18,7 @@ interface DeployApi {
 // gnb): polls status, and exposes deploy/stop/fetchLogs actions. Each
 // target's hook is just this with its own id/label/api methods plugged in.
 export function useDeployTarget(
-  id: NodeId,
+  id: string,
   label: string,
   formatSublabel: (serviceCount: number) => string,
   deployApi: DeployApi,
