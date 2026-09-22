@@ -1,0 +1,23 @@
+backend:
+  username: "admin"
+  password: "frulab"
+
+  port: 8888
+
+  jwt:
+    secret: "fru-lab"
+    expiresIn: 1h
+
+  db:
+    type: "bbolt"
+    path: "./db/frulab.db"
+
+  deploy:
+    # must stay an identical path on the host and in this container - see
+    # the comment on this same mount in docker-compose.yaml.
+    workDir: "/var/lib/frulab/deploy"
+
+  frontendFilePath: "frontend"
+
+logger:
+  level: "info"

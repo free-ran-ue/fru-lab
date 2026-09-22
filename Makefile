@@ -1,4 +1,4 @@
-.PHONY: backend frontend openapi openapi-webconsole run  tidy lint clean
+.PHONY: backend frontend openapi openapi-webconsole run tidy lint clean docker
 
 BACKEND_SRC := $(shell find web/backend -name "*.go")
 FRONTEND_SRC := $(shell find web/frontend -type f ! -path "web/frontend/dist/*" ! -path "web/frontend/node_modules/*")
@@ -64,3 +64,6 @@ lint:
 clean:
 	rm -rf build
 	rm /tmp/frulab.db
+
+docker:
+	./docker/build_image.sh

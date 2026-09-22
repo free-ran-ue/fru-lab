@@ -1,0 +1,21 @@
+services:
+  fru-lab:
+    container_name: fru-lab
+    image: alonza0314/fru-lab:latest
+    command: ./fru-lab -c config.yaml
+    expose:
+      - "8888"
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config.yaml:/frulab/config.yaml
+      - /var/lib/frulab/db:/frulab/db
+      # fru-lab deploys free5gc/gNB/UE by talking to this same Docker
+      # daemon (via the socket below), not a nested one - so any compose
+      # file/config it materializes under deploy.workDir has to resolve to
+      # the SAME path on the host as it does inside this container, or the
+      # daemon can't find the files it's told to bind-mount into those
+      # containers. Keep this path identical on both sides of the ":" if
+      # you change it, and match config.yaml's deploy.workDir to it.
+      - /var/lib/frulab/deploy:/var/lib/frulab/deploy
+      - /var/run/docker.sock:/var/run/docker.sock
