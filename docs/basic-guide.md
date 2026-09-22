@@ -34,14 +34,17 @@ While Core is stopped, a "Template" dropdown appears next to "Deploy Service" so
 
 - **Basic** - a single UPF (default).
 - **ULCL** - the data plane is split into an Intermediate UPF (I-UPF) and a PDU Session Anchor UPF (PSA-UPF), chained over N9.
+- **ULCL (Two Slice)** - two independent ULCL chains (their own SMF, I-UPF, and PSA-UPF each), one per network slice (S-NSSAI SD `010203` and `112233`).
 
 The dropdown is only shown while stopped - once deployed, which template is running is shown in the "Core Network" stats card and reflected in the detailed topology below.
+
+Under the Two Slice template, the gNB card still deploys/stops as a single unit, but it fans out to two independent gNB containers behind the scenes - one per slice - so both are up (or down) together.
 
 ![Core detail panel](./images/core-detail-panel.png)
 
 ## 5. Add a 5G Subscriber
 
-Open "5G Subscriber" in the left sidebar to create / edit / delete UE subscriber data (IMSI, key, slice, etc.), which is used to deploy the matching UE.
+Open "5G Subscriber" in the left sidebar to create / edit / delete UE subscriber data (IMSI, key, slice, etc.), which is used to deploy the matching UE. Under the Two Slice Core template, a subscriber's S-NSSAI SD (`010203` or `112233`) decides which gNB slice its UE attaches to - there's no separate gNB selection when deploying the UE itself.
 
 ![5G Subscriber page](./images/subscribers-page.png)
 
@@ -53,7 +56,11 @@ Back on the Dashboard, click the UE node to see all subscribers listed on the ri
 
 ## 7. Detailed network topology
 
-Below the main topology, a more detailed diagram shows the live SBI service mesh, N2/N3 links, and the Uu link between gNB and each currently running UE. It automatically adapts to whichever Core template is deployed - with the ULCL template, it shows the I-UPF / PSA-UPF chain and the N9 link between them instead of a single UPF.
+Below the main topology, a more detailed diagram shows the live SBI service mesh, N2/N3 links, and the Uu link between gNB and each currently running UE. It automatically adapts to whichever Core template is deployed:
+
+- **Basic** - a single UPF.
+- **ULCL** - the I-UPF / PSA-UPF chain and the N9 link between them, instead of a single UPF.
+- **ULCL (Two Slice)** - both slices' chains side by side (gNB Slice 1/2, their own SMF/I-UPF/PSA-UPF), each currently-running UE's Uu link drawn from whichever slice's gNB it's actually attached to.
 
 ![Detailed network topology](./images/detailed-topology.png)
 
