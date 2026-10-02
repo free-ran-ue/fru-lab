@@ -125,13 +125,13 @@ If **every** PDU session of a run times out while registration succeeds, look at
 The **Data plane** card shows, per direction:
 
 - **Sent / received**: the rate over the last second. *Received* is what actually made it through the UPF.
-- **Packets per second** and **Total sent / received**: totals count inner IP packet bytes.
+- **Packets per second** and **Total sent / received**: totals count the inner IP packets, shown in bits (Mb, Gb) like the rates.
 - **Loss**: `1 - received/sent` for the run so far.
 - **Latency p50 / p99**: one way; send and receive use the same host clock.
 - **Out of order** and **Send errors** (the local socket refused a packet).
 - **Misrouted** (shown only when not 0): downlink that came back in another UE's tunnel or at another gNB. It is not counted as received.
 
-Uplink and downlink each have their own panel and chart. The chart always shows the whole run from 0 (time as h:mm:ss) and squeezes as the run goes on; after the first 10 minutes each point is the average of 2, then 4, 8 ... seconds, so the chart stays light however long the run is. the dashed orange line is sent (Tx), the solid green line is received (Rx). When they overlap, nothing is being lost. Hover over a chart to read both rates at that second. The gNB table adds the bytes received per gNB in each direction, with their loss.
+Uplink and downlink each have their own panel and chart. The chart always shows the whole run from 0 (time as h:mm:ss) and squeezes as the run goes on; after the first 10 minutes each point is the average of 2, then 4, 8 ... seconds, so the chart stays light however long the run is. The dashed orange line is sent (Tx), the solid green line is received (Rx). When they overlap, nothing is being lost. Hover over a chart to read both rates at that second. The gNB table adds the data received per gNB in each direction (in bits), with their loss.
 
 The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). After Stop it also counts deregistering and deregistered UEs. It also lists the first 200 failed UEs with their SUPI, gNB, stage (registration, PDU or deregistration), cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 

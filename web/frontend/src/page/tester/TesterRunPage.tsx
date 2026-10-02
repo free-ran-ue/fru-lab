@@ -9,7 +9,7 @@ import type {
   TesterDataplaneSnapshot, TesterGnbTraffic, TesterRunSnapshot, TesterStageSnapshot, TesterTrafficDirection,
   TesterTrafficPoint, TesterUeSummary,
 } from '../../api'
-import { buildTesterStreamUrl, formatBps, formatBytes, formatLoss, formatMs } from './testerFormat'
+import { buildTesterStreamUrl, formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
 import styles from './tester.module.css'
 
 const RECONNECT_MS = 2000
@@ -44,7 +44,7 @@ function gnbTraffic(t: TesterGnbTraffic | undefined, dir: 'ul' | 'dl'): string {
   const tx = dir === 'ul' ? t.ulTxBytes : t.dlTxBytes
   const rx = dir === 'ul' ? t.ulRxBytes : t.dlRxBytes
   if (!tx) return '—'
-  return `${formatBytes(rx)} (${formatLoss(rx < tx ? 1 - rx / tx : 0)} lost)`
+  return `${formatBits(rx)} (${formatLoss(rx < tx ? 1 - rx / tx : 0)} lost)`
 }
 
 // niceStep rounds a grid step up to 1, 2, 2.5 or 5 x 10^n so the grid
@@ -178,7 +178,7 @@ function DirectionPanel({ dir, d, series }: { dir: Dir, d: TesterTrafficDirectio
       <RateChart series={series} dir={dir} />
       <div className={styles.statGrid}>
         <Stat label="Packets/s Tx / Rx" value={`${Math.round(d.txPps).toLocaleString()} / ${Math.round(d.rxPps).toLocaleString()}`} />
-        <Stat label="Total Tx / Rx" value={`${formatBytes(d.txBytes)} / ${formatBytes(d.rxBytes)}`} />
+        <Stat label="Total Tx / Rx" value={`${formatBits(d.txBytes)} / ${formatBits(d.rxBytes)}`} />
         <Stat label="Latency p50 / p99" value={`${formatMs(d.latency.p50Ms)} / ${formatMs(d.latency.p99Ms)}`} />
         <Stat label="Out of order" value={d.outOfOrder.toLocaleString()} />
         <Stat label="Send errors" value={d.sendErrors.toLocaleString()} />

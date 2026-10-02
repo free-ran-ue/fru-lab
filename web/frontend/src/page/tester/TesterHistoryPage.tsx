@@ -4,7 +4,7 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterHistorySummary } from '../../api'
-import { formatBps, formatBytes, formatLoss, formatMs } from './testerFormat'
+import { formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
 import styles from './tester.module.css'
 
 function seconds(r: TesterHistorySummary): number {
@@ -40,8 +40,8 @@ const METRICS: [string, (r: TesterHistorySummary) => string][] = [
   ['Registration p95', (r) => formatMs(r.registrationP95Ms)],
   ['PDU session', (r) => percent(r.established, r.ueCount)],
   ['Deregistration', (r) => percent(r.deregistered, r.registered)],
-  ['DL received', (r) => `${formatBytes(r.dlRxBytes)} · ${avgRate(r.dlRxBytes, r)}`],
-  ['UL received', (r) => `${formatBytes(r.ulRxBytes)} · ${avgRate(r.ulRxBytes, r)}`],
+  ['DL received', (r) => `${formatBits(r.dlRxBytes)} · ${avgRate(r.dlRxBytes, r)}`],
+  ['UL received', (r) => `${formatBits(r.ulRxBytes)} · ${avgRate(r.ulRxBytes, r)}`],
   ['Loss DL / UL', (r) => `${formatLoss(r.dlLossRate)} / ${formatLoss(r.ulLossRate)}`],
 ]
 

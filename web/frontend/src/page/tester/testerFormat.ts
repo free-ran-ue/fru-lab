@@ -18,10 +18,11 @@ export function formatBps(bps: number): string {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
-// formatBytes renders a byte count in decimal units, e.g. 1.2 GB.
-export function formatBytes(bytes: number): string {
-  const units = ['B', 'kB', 'MB', 'GB', 'TB']
-  let v = bytes
+// formatBits renders a byte count as bits in decimal units, e.g. 9.6 Gb:
+// every amount of data on the tester pages is in bits, like the rates.
+export function formatBits(bytes: number): string {
+  const units = ['b', 'kb', 'Mb', 'Gb', 'Tb']
+  let v = bytes * 8
   let i = 0
   while (v >= 1000 && i < units.length - 1) {
     v /= 1000
