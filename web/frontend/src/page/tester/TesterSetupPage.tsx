@@ -6,7 +6,7 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterFieldError, TesterProfile, TesterValidateResponse } from '../../api'
-import { DEFAULT_TESTER_PROFILE } from './testerDefaults'
+import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
 import styles from './tester.module.css'
 
 const PREVIEW_ROWS = 10
@@ -65,7 +65,7 @@ export default function TesterSetupPage() {
   useEffect(() => {
     api.testerProfileGet()
       .then((response) => {
-        if (response.status === 200 && response.data) setProfile(response.data)
+        if (response.status === 200 && response.data) setProfile(normalizeProfile(response.data))
       })
       .catch((error) => addError(extractErrorMessage(error, 'Failed to load the saved profile')))
       .finally(() => setIsLoading(false))

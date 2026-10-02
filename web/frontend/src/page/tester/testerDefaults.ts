@@ -20,3 +20,19 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
   },
   rates: { n2: { timeoutMs: 5000, retries: 1 } },
 }
+
+// normalizeProfile turns whatever was saved into a complete profile:
+// every field missing or of the wrong type takes its default, and keys
+// this version doesn't know are dropped (fru-tester rejects unknown
+// fields). Saved profiles can predate fields added in later phases.
+export function normalizeProfile(saved: unknown): TesterProfile {
+  return mergeKnown(DEFAULT_TESTER_PROFILE, saved) as TesterProfile
+}
+
+function mergeKnown(defaults: unknown, saved: unknown): unknown {
+  if (typeof defaults === 'object' && defaults !== null) {
+    const src = typeof saved === 'object' && saved !== null ? saved as Record<string, unknown> : {}
+    return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, mergeKnown(value, src[key])]))
+  }
+  return typeof saved === typeof defaults ? saved : defaults
+}
