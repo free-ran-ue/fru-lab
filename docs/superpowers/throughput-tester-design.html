@@ -1478,7 +1478,8 @@ ul.tight li { margin: 3px 0; }
         <tr><td>真實 free5GC，4 UE，每 UE 1/1 Mbps，30 秒（加了 500 ms 延遲之後）</td><td><span class="pill ok">通過</span> UL 10447 → 10447、DL 10445 → 10445，兩個方向都 0 掉包；單向延遲 p50 約 0.05 ms、p99 約 0.1 ms；結束後路由和 IP 都清乾淨</td></tr>
         <tr><td>真實 free5GC，高速（加延遲之前）</td><td><span class="pill ok">通過</span> UL 200 Mbps 0 掉包；DL 約 904 Mbps，0.76% 掉包，全部集中在每個 UE 剛起來的那一刻（這就是後來加 500 ms 延遲的原因）</td></tr>
         <tr><td>DL 收不到（已找到原因）</td><td><span class="pill ok">已解決</span> SMF 的 urrThreshold 只有幾百 bytes，UPF 每一兩個封包就送一次用量報告，PFCP 塞爆，下行規則一直裝不上。範本已改 10 GB</td></tr>
-        <tr><td>完成標準「1 Gbps DL 與 UPF 計數一致」</td><td><span class="pill draft">部分</span> 用一般 UDP socket，這台機器 DL 最高約 78 k pps（約 875–904 Mbps）；收發數字由 tester 兩端比對，沒有拿 UPF 自己的計數比</td></tr>
+        <tr><td>DL 不管設多少都卡在 950～980 Mbps（已找到原因）</td><td><span class="pill ok">已解決</span> 4 條 DL 發送線共用 sink 的同一個 socket，Go 一次只讓一個寫入通過，所以只能輪流送，上限就是單一 socket 的約 8–9 萬 pps。改成每條發送線各用一個 socket 後，4 UE 的 DL 3 Gbps 送 3000 / 收 3000 Mbps（約 26.8 萬 pps），86 萬個封包只掉 5 個</td></tr>
+        <tr><td>完成標準「1 Gbps DL 與 UPF 計數一致」</td><td><span class="pill ok">通過</span> DL 已到 3 Gbps；收發數字由 tester 兩端比對，沒有拿 UPF 自己的計數比</td></tr>
       </table>
     </div>
 
@@ -1501,6 +1502,7 @@ ul.tight li { margin: 3px 0; }
       <li>下一期：第 4 期，Stop 時釋放 PDU session 與反註冊。目前連續跑同一批 UE，free5GC 會出現 Duplicated PDU session ID，PDU 會逾時，要重開核網。</li>
       <li>延遲是固定 500 ms；裝隧道比較慢的核網，每個 UE 開頭還是可能掉幾個 DL 封包。</li>
       <li>N6 介面名稱沒有檢查是否存在。</li>
+      <li><b>可改善：發送速率上限。</b>一個 UDP socket 約 1 Gbps（1400 bytes 封包）。目前 UL 每個 gNB 一個 socket、DL 固定 4 個，所以單一 gNB 的 UL、單一 UE 的 DL 上限都約 1 Gbps，DL 總上限約 4 Gbps。改法：發送線數跟 CPU 核心數走，UL 也照樣拆成多個 socket；再往上可以改用 sendmmsg 批次送或 UDP GSO。</li>
       <li>重開核網時要先重開 NRF，再重開其他 NF，而且 SMF 要在 UPF 之後，不然 PFCP 關聯會斷，PDU 全部逾時。</li>
     </ul>
   </div>
