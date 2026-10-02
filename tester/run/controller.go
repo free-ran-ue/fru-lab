@@ -462,12 +462,14 @@ func (r *run) attemptN2(n *n2Round, i int) {
 // watchConn reads the association until it fails, discarding whatever
 // the AMF sends (phase 1 handles no AMF-initiated procedures). A read
 // error while the run is not stopping means the AMF side went away.
-// EAGAIN is just SO_RCVTIMEO expiring on an idle association.
+// EAGAIN is just SO_RCVTIMEO expiring on an idle association, and EINTR
+// is a signal interrupting recvmsg (not restarted when SO_RCVTIMEO is
+// set, see signal(7)); neither means the association is gone.
 func (r *run) watchConn(i int, conn gnb.Conn) {
 	buf := make([]byte, 4096)
 	for {
 		_, err := conn.Read(buf)
-		if err == nil || errors.Is(err, syscall.EAGAIN) {
+		if err == nil || errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EINTR) {
 			continue
 		}
 		if r.ctx.Err() != nil {

@@ -80,6 +80,8 @@ type fakeConn struct {
 	reads  int
 	// closeDelay mimics free5gc/sctp's Close blocking up to 1 s (SO_LINGER)
 	closeDelay time.Duration
+	// interrupts is how many reads after the NG Setup answer fail with EINTR
+	interrupts int
 }
 
 func (c *fakeConn) Write(b []byte) (int, error) { return len(b), nil }
@@ -91,6 +93,9 @@ func (c *fakeConn) Read(b []byte) (int, error) {
 			return 0, err
 		}
 		return copy(b, raw), nil
+	}
+	if c.reads <= 1+c.interrupts {
+		return 0, syscall.EINTR
 	}
 	select {
 	case <-c.closed:
@@ -111,8 +116,9 @@ type fakeDialer struct {
 	script func(localIP string, attempt int) (reply func() ([]byte, error), dialErr error)
 	counts map[string]int
 	opened []*fakeConn
-	// closeDelay is copied into every conn this dialer opens
+	// closeDelay and interrupts are copied into every conn this dialer opens
 	closeDelay time.Duration
+	interrupts int
 }
 
 func (d *fakeDialer) Dial(localIP, amfIP string, amfPort int, timeout time.Duration) (gnb.Conn, error) {
@@ -124,7 +130,7 @@ func (d *fakeDialer) Dial(localIP, amfIP string, amfPort int, timeout time.Durat
 	if dialErr != nil {
 		return nil, dialErr
 	}
-	c := &fakeConn{reply: reply, closed: make(chan struct{}), drop: make(chan struct{}), closeDelay: d.closeDelay}
+	c := &fakeConn{reply: reply, closed: make(chan struct{}), drop: make(chan struct{}), closeDelay: d.closeDelay, interrupts: d.interrupts}
 	d.mu.Lock()
 	d.opened = append(d.opened, c)
 	d.mu.Unlock()
@@ -420,4 +426,24 @@ func TestStopClosesAssociationsConcurrently(t *testing.T) {
 	require.NoError(t, err)
 	waitState(t, c, StateStopped)
 	require.Less(t, time.Since(start), 600*time.Millisecond, "3 closes of 300 ms each should overlap")
+}
+
+// A recvmsg with SO_RCVTIMEO set is not restarted after a signal; EINTR on
+// a healthy association must not mark the gNB lost.
+func TestInterruptedReadDoesNotLoseGnb(t *testing.T) {
+	addrs := &fakeAddrs{}
+	dialer := newFakeDialer(func(string, int) (func() ([]byte, error), error) { return accept(t), nil })
+	dialer.interrupts = 3
+	c := newTestController(addrs, dialer)
+	_, err := c.Start(testProfile())
+	require.NoError(t, err)
+	waitState(t, c, StateRunning)
+
+	time.Sleep(100 * time.Millisecond) // let every watchConn hit its EINTRs
+	for _, g := range c.Snapshot().Gnbs {
+		require.Equal(t, GnbUp, g.State, "gNB %s: %s", g.Name, g.Cause)
+	}
+	_, err = c.Stop()
+	require.NoError(t, err)
+	waitState(t, c, StateStopped)
 }
