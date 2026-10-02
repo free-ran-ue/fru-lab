@@ -122,3 +122,22 @@ func TestSnapshotJSONShape(t *testing.T) {
 		require.Contains(t, buf.String(), key)
 	}
 }
+
+func TestStreamCoalescesBurstsOfChanges(t *testing.T) {
+	ctrl := &fakeCtrl{snap: run.Snapshot{State: run.StateRunning}, changed: make(chan struct{})}
+	close(ctrl.changed) // every frame sees "changed" at once, like a busy run
+	srv := httptest.NewServer(NewRouter(ctrl, "t"))
+	defer srv.Close()
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/run/stream"
+	conn, _, err := websocket.DefaultDialer.Dial(url, http.Header{"Authorization": {"Bearer t"}})
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	var got run.Snapshot
+	start := time.Now()
+	for range 4 {
+		require.NoError(t, conn.ReadJSON(&got))
+	}
+	require.GreaterOrEqual(t, time.Since(start), 3*minFrameGap-20*time.Millisecond,
+		"4 frames need at least 3 gaps")
+}

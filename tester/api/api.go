@@ -46,7 +46,12 @@ type StartErrorResponse struct {
 
 // streamInterval is how often the stream re-sends a snapshot even when no
 // state changed, so totals and in-flight timers keep moving.
-const streamInterval = time.Second
+// minFrameGap bounds the frame rate: with thousands of UEs every step is a
+// state change, and a full snapshot per change would flood the browser.
+const (
+	streamInterval = time.Second
+	minFrameGap    = 200 * time.Millisecond
+)
 
 func NewRouter(ctrl Controller, apiToken string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -165,6 +170,7 @@ func handleStream(ctrl Controller) gin.HandlerFunc {
 		defer ticker.Stop()
 		for {
 			changed := ctrl.Changed()
+			sent := time.Now()
 			if err := conn.WriteJSON(ctrl.Snapshot()); err != nil {
 				return
 			}
@@ -173,6 +179,16 @@ func handleStream(ctrl Controller) gin.HandlerFunc {
 				return
 			case <-changed:
 			case <-ticker.C:
+			}
+			// coalesce bursts of changes into one frame per minFrameGap
+			if wait := minFrameGap - time.Since(sent); wait > 0 {
+				t := time.NewTimer(wait)
+				select {
+				case <-gone:
+					t.Stop()
+					return
+				case <-t.C:
+				}
 			}
 		}
 	}
