@@ -30,7 +30,9 @@ func AllocateIPs(cidr, start string, count int, exclude []netip.Addr) ([]netip.A
 		excluded[a] = true
 	}
 
-	out := make([]netip.Addr, 0, count)
+	// Cap the up-front capacity at the CIDR size: a mistyped count must
+	// end in the shortfall error below, not a huge allocation.
+	out := make([]netip.Addr, 0, min(count, 1<<min(32-prefix.Bits(), 24)))
 	for a := first; prefix.Contains(a) && len(out) < count; a = a.Next() {
 		if skipEdges && (a == network || a == broadcast) {
 			continue

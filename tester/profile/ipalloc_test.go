@@ -57,3 +57,10 @@ func TestAllocateIPsRejectsBadInput(t *testing.T) {
 	_, err = AllocateIPs("fd00::/64", "fd00::1", 1, nil)
 	require.ErrorContains(t, err, "not an IPv4 CIDR")
 }
+
+// A mistyped gNB count must give the shortfall error, not try to allocate
+// room for billions of addresses up front.
+func TestAllocateIPsHugeCountDoesNotPreallocate(t *testing.T) {
+	_, err := AllocateIPs("10.0.1.0/30", "10.0.1.1", 1<<40, nil)
+	require.EqualError(t, err, "10.0.1.0/30 from 10.0.1.1 has only 2 usable IPs, need 1099511627776 (short by 1099511627774)")
+}
