@@ -1,7 +1,8 @@
 import type { TesterProfile } from '../../api'
 
-// Starting point for a first-time setup page; values mirror free-ran-ue's
-// sample gnb.yaml so a lab already running fru-lab's free5GC gets close.
+// Starting point for a first-time setup page; values match the basic
+// free5GC template fru-lab deploys (AMF 10.0.1.3, UPF 10.0.1.5 on the
+// frulab-cn-ran bridge, host side docker-cn-ran) so it runs as-is there.
 export const DEFAULT_TESTER_PROFILE: TesterProfile = {
   name: 'N2 baseline',
   scale: { gnbCount: 10, ueCount: 1000 },
@@ -15,8 +16,8 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     sd: '010203',
   },
   network: {
-    n2: { interface: '', cidr: '10.0.1.0/24', startIp: '10.0.1.100', amfIp: '10.0.1.1', amfPort: 38412 },
-    n3: { interface: '', cidr: '10.0.2.0/24', startIp: '10.0.2.100', upfIp: '10.0.2.1', upfPort: 2152 },
+    n2: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', amfIp: '10.0.1.3', amfPort: 38412 },
+    n3: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', upfIp: '10.0.1.5', upfPort: 2152 },
   },
   rates: { n2: { timeoutMs: 5000, retries: 1 } },
 }

@@ -11,6 +11,7 @@ The engine is a separate program, `fru-tester`. fru-lab stores your profile and 
 - The `sctp` kernel module is loaded: `sudo modprobe sctp`.
 - fru-tester runs as root, or with `CAP_NET_ADMIN`. It adds one IP per gNB to the N2 interface when a run starts and removes them when the run stops.
 - Pick a CIDR and a first IP that nothing else uses. fru-tester skips the network and broadcast addresses, the AMF and UPF IPs, and every IP already configured **on this host**. It cannot see IPs used by other machines, or by containers on a Docker bridge (for example the gNB container fru-lab deploys at `10.0.1.2`). Start well above those, for example `10.0.1.100`.
+- The Setup page's defaults match fru-lab's basic free5GC template: interface `docker-cn-ran`, AMF `10.0.1.3:38412`, UPF `10.0.1.5:2152`, PLMN 208/93, TAC 000001, S-NSSAI 1/010203. For another core, change them.
 
 ## Run in development
 
