@@ -8,21 +8,36 @@ import (
 )
 
 // GnbSpec is one concrete gNB a run will bring up. UeFirst/UeLast are the
-// 1-based UE indexes it owns (both 0 when it owns none).
+// 1-based UE indexes it owns (both 0 when it owns none); FirstSupi and
+// LastSupi are those UEs' SUPIs, so the user can check them against the
+// subscribers in the core.
 type GnbSpec struct {
-	Index   int    `json:"index"`
-	Name    string `json:"name"`
-	GnbID   string `json:"gnbId"`
-	N2IP    string `json:"n2Ip"`
-	N3IP    string `json:"n3Ip"`
-	UeCount int    `json:"ueCount"`
-	UeFirst int    `json:"ueFirst"`
-	UeLast  int    `json:"ueLast"`
+	Index     int    `json:"index"`
+	Name      string `json:"name"`
+	GnbID     string `json:"gnbId"`
+	N2IP      string `json:"n2Ip"`
+	N3IP      string `json:"n3Ip"`
+	UeCount   int    `json:"ueCount"`
+	UeFirst   int    `json:"ueFirst"`
+	UeLast    int    `json:"ueLast"`
+	FirstSupi string `json:"firstSupi"`
+	LastSupi  string `json:"lastSupi"`
 }
 
-// Plan is a profile expanded against a specific host.
+// UeSpec is one concrete UE. Gnb is the 0-based index into Plan.Gnbs.
+type UeSpec struct {
+	Index int    // 1-based
+	Gnb   int    // 0-based index into Plan.Gnbs
+	Msin  string // incremented from UeTemplate.MsinStart
+	Supi  string // "imsi-" + MCC + MNC + MSIN
+}
+
+// Plan is a profile expanded against a specific host. Ues is left out of
+// the JSON: the setup page only needs the per-gNB SUPI ranges, and a full
+// UE list would make every validate response O(UE count).
 type Plan struct {
 	Gnbs      []GnbSpec `json:"gnbs"`
+	Ues       []UeSpec  `json:"-"`
 	UesPerGnb int       `json:"uesPerGnb"`
 	N2Prefix  int       `json:"n2Prefix"`
 	N3Prefix  int       `json:"n3Prefix"`
@@ -32,6 +47,12 @@ var (
 	reMcc  = regexp.MustCompile(`^[0-9]{3}$`)
 	reMnc  = regexp.MustCompile(`^[0-9]{2,3}$`)
 	reHex6 = regexp.MustCompile(`^[0-9a-fA-F]{6}$`)
+	reHex  = func(n int) *regexp.Regexp { return regexp.MustCompile(fmt.Sprintf(`^[0-9a-fA-F]{%d}$`, n)) }
+	reKey  = reHex(32)
+	reAmf  = reHex(4)
+	reSqn  = reHex(12)
+	reNia  = regexp.MustCompile(`^nia[0-3]$`)
+	reNea  = regexp.MustCompile(`^nea[0-3]$`)
 )
 
 // Expand validates p and, if it is valid, assigns every gNB its ID, name,
@@ -65,6 +86,9 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 	if _, err := IncrementHex(p.Gnb.GnbIDStart, count-1); err != nil {
 		verr.add("gnb.gnbIdStart", err.Error())
 	}
+	if _, err := IncrementDecimal(p.Ue.MsinStart, p.Scale.UeCount-1); err != nil {
+		verr.add("ue.msinStart", err.Error())
+	}
 	if len(verr.Errors) > 0 {
 		return nil, verr
 	}
@@ -76,6 +100,7 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 		N2Prefix:  netip.MustParsePrefix(p.Network.N2.Cidr).Bits(),
 		N3Prefix:  netip.MustParsePrefix(p.Network.N3.Cidr).Bits(),
 	}
+	plan.Ues = make([]UeSpec, 0, p.Scale.UeCount)
 	nextUe := 1
 	for i := 0; i < count; i++ {
 		id, _ := IncrementHex(p.Gnb.GnbIDStart, i)
@@ -88,9 +113,18 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 			N3IP:    n3IPs[i].String(),
 			UeCount: ues,
 		}
+		for range ues {
+			msin, _ := IncrementDecimal(p.Ue.MsinStart, nextUe-1)
+			plan.Ues = append(plan.Ues, UeSpec{
+				Index: nextUe, Gnb: i, Msin: msin,
+				Supi: "imsi-" + p.Gnb.Mcc + p.Gnb.Mnc + msin,
+			})
+			nextUe++
+		}
 		if ues > 0 {
-			spec.UeFirst, spec.UeLast = nextUe, nextUe+ues-1
-			nextUe += ues
+			spec.UeFirst, spec.UeLast = nextUe-ues, nextUe-1
+			spec.FirstSupi = plan.Ues[spec.UeFirst-1].Supi
+			spec.LastSupi = plan.Ues[spec.UeLast-1].Supi
 		}
 		plan.Gnbs = append(plan.Gnbs, spec)
 	}
@@ -130,6 +164,7 @@ func validateFields(p Profile, verr *ValidationError) {
 	if p.Gnb.Sd != "" && !reHex6.MatchString(p.Gnb.Sd) {
 		verr.add("gnb.sd", "must be empty or 6 hex digits")
 	}
+	validateUe(p, verr)
 	validateEndpoint(verr, "network.n2", p.Network.N2.Interface, p.Network.N2.Cidr, p.Network.N2.StartIP, "amfIp", p.Network.N2.AmfIP, "amfPort", p.Network.N2.AmfPort)
 	validateEndpoint(verr, "network.n3", p.Network.N3.Interface, p.Network.N3.Cidr, p.Network.N3.StartIP, "upfIp", p.Network.N3.UpfIP, "upfPort", p.Network.N3.UpfPort)
 	// The upper bound keeps Stop prompt: in-flight attempts finish within
@@ -139,6 +174,59 @@ func validateFields(p Profile, verr *ValidationError) {
 	}
 	if p.Rates.N2.Retries < 0 {
 		verr.add("rates.n2.retries", "must not be negative")
+	}
+	validateProcedureRate(verr, "rates.registration", p.Rates.Registration)
+	validateProcedureRate(verr, "rates.pdu", p.Rates.Pdu)
+}
+
+func validateUe(p Profile, verr *ValidationError) {
+	u := p.Ue
+	if u.MsinStart == "" || strings.Trim(u.MsinStart, "0123456789") != "" {
+		verr.add("ue.msinStart", "must be decimal digits")
+	} else if n := len(p.Gnb.Mcc) + len(p.Gnb.Mnc) + len(u.MsinStart); reMcc.MatchString(p.Gnb.Mcc) && reMnc.MatchString(p.Gnb.Mnc) && n != 15 {
+		verr.add("ue.msinStart", fmt.Sprintf("must be %d digits so MCC+MNC+MSIN is 15", 15-len(p.Gnb.Mcc)-len(p.Gnb.Mnc)))
+	}
+	if !reKey.MatchString(u.Key) {
+		verr.add("ue.key", "must be 32 hex digits")
+	}
+	if !reKey.MatchString(u.Opc) {
+		verr.add("ue.opc", "must be 32 hex digits")
+	}
+	if !reAmf.MatchString(u.Amf) {
+		verr.add("ue.amf", "must be 4 hex digits")
+	}
+	if !reSqn.MatchString(u.Sqn) {
+		verr.add("ue.sqn", "must be 12 hex digits")
+	}
+	if !reNia.MatchString(u.Integrity) {
+		verr.add("ue.integrity", "must be one of nia0, nia1, nia2, nia3")
+	}
+	if !reNea.MatchString(u.Ciphering) {
+		verr.add("ue.ciphering", "must be one of nea0, nea1, nea2, nea3")
+	}
+	if strings.TrimSpace(u.Dnn) == "" {
+		verr.add("ue.dnn", "must not be empty")
+	}
+	if u.Sst < 0 || u.Sst > 255 {
+		verr.add("ue.sst", "must be between 0 and 255")
+	}
+	if u.Sd != "" && !reHex6.MatchString(u.Sd) {
+		verr.add("ue.sd", "must be empty or 6 hex digits")
+	}
+}
+
+func validateProcedureRate(verr *ValidationError, base string, r ProcedureRate) {
+	if r.RatePerSec < 1 || r.RatePerSec > 100000 {
+		verr.add(base+".ratePerSec", "must be between 1 and 100000")
+	}
+	if r.MaxInFlight < 1 || r.MaxInFlight > 100000 {
+		verr.add(base+".maxInFlight", "must be between 1 and 100000")
+	}
+	if r.TimeoutMs < 1 || r.TimeoutMs > 60000 {
+		verr.add(base+".timeoutMs", "must be between 1 and 60000")
+	}
+	if r.Retries < 0 {
+		verr.add(base+".retries", "must not be negative")
 	}
 }
 

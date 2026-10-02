@@ -8,6 +8,7 @@ type Profile struct {
 	Name    string      `json:"name"`
 	Scale   Scale       `json:"scale"`
 	Gnb     GnbTemplate `json:"gnb"`
+	Ue      UeTemplate  `json:"ue"`
 	Network Network     `json:"network"`
 	Rates   Rates       `json:"rates"`
 }
@@ -27,6 +28,23 @@ type GnbTemplate struct {
 	Tac         string `json:"tac"`
 	Sst         int    `json:"sst"`
 	Sd          string `json:"sd"`
+}
+
+// UeTemplate is expanded once per UE. MsinStart is decimal and keeps its
+// width when incremented; MCC+MNC+MSIN must be 15 digits. The UE uses the
+// gNB template's PLMN. Key/Opc/Amf/Sqn must match the subscriber data the
+// user created in the core (the tester does not provision subscribers).
+type UeTemplate struct {
+	MsinStart string `json:"msinStart"`
+	Key       string `json:"key"`
+	Opc       string `json:"opc"`
+	Amf       string `json:"amf"`
+	Sqn       string `json:"sqn"`
+	Integrity string `json:"integrity"` // nia0..nia3
+	Ciphering string `json:"ciphering"` // nea0..nea3
+	Dnn       string `json:"dnn"`
+	Sst       int    `json:"sst"`
+	Sd        string `json:"sd"`
 }
 
 type Network struct {
@@ -54,7 +72,19 @@ type N3Network struct {
 }
 
 type Rates struct {
-	N2 StageRate `json:"n2"`
+	N2           StageRate     `json:"n2"`
+	Registration ProcedureRate `json:"registration"`
+	Pdu          ProcedureRate `json:"pdu"`
+}
+
+// ProcedureRate paces a per-UE stage: at most RatePerSec new attempts per
+// second (token bucket) and at most MaxInFlight attempts at once
+// (semaphore), each bounded by TimeoutMs; Retries as in StageRate.
+type ProcedureRate struct {
+	RatePerSec  int `json:"ratePerSec"`
+	MaxInFlight int `json:"maxInFlight"`
+	TimeoutMs   int `json:"timeoutMs"`
+	Retries     int `json:"retries"`
 }
 
 // StageRate bounds one attempt with TimeoutMs; Retries is how many more

@@ -39,3 +39,19 @@ func TestRenderName(t *testing.T) {
 	require.Equal(t, "gNB-3", RenderName("gNB-{i}", 3))
 	require.Equal(t, "g3-3", RenderName("g{i}-{i}", 3))
 }
+
+func TestIncrementDecimal(t *testing.T) {
+	got, err := IncrementDecimal("0000000009", 1)
+	require.NoError(t, err)
+	require.Equal(t, "0000000010", got)
+	got, err = IncrementDecimal("0000000001", 999)
+	require.NoError(t, err)
+	require.Equal(t, "0000001000", got)
+
+	_, err = IncrementDecimal("9999999999", 1)
+	require.ErrorContains(t, err, "overflows")
+	_, err = IncrementDecimal("12a", 0)
+	require.ErrorContains(t, err, "decimal")
+	_, err = IncrementDecimal("", 0)
+	require.ErrorContains(t, err, "decimal")
+}

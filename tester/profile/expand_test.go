@@ -15,11 +15,20 @@ func sampleProfile() Profile {
 			GnbIDStart: "000314", NamePattern: "gNB-{i}",
 			Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203",
 		},
+		Ue: UeTemplate{
+			MsinStart: "0000000001", Key: "8baf473f2f8fd09487cccbd7097c6862",
+			Opc: "8e27b6af0e692e750f32667a3b14605d", Amf: "8000", Sqn: "000000000023",
+			Integrity: "nia2", Ciphering: "nea0", Dnn: "internet", Sst: 1, Sd: "010203",
+		},
 		Network: Network{
 			N2: N2Network{Interface: "ens19", Cidr: "10.0.1.0/24", StartIP: "10.0.1.1", AmfIP: "10.0.1.1", AmfPort: 38412},
 			N3: N3Network{Interface: "ens20", Cidr: "10.0.2.0/24", StartIP: "10.0.2.2", UpfIP: "10.0.2.1", UpfPort: 2152},
 		},
-		Rates: Rates{N2: StageRate{TimeoutMs: 5000, Retries: 1}},
+		Rates: Rates{
+			N2:           StageRate{TimeoutMs: 5000, Retries: 1},
+			Registration: ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
+			Pdu:          ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
+		},
 	}
 }
 
@@ -30,10 +39,15 @@ func TestExpandFillsGnbsInOrder(t *testing.T) {
 	require.Equal(t, 24, plan.N2Prefix)
 	require.Equal(t, []GnbSpec{
 		// .1 is the AMF, .3 is already on the host
-		{Index: 1, Name: "gNB-1", GnbID: "000314", N2IP: "10.0.1.2", N3IP: "10.0.2.2", UeCount: 4, UeFirst: 1, UeLast: 4},
-		{Index: 2, Name: "gNB-2", GnbID: "000315", N2IP: "10.0.1.4", N3IP: "10.0.2.3", UeCount: 4, UeFirst: 5, UeLast: 8},
-		{Index: 3, Name: "gNB-3", GnbID: "000316", N2IP: "10.0.1.5", N3IP: "10.0.2.4", UeCount: 2, UeFirst: 9, UeLast: 10},
+		{Index: 1, Name: "gNB-1", GnbID: "000314", N2IP: "10.0.1.2", N3IP: "10.0.2.2", UeCount: 4, UeFirst: 1, UeLast: 4,
+			FirstSupi: "imsi-208930000000001", LastSupi: "imsi-208930000000004"},
+		{Index: 2, Name: "gNB-2", GnbID: "000315", N2IP: "10.0.1.4", N3IP: "10.0.2.3", UeCount: 4, UeFirst: 5, UeLast: 8,
+			FirstSupi: "imsi-208930000000005", LastSupi: "imsi-208930000000008"},
+		{Index: 3, Name: "gNB-3", GnbID: "000316", N2IP: "10.0.1.5", N3IP: "10.0.2.4", UeCount: 2, UeFirst: 9, UeLast: 10,
+			FirstSupi: "imsi-208930000000009", LastSupi: "imsi-208930000000010"},
 	}, plan.Gnbs)
+	require.Len(t, plan.Ues, 10)
+	require.Equal(t, UeSpec{Index: 10, Gnb: 2, Msin: "0000000010", Supi: "imsi-208930000000010"}, plan.Ues[9])
 }
 
 func TestExpandMoreGnbsThanUes(t *testing.T) {
@@ -111,4 +125,35 @@ func TestExpandBoundsN2Timeout(t *testing.T) {
 	var verr *ValidationError
 	require.ErrorAs(t, err, &verr)
 	require.Equal(t, []FieldError{{Field: "rates.n2.timeoutMs", Message: "must be between 1 and 60000"}}, verr.Errors)
+}
+
+func TestExpandValidatesUeTemplateAndRates(t *testing.T) {
+	p := sampleProfile()
+	p.Ue.MsinStart = "000001" // 3+2+6 = 11 digits
+	p.Ue.Key = "xyz"
+	p.Ue.Integrity = "nia9"
+	p.Ue.Dnn = ""
+	p.Rates.Registration.RatePerSec = 0
+	p.Rates.Pdu.TimeoutMs = 60001
+	_, err := Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.ElementsMatch(t, []FieldError{
+		{Field: "ue.msinStart", Message: "must be 10 digits so MCC+MNC+MSIN is 15"},
+		{Field: "ue.key", Message: "must be 32 hex digits"},
+		{Field: "ue.integrity", Message: "must be one of nia0, nia1, nia2, nia3"},
+		{Field: "ue.dnn", Message: "must not be empty"},
+		{Field: "rates.registration.ratePerSec", Message: "must be between 1 and 100000"},
+		{Field: "rates.pdu.timeoutMs", Message: "must be between 1 and 60000"},
+	}, verr.Errors)
+}
+
+func TestExpandReportsMsinOverflow(t *testing.T) {
+	p := sampleProfile()
+	p.Ue.MsinStart = "9999999995" // 10 UEs need ...04
+	_, err := Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, "ue.msinStart", verr.Errors[0].Field)
+	require.Contains(t, verr.Errors[0].Message, "overflows")
 }
