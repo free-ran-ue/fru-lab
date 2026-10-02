@@ -40,7 +40,9 @@ type Config struct {
 // would drop packets in this host's kernel and look like UPF loss.
 const rcvBuf = 8 << 20
 
-// dlSenders shards downlink flows over this many goroutines.
+// dlSenders shards downlink flows over this many goroutines, each with
+// its own socket: Go lets one write at a time through a socket, so
+// senders sharing one top out at what a single thread can send.
 const dlSenders = 4
 
 // historyLen is how many 1-second points Snapshot.Series keeps.
@@ -91,7 +93,8 @@ type gnbCounters struct {
 type Engine struct {
 	cfg   Config
 	n3    []*net.UDPConn
-	n6    *net.UDPConn
+	n6    *net.UDPConn   // the sink: receives uplink
+	dlOut []*net.UDPConn // one per downlink sender, on the sink IP
 	flows []atomic.Pointer[flow]
 
 	ulShards []*shard // by gNB
@@ -147,6 +150,14 @@ func (e *Engine) Start() error {
 	}
 	growReadBuffer(c)
 	e.n6 = c
+	for range dlSenders {
+		c, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(e.cfg.SinkIP, 0)))
+		if err != nil {
+			e.closeSockets()
+			return fmt.Errorf("bind N6 downlink sender on %s: %w", e.cfg.SinkIP, err)
+		}
+		e.dlOut = append(e.dlOut, c)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
@@ -165,9 +176,9 @@ func (e *Engine) Start() error {
 		}
 	}
 	if e.cfg.DlBps > 0 {
-		for _, sh := range e.dlShards {
+		for i, sh := range e.dlShards {
 			e.senders.Add(1)
-			go e.pace(ctx, sh, e.cfg.DlBps, pktBits, e.sendDl)
+			go e.pace(ctx, sh, e.cfg.DlBps, pktBits, func(f *flow) { e.sendDl(e.dlOut[i], f) })
 		}
 	}
 	e.sampler.Add(1)
@@ -267,10 +278,10 @@ func (e *Engine) sendUl(g int, f *flow) {
 	e.gnbs[g].ulTx.Add(uint64(e.cfg.PacketSize))
 }
 
-func (e *Engine) sendDl(f *flow) {
+func (e *Engine) sendDl(out *net.UDPConn, f *flow) {
 	putHeader(f.dl, header{runID: e.cfg.RunID, ue: f.ue, dl: true, seq: f.dlSeq, txNanos: e.cfg.Now().UnixNano()})
 	f.dlSeq++
-	if _, err := e.n6.WriteToUDPAddrPort(f.dl, f.dlTo); err != nil {
+	if _, err := out.WriteToUDPAddrPort(f.dl, f.dlTo); err != nil {
 		e.dl.sendErrors.Add(1)
 		return
 	}
@@ -373,5 +384,8 @@ func (e *Engine) closeSockets() {
 	}
 	if e.n6 != nil {
 		_ = e.n6.Close()
+	}
+	for _, c := range e.dlOut {
+		_ = c.Close()
 	}
 }

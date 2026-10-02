@@ -24,7 +24,8 @@ type fakeUPF struct {
 	ues       map[uint32]ueRoute // by UE index (from the tester header)
 	dropEvery uint64
 	dlSeen    atomic.Uint64
-	wrongTeid bool // put downlink in a tunnel the gNB did not allocate
+	wrongTeid bool                    // put downlink in a tunnel the gNB did not allocate
+	dlFrom    map[netip.AddrPort]bool // source of every downlink packet, under mu
 }
 
 type ueRoute struct {
@@ -39,7 +40,7 @@ func newFakeUPF(t *testing.T, sink netip.AddrPort, dropEvery uint64) *fakeUPF {
 	require.NoError(t, err)
 	n6, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100"), Port: 0})
 	require.NoError(t, err)
-	u := &fakeUPF{n3: n3, n6: n6, sink: sink, ues: map[uint32]ueRoute{}, dropEvery: dropEvery}
+	u := &fakeUPF{n3: n3, n6: n6, sink: sink, ues: map[uint32]ueRoute{}, dropEvery: dropEvery, dlFrom: map[netip.AddrPort]bool{}}
 	go u.uplink()
 	go u.downlink()
 	t.Cleanup(func() { _ = n3.Close(); _ = n6.Close() })
@@ -75,10 +76,13 @@ func (u *fakeUPF) uplink() {
 func (u *fakeUPF) downlink() {
 	buf := make([]byte, 65536)
 	for {
-		n, _, err := u.n6.ReadFromUDPAddrPort(buf)
+		n, from, err := u.n6.ReadFromUDPAddrPort(buf)
 		if err != nil {
 			return
 		}
+		u.mu.Lock()
+		u.dlFrom[from] = true
+		u.mu.Unlock()
 		seen := u.dlSeen.Add(1)
 		if u.dropEvery > 0 && seen%u.dropEvery == 0 {
 			continue
@@ -239,4 +243,19 @@ func TestDownlinkInTheWrongTunnelIsMisroutedNotReceived(t *testing.T) {
 	require.Positive(t, s.Dl.TxPackets)
 	require.Zero(t, s.Dl.RxPackets)
 	require.Equal(t, s.Dl.TxPackets, s.Dl.Misrouted)
+}
+
+// One socket carries one writer at a time (Go locks writes per socket),
+// which capped downlink at ~80 k packets/s; each sender needs its own.
+func TestDownlinkSendersEachUseTheirOwnSocketOnTheSinkIP(t *testing.T) {
+	e, upf := startEngine(t, 1, 0) // 4 UEs, one per downlink sender
+	time.Sleep(500 * time.Millisecond)
+	e.Stop(50 * time.Millisecond)
+
+	upf.mu.Lock()
+	defer upf.mu.Unlock()
+	require.Len(t, upf.dlFrom, dlSenders)
+	for from := range upf.dlFrom {
+		require.Equal(t, netip.MustParseAddr("127.0.0.1"), from.Addr(), "downlink leaves from the sink IP")
+	}
 }

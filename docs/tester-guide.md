@@ -138,6 +138,6 @@ gNB states: `pending` → `connecting` → `up` or `failed`.
 - The SQN in the network's AUTN is accepted without a freshness check (as in free-ran-ue), so re-running the same UEs never needs a resynchronisation.
 - A UE that reached `established` on a gNB later marked `lost` still counts as established.
 - Traffic starts a fixed 500 ms after each PDU session. A core that takes longer to install the downlink tunnel in the UPF loses the first downlink packets of each UE. Against fru-lab's free5GC, 4 UEs at 1 Mbps ran with 0 loss in both directions.
-- The sender uses plain UDP sockets. On the test host, downlink topped out at about 78 k packets/s (~875 Mbps at 1400-byte packets).
+- The sender uses plain UDP sockets, and one socket sends about 80–90 k packets/s (~1 Gbps at 1400-byte packets). Uplink has one socket per gNB and downlink four, so on the test host one gNB's uplink and one UE's downlink each top out near 1 Gbps. 4 UEs reached 3 Gbps downlink with no loss.
 - High rates need the SMF's `urrThreshold` raised. At a few hundred bytes, the UPF sends a usage report every packet or two, PFCP starves, and downlink stops reaching the gNB. fru-lab's templates set it to 10 GB. A core deployed by an older fru-lab, or any other core, needs the same change.
 - Back-to-back runs with the same UEs can leave free5GC with duplicate PDU sessions (`Duplicated PDU session ID` in the AMF log), so their PDU sessions time out. Restart the core, or wait for the next phase, which releases sessions and deregisters UEs on Stop.
