@@ -2,7 +2,15 @@
 
 The Throughput Tester is a lab tool that sits next to fru-lab's deploy features. It simulates many gNBs against **any** 5G core. It does not depend on the free5GC that fru-lab deploys.
 
-**Phase 1** brings up N2 for every simulated gNB (an SCTP association plus NG Setup) and holds the associations until you press **Stop**, showing live statistics the whole time. UE registration, PDU sessions and the data plane come in later phases.
+A run currently does three things, with live statistics for each:
+
+1. Brings up N2 for every simulated gNB (an SCTP association plus NG Setup).
+2. Registers each gNB's UEs as soon as that gNB is up.
+3. Establishes one PDU session per registered UE.
+
+Everything is then held until you press **Stop**. The data plane (UL/DL traffic) comes in a later phase.
+
+The UEs never open a radio link: each gNB carries its UEs' NAS messages inside NGAP itself, over its single SCTP association.
 
 The engine is a separate program, `fru-tester`. fru-lab stores your profile and forwards the tester pages' API calls to fru-tester, using a shared API token.
 
@@ -12,6 +20,29 @@ The engine is a separate program, `fru-tester`. fru-lab stores your profile and 
 - fru-tester runs as root, or with `CAP_NET_ADMIN`. It adds one IP per gNB to the N2 interface when a run starts and removes them when the run stops.
 - Pick a CIDR and a first IP that nothing else uses. fru-tester skips the network and broadcast addresses, the AMF and UPF IPs, and every IP already configured **on this host**. It cannot see IPs used by other machines, or by containers on a Docker bridge (for example the gNB container fru-lab deploys at `10.0.1.2`). Start well above those, for example `10.0.1.100`.
 - The Setup page's defaults match fru-lab's basic free5GC template: interface `docker-cn-ran`, AMF `10.0.1.3:38412`, UPF `10.0.1.5:2152`, PLMN 208/93, TAC 000001, S-NSSAI 1/010203. For another core, change them.
+
+## Subscribers
+
+fru-tester never creates subscribers. Every UE in the run needs a subscriber in the core with all of the following:
+
+- the SUPI the plan preview shows: each gNB row lists its first and last SUPI, and the UE template card lists the whole range;
+- the UE template's K, OPc, AMF and SQN;
+- a slice (S-NSSAI) that the gNB template advertises.
+
+The defaults match free-ran-ue's sample subscriber, `imsi-208930000000001` with K `8baf…6862` and OPc `8e27…605d`, on slice 1/010203.
+
+If a subscriber is missing or its keys differ, that UE fails registration. If its slice is not one the gNB advertises, the AMF rejects it with `5gmm(62)` ("no network slices available").
+
+## Pacing
+
+Registration and PDU sessions each have four settings:
+
+- **Starts per second**: how fast new attempts begin.
+- **Max in flight**: how many attempts may be waiting for the core at once.
+- **Timeout per attempt**.
+- **Retries**.
+
+With a fast core, the rate decides. When the core slows down, the in-flight limit stops requests from piling up; you see the queue grow instead. A UE whose attempt failed with retries left goes to the back of the queue.
 
 ## Run in development
 
@@ -31,30 +62,46 @@ make run-tester   # fru-tester on 127.0.0.1:9100 (sudo), reads tester.yaml
 
 1. **Throughput Tester → Setup**
    - Enter the gNB count and UE count. UEs fill gNBs in order, and the last gNB may be partly filled.
-   - Fill in the gNB template, the N2 and N3 interface and CIDR, and the N2 timeout and retries.
-   - The plan preview shows the ID, name, N2 IP, N3 IP and UE range each gNB will get.
+   - Fill in the gNB template, the UE template, the N2 and N3 interface and CIDR, and the pacing for N2, registration and PDU sessions.
+   - The plan preview shows the ID, name, N2 IP, N3 IP, UE range and SUPI range each gNB will get.
    - Any problem is shown under the field it belongs to.
 2. **Start run** saves the profile and opens **Run**. Only one run can be active at a time.
 3. **Stop** closes every N2 association and removes the gNB IPs.
 
-## What the N2 card means
+## What the stage cards mean
+
+There are three cards: N2 setup (per gNB), Registration (per UE) and PDU session (per UE). They share the same numbers:
 
 | Number | Meaning |
 |---|---|
-| accepted / expected | gNBs whose NG Setup succeeded / gNBs in the run |
-| Rejected | The AMF answered NGSetupFailure; the cause, e.g. `misc(4)`, is listed under *Failure causes* |
+| accepted / expected | Items (gNBs or UEs) that succeeded / items in the run |
+| Rejected | The core said no: NGSetupFailure (`misc(4)`), Registration Reject (`5gmm(N)`) or PDU Session Establishment Reject (`5gsm(N)`). Causes are listed under *Failure causes* |
 | Timed out | No answer within the timeout (connect or NG Setup). `operation now in progress` means the SCTP connect itself got no answer |
-| Connection errors | Local or transport error, e.g. `connection refused` |
-| Retries | Extra attempts. A failed gNB with retries left goes to the back of the queue |
-| Total time | Wall clock from the first attempt starting to the last gNB finishing |
-| Average, p50/p95/p99, Max | Setup time of **accepted** gNBs, measured from each gNB's first attempt, so retries count |
+| Connection errors | Local or transport error, e.g. `connection refused` or `association lost` |
+| Retries | Extra attempts. A failed item with retries left goes to the back of the queue |
+| Not started | Items never attempted: their gNB never came up, an earlier stage failed them, or the run was stopped first |
+| Total time | Wall clock from the first attempt starting to the last item finishing |
+| Average, p50/p95/p99, Max | Time of **accepted** items, measured from each item's first attempt, so retries count |
+
+What each stage times:
+
+| Stage | Timed from | Timed to |
+|---|---|---|
+| N2 setup | SCTP connect | NG Setup Response |
+| Registration | Initial UE Message (Registration Request) sent | Registration Complete sent |
+| PDU session | PDU Session Establishment Request sent | Accept received (the gNB has already answered PDU Session Resource Setup) |
+
+The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). It also lists the first 200 failed UEs with their SUPI, gNB, stage, cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 
 gNB states: `pending` → `connecting` → `up` or `failed`.
 - `lost` means the association was up and the AMF side dropped it, for example an AMF restart.
 - `closed` means it was closed by Stop.
 
-## Known limitations (Phase 1)
+## Known limitations
 
 - If fru-tester is killed with SIGKILL, the gNB IPs it added stay on the interface. Later runs skip them as host IPs; remove them with `ip addr del`.
 - Messages the AMF sends after NG Setup are read and ignored.
 - There is no run history yet.
+- Stop does not deregister UEs. The AMF drops their contexts when the gNB's association closes. PDU release and deregistration come in a later phase.
+- The SQN in the network's AUTN is accepted without a freshness check (as in free-ran-ue), so re-running the same UEs never needs a resynchronisation.
+- A UE that reached `established` on a gNB later marked `lost` still counts as established.
