@@ -25,5 +25,13 @@ jobs:
       - name: Test
         run: cd web/backend && go test -v ./...
 
+      - name: Build fru-tester
+        run: cd tester && go build -v ./...
+
+      # tests that need root or the sctp kernel module are skipped unless
+      # FRU_TESTER_NETLINK / FRU_TESTER_SCTP are set
+      - name: Test fru-tester
+        run: cd tester && go test -race -v ./...
+
       - name: Make Backend
         run: make
