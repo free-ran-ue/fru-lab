@@ -91,7 +91,7 @@ What each stage times:
 | Registration | Initial UE Message (Registration Request) sent | Registration Complete sent |
 | PDU session | PDU Session Establishment Request sent | Accept received (the gNB has already answered PDU Session Resource Setup) |
 
-If **every** PDU session of a run times out while registration succeeds, look at the core first. Check the SMF log for charging (CHF) timeouts (see Known limitations).
+If **every** PDU session of a run times out while registration succeeds, look at the core first. Check the SMF log for charging (CHF) timeouts; the usual cause is CHF billing (CGF) being on (see Known limitations).
 
 The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). It also lists the first 200 failed UEs with their SUPI, gNB, stage, cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 
@@ -104,6 +104,7 @@ gNB states: `pending` → `connecting` → `up` or `failed`.
 - If fru-tester is killed with SIGKILL, the gNB IPs it added stay on the interface. Later runs skip them as host IPs; remove them with `ip addr del`.
 - Messages the AMF sends after NG Setup are read and ignored.
 - There is no run history yet.
-- Stop does not release PDU sessions or deregister UEs (that comes in a later phase), so the core keeps their sessions until the same SUPIs register again. free5GC then tears the stale sessions down, which normally works. That teardown goes through the CHF, though: once, during testing, the CHF stopped answering, and every PDU session timed out (the SMF logs `Send Charging Data Request ... Failed`) until the core was restarted.
+- Stop does not release PDU sessions or deregister UEs (that comes in a later phase), so the core keeps their sessions until the same SUPIs register again. free5GC then tears them down, which works.
+- free5GC's CHF stops answering charging requests after the first few UEs when its CDR delivery to the webconsole billing FTP (`chfcfg.yaml` → `cgf.enable`) is on. The SMF then waits 10 s per PDU session and the sessions time out (the SMF logs `Send Charging Data Request ... Failed`). fru-lab's free5GC templates therefore ship with `cgf.enable: false`. A core deployed by an older fru-lab, or any other core with CGF on, needs the same change and a CHF restart.
 - The SQN in the network's AUTN is accepted without a freshness check (as in free-ran-ue), so re-running the same UEs never needs a resynchronisation.
 - A UE that reached `established` on a gNB later marked `lost` still counts as established.

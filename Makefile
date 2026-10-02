@@ -1,6 +1,7 @@
 .PHONY: backend frontend tester openapi openapi-webconsole run run-tester test tidy lint clean docker
 
-BACKEND_SRC := $(shell find web/backend -name "*.go")
+# every file, not just *.go: the compose templates are embedded in the binary
+BACKEND_SRC := $(shell find web/backend -type f)
 TESTER_SRC := $(shell find tester -name "*.go") tester/go.mod tester/go.sum
 FRONTEND_SRC := $(shell find web/frontend -type f ! -path "web/frontend/dist/*" ! -path "web/frontend/node_modules/*")
 FRONTEND_STAMP := build/frontend/.stamp
@@ -35,7 +36,7 @@ tester: build/fru-tester
 
 backend:
 	@if [ -f build/fru-lab ]; then \
-		if [ -z "$$(find web/backend -name '*.go' -newer build/fru-lab)" ]; then \
+		if [ -z "$$(find web/backend -type f -newer build/fru-lab)" ]; then \
 			echo "[✔] backend is up-to-date, no build needed"; \
 			exit 0; \
 		fi; \

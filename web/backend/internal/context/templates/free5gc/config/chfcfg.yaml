@@ -23,8 +23,11 @@ configuration:
   volumeLimit: 50000
   volumeLimitPDU: 10000
   volumeThresholdRate: 0.8
+  # CDR delivery to the webconsole billing FTP is off: with it on, the CHF
+  # stops answering charging requests after the first few UEs, so the
+  # SMF waits 10 s per PDU session and the sessions time out.
   cgf:
-    enable: true
+    enable: false
     hostIPv4: webconsole
     port: 2121
     listenPort: 2122
