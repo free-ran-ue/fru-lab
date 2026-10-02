@@ -22,6 +22,13 @@ type AddrManager interface {
 	// Remove must treat an already-missing address as success, because the
 	// kernel drops secondary addresses when their primary is removed.
 	Remove(iface string, addr netip.Prefix) error
+	// EnsureRoute makes sure dst is routed via gw on iface. It reports
+	// whether it added the route; an identical existing route is left
+	// alone (added=false), a different existing route is an error.
+	EnsureRoute(iface string, dst netip.Prefix, gw netip.Addr) (added bool, err error)
+	// RemoveRoute deletes a route EnsureRoute added; a missing route is
+	// not an error.
+	RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) error
 }
 
 // Netlink is the real AddrManager; it needs CAP_NET_ADMIN.
@@ -76,6 +83,47 @@ func (Netlink) Remove(iface string, addr netip.Prefix) error {
 		return fmt.Errorf("remove %s from %s: %w", addr, iface, err)
 	}
 	return nil
+}
+
+func (Netlink) EnsureRoute(iface string, dst netip.Prefix, gw netip.Addr) (bool, error) {
+	link, err := netlink.LinkByName(iface)
+	if err != nil {
+		return false, fmt.Errorf("interface %q: %w", iface, err)
+	}
+	existing, err := netlink.RouteListFiltered(netlink.FAMILY_V4,
+		&netlink.Route{Dst: ipNet(dst)}, netlink.RT_FILTER_DST)
+	if err != nil {
+		return false, fmt.Errorf("list routes to %s: %w", dst, err)
+	}
+	if len(existing) > 0 {
+		r := existing[0]
+		if r.Gw.Equal(net.IP(gw.AsSlice())) && r.LinkIndex == link.Attrs().Index {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s is already routed via %s; remove that route or change the UE pool", dst, r.Gw)
+	}
+	if err := netlink.RouteAdd(&netlink.Route{LinkIndex: link.Attrs().Index, Dst: ipNet(dst), Gw: net.IP(gw.AsSlice())}); err != nil {
+		return false, fmt.Errorf("route %s via %s dev %s: %w", dst, gw, iface, err)
+	}
+	return true, nil
+}
+
+func (Netlink) RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) error {
+	link, err := netlink.LinkByName(iface)
+	if err != nil {
+		return fmt.Errorf("interface %q: %w", iface, err)
+	}
+	err = netlink.RouteDel(&netlink.Route{LinkIndex: link.Attrs().Index, Dst: ipNet(dst), Gw: net.IP(gw.AsSlice())})
+	if err != nil && !errors.Is(err, syscall.ESRCH) {
+		return fmt.Errorf("remove route %s via %s: %w", dst, gw, err)
+	}
+	return nil
+}
+
+func ipNet(p netip.Prefix) *net.IPNet {
+	p = p.Masked()
+	ip := p.Addr().As4()
+	return &net.IPNet{IP: net.IP(ip[:]), Mask: net.CIDRMask(p.Bits(), 32)}
 }
 
 func toNetlink(p netip.Prefix) *netlink.Addr {

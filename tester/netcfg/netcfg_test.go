@@ -17,6 +17,7 @@ func TestNetlinkAddRemoveOnDummyLink(t *testing.T) {
 	link := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "frutest0"}}
 	require.NoError(t, netlink.LinkAdd(link))
 	t.Cleanup(func() { _ = netlink.LinkDel(link) })
+	require.NoError(t, netlink.LinkSetUp(link)) // routes need an up link
 
 	m := Netlink{}
 	names, err := m.Interfaces()
@@ -40,4 +41,19 @@ func TestNetlinkAddRemoveOnDummyLink(t *testing.T) {
 	require.NoError(t, m.Remove("frutest0", secondary))
 
 	require.ErrorContains(t, m.Add("no-such-if0", primary), `interface "no-such-if0"`)
+
+	// routes: add once, recognise our own route, refuse a conflicting one
+	require.NoError(t, m.Add("frutest0", primary))
+	pool := netip.MustParsePrefix("10.251.0.0/16")
+	gw := netip.MustParseAddr("10.250.0.9")
+	added, err := m.EnsureRoute("frutest0", pool, gw)
+	require.NoError(t, err)
+	require.True(t, added)
+	added, err = m.EnsureRoute("frutest0", pool, gw)
+	require.NoError(t, err)
+	require.False(t, added, "an identical route is left alone")
+	_, err = m.EnsureRoute("frutest0", pool, netip.MustParseAddr("10.250.0.8"))
+	require.ErrorContains(t, err, "already routed via 10.250.0.9")
+	require.NoError(t, m.RemoveRoute("frutest0", pool, gw))
+	require.NoError(t, m.RemoveRoute("frutest0", pool, gw), "removing twice is fine")
 }
