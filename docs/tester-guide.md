@@ -91,6 +91,8 @@ What each stage times:
 | Registration | Initial UE Message (Registration Request) sent | Registration Complete sent |
 | PDU session | PDU Session Establishment Request sent | Accept received (the gNB has already answered PDU Session Resource Setup) |
 
+If **every** PDU session of a run times out while registration succeeds, look at the core first. A common cause is stale sessions from an earlier run with the same SUPIs (see Known limitations).
+
 The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). It also lists the first 200 failed UEs with their SUPI, gNB, stage, cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 
 gNB states: `pending` → `connecting` → `up` or `failed`.
@@ -102,6 +104,6 @@ gNB states: `pending` → `connecting` → `up` or `failed`.
 - If fru-tester is killed with SIGKILL, the gNB IPs it added stay on the interface. Later runs skip them as host IPs; remove them with `ip addr del`.
 - Messages the AMF sends after NG Setup are read and ignored.
 - There is no run history yet.
-- Stop does not deregister UEs. The AMF drops their contexts when the gNB's association closes. PDU release and deregistration come in a later phase.
+- Stop does not release PDU sessions or deregister UEs (that comes in a later phase), so the core keeps their sessions. Re-running the **same SUPIs** makes the core tear those stale sessions down during the new registration. On the free5GC this was tested against, that teardown waited on the CHF, which did not answer, and every PDU session of the re-run timed out until the CHF/SMF were restarted. Between runs, either restart those NFs or point `First MSIN` at fresh subscribers.
 - The SQN in the network's AUTN is accepted without a freshness check (as in free-ran-ue), so re-running the same UEs never needs a resynchronisation.
 - A UE that reached `established` on a gNB later marked `lost` still counts as established.
