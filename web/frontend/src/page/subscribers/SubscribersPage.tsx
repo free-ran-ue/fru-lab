@@ -7,6 +7,7 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import type { Subscriber } from '../../webconsoleApi'
+import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
 import styles from './webconsole-style.module.css'
 
 export default function SubscribersPage() {
@@ -17,6 +18,18 @@ export default function SubscribersPage() {
   const [search, setSearch] = useState('')
   const [deletingUeId, setDeletingUeId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Subscriber | null>(null)
+  const [isAskingCount, setIsAskingCount] = useState(false)
+  const [ueCount, setUeCount] = useState('1')
+  const parsedCount = Number(ueCount)
+  const isCountValid = Number.isInteger(parsedCount) && parsedCount >= 1 && parsedCount <= MAX_BULK_SUBSCRIBERS
+
+  // Add asks how many UEs first; the form then creates that many,
+  // IMSI +1 each, with every other field the same.
+  function startAdd() {
+    if (!isCountValid) return
+    setIsAskingCount(false)
+    navigate(`/subscribers/new?count=${parsedCount}`)
+  }
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
 
@@ -148,7 +161,7 @@ export default function SubscribersPage() {
               </table>
             )}
 
-            <Button onClick={() => navigate('/subscribers/new')}>+ Add Subscriber</Button>
+            <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add Subscriber</Button>
           </section>
         </div>
       </main>
@@ -160,6 +173,34 @@ export default function SubscribersPage() {
         onSubmit={handleConfirmDelete}
       >
         <p>Delete subscriber <strong>{confirmTarget?.ueId}</strong>? This cannot be undone.</p>
+      </Modal>
+
+      <Modal
+        isOpen={isAskingCount}
+        onClose={() => setIsAskingCount(false)}
+        title="Add subscribers"
+        onSubmit={startAdd}
+      >
+        <form onSubmit={(event) => { event.preventDefault(); startAdd() }}>
+          <div className={styles.field}>
+            <label htmlFor="ue-count">How many UEs?</label>
+            <input
+              id="ue-count"
+              className={styles.input}
+              type="number"
+              min={1}
+              max={MAX_BULK_SUBSCRIBERS}
+              value={ueCount}
+              onChange={(event) => setUeCount(event.target.value)}
+              autoFocus
+            />
+          </div>
+          <p style={{ margin: '0.75rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+            {isCountValid
+              ? 'You fill in the first subscriber; the rest get the next IMSIs (+1 each) with every other field the same.'
+              : `Enter a whole number from 1 to ${MAX_BULK_SUBSCRIBERS}.`}
+          </p>
+        </form>
       </Modal>
     </div>
   )

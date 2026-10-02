@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/sidebar/Sidebar'
 import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
@@ -10,6 +10,7 @@ import {
   PDU_SESSION_TYPES,
   SSC_MODES,
   UP_SECURITY_OPTIONS,
+  bulkUeIds,
   emptySubscriberForm,
   fromSubscription,
   makeDefaultUpSecurity,
@@ -22,6 +23,15 @@ import {
   type SubscriberFormState,
 } from './subscriberForm'
 import styles from './webconsole-style.module.css'
+
+// BULK_CONCURRENCY is how many create requests run at once when adding
+// many subscribers, so the webconsole is not flooded.
+const BULK_CONCURRENCY = 8
+
+interface BulkFailure {
+  ueId: string
+  message: string
+}
 
 function updateRow<T extends { id: string }>(rows: T[], id: string, patch: Partial<T>): T[] {
   return rows.map((row) => (row.id === id ? { ...row, ...patch } : row))
@@ -46,11 +56,18 @@ export default function SubscriberFormPage() {
   const navigate = useNavigate()
   const { ueId: editUeId, plmnId: editPlmnId } = useParams<{ ueId: string; plmnId: string }>()
   const isEditMode = Boolean(editUeId && editPlmnId)
+  const [searchParams] = useSearchParams()
+  // count > 1 creates that many subscribers from this form, IMSI +1 each
+  const count = isEditMode ? 1 : Math.max(1, Math.floor(Number(searchParams.get('count')) || 1))
+  const isBulk = count > 1
 
   const [form, setForm] = useState<SubscriberFormState>(emptySubscriberForm())
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [bulkFailures, setBulkFailures] = useState<BulkFailure[]>([])
+  const bulkIds = useMemo(() => (isBulk ? bulkUeIds(form.ueId, count) : null), [isBulk, form.ueId, count])
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
 
@@ -74,8 +91,53 @@ export default function SubscriberFormPage() {
     }
   }, [isEditMode, loadForEdit])
 
+  // createMany posts one subscription per IMSI: the form's subscription
+  // with only ueId changed. It keeps going past failures and reports them.
+  async function createMany(ids: string[]) {
+    const base = toSubscription(form)
+    const failures: BulkFailure[] = []
+    let next = 0
+    let done = 0
+    setProgress(0)
+    setBulkFailures([])
+    const worker = async () => {
+      while (next < ids.length) {
+        const ueId = ids[next++]
+        try {
+          await webconsoleApi.postSubscriberByID(ueId, base.plmnID, { ...base, ueId })
+        } catch (error) {
+          failures.push({ ueId, message: extractWebconsoleErrorMessage(error, 'Failed to create') })
+        }
+        done++
+        setProgress(done)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, worker))
+    failures.sort((a, b) => a.ueId.localeCompare(b.ueId))
+    return failures
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isBulk) {
+      if (typeof bulkIds === 'string' || bulkIds === null) {
+        addError(bulkIds ?? 'Invalid SUPI')
+        return
+      }
+      setIsSaving(true)
+      try {
+        const failures = await createMany(bulkIds)
+        if (failures.length === 0) {
+          navigate('/subscribers')
+          return
+        }
+        setBulkFailures(failures)
+        addError(`Created ${bulkIds.length - failures.length} of ${bulkIds.length}; ${failures.length} failed (listed below)`)
+      } finally {
+        setIsSaving(false)
+      }
+      return
+    }
     setIsSaving(true)
     try {
       const subscription = toSubscription(form)
@@ -146,7 +208,7 @@ export default function SubscriberFormPage() {
           <div className={styles.heroInner}>
             <div>
               <p className={styles.kicker}>Fru-Lab Control Plane</p>
-              <h2 className={styles.title}>{isEditMode ? 'Edit Subscriber' : 'Add Subscriber'}</h2>
+              <h2 className={styles.title}>{isEditMode ? 'Edit Subscriber' : isBulk ? `Add ${count} Subscribers` : 'Add Subscriber'}</h2>
             </div>
           </div>
         </div>
@@ -164,6 +226,13 @@ export default function SubscriberFormPage() {
                     disabled={isEditMode}
                     required
                   />
+                  {isBulk && (
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: typeof bulkIds === 'string' ? '#b91c1c' : '#64748b' }}>
+                      {typeof bulkIds === 'string'
+                        ? bulkIds
+                        : `Creates ${count} subscribers, ${bulkIds?.[0]} to ${bulkIds?.[bulkIds.length - 1]}; every other field is the same for all of them.`}
+                    </p>
+                  )}
                 </Field>
                 <Field label="PLMN ID" required>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -434,10 +503,25 @@ export default function SubscriberFormPage() {
               ))}
             </div>
 
+            {bulkFailures.length > 0 && (
+              <section className={styles.card}>
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>
+                  {bulkFailures.length} subscriber{bulkFailures.length === 1 ? '' : 's'} could not be created
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85rem', maxHeight: '12rem', overflowY: 'auto' }}>
+                  {bulkFailures.map((f) => <li key={f.ueId}><code>{f.ueId}</code>: {f.message}</li>)}
+                </ul>
+              </section>
+            )}
+
             <div className={styles.actionsRow}>
-              <Button variant="secondary" type="button" onClick={() => navigate('/subscribers')} disabled={isSaving}>Cancel</Button>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? 'Saving…' : isEditMode ? 'Save' : 'Create'}
+              <Button variant="secondary" type="button" onClick={() => navigate('/subscribers')} disabled={isSaving}>
+                {bulkFailures.length > 0 ? 'Back to subscribers' : 'Cancel'}
+              </Button>
+              <Button type="submit" disabled={isSaving || (isBulk && typeof bulkIds === 'string')}>
+                {isSaving
+                  ? (isBulk ? `Creating ${progress}/${count}…` : 'Saving…')
+                  : isEditMode ? 'Save' : isBulk ? `Create ${count}` : 'Create'}
               </Button>
             </div>
           </form>
