@@ -1503,6 +1503,7 @@ ul.tight li { margin: 3px 0; }
       <li>延遲是固定 500 ms；裝隧道比較慢的核網，每個 UE 開頭還是可能掉幾個 DL 封包。</li>
       <li>N6 介面名稱沒有檢查是否存在。</li>
       <li><b>可改善：發送速率上限。</b>一個 UDP socket 約 1 Gbps（1400 bytes 封包）。目前 UL 每個 gNB 一個 socket、DL 固定 4 個，所以單一 gNB 的 UL、單一 UE 的 DL 上限都約 1 Gbps，DL 總上限約 4 Gbps。改法：發送線數跟 CPU 核心數走，UL 也照樣拆成多個 socket；再往上可以改用 sendmmsg 批次送或 UDP GSO。</li>
+      <li><b>可改善：CPU 分配。</b>目前沒有任何分配：不綁核、不設 GOMAXPROCS，UPF container 也沒有 CPU 限制，全部交給 Go runtime 和 Linux 排程（測試機是 6 vCPU 的 VM）。資料面的 goroutine：UL 發送每個 gNB 一條、DL 發送固定 4 條、DL 接收每個 gNB 一條、UL 接收（sink）1 條、統計 1 條。要注意的是，tester 呼叫 sendto 後，封包經 veth 進 UPF、gtp5g 封裝或解封裝、再經 bridge 回到 tester 的 socket，這段 kernel 處理大多在送出封包的那顆 CPU 上做完（softirq），所以 UPF 的工作有一部分算在 tester 頭上。實測：DL 900 Mbps 時 fru-tester 約 230% CPU，整台約 40% 忙；每次 sendto 約 10 µs。發送線數跟核心數走之後，下一個瓶頸會是 CPU 本身，可以考慮：發送線、接收線分別綁核，和 UPF 的 softirq 錯開；用 sendmmsg / recvmmsg 減少系統呼叫；把 tester 和核網放在不同機器。</li>
       <li>重開核網時要先重開 NRF，再重開其他 NF，而且 SMF 要在 UPF 之後，不然 PFCP 關聯會斷，PDU 全部逾時。</li>
     </ul>
   </div>
