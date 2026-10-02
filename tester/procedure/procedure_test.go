@@ -157,3 +157,48 @@ func TestRegisterDoesNotWaitForeverForConfigurationUpdate(t *testing.T) {
 	require.Less(t, time.Since(start), time.Second)
 	require.Equal(t, metrics.Accepted, EstablishPdu(assoc, link, u, time.Second).Result)
 }
+
+// The AMF goes away while the UE is already waiting for its answer: the
+// attempt must fail at once with "association lost", not sit out its
+// timeout, even if the UE's downlink buffer could not take the event.
+func TestAssociationLostWhileWaiting(t *testing.T) {
+	gnbEnd, amfEnd := fakecore.Pipe()
+	go func() {
+		buf := make([]byte, 65536)
+		_, _ = amfEnd.Read(buf) // take the Initial UE Message, then vanish
+		_ = amfEnd.Close()
+	}()
+	id, err := gnb.NewIdentity(profile.GnbSpec{Name: "gNB-1", GnbID: "000314"},
+		profile.GnbTemplate{Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203"})
+	require.NoError(t, err)
+	assoc := gnb.NewAssociation(gnbEnd, id, netip.MustParseAddr("10.0.1.100"), &gnb.TeidAllocator{})
+	go func() { _ = assoc.Run() }()
+
+	start := time.Now()
+	_, out := Register(assoc, newUE(t, "0000000001"), 5*time.Second)
+	require.Equal(t, metrics.Failed, out.Result)
+	require.Contains(t, out.Cause, "association lost")
+	require.Less(t, time.Since(start), time.Second)
+}
+
+func TestAssociationLostIsNotDroppedWithAFullBuffer(t *testing.T) {
+	gnbEnd, amfEnd := fakecore.Pipe()
+	id, err := gnb.NewIdentity(profile.GnbSpec{Name: "gNB-1", GnbID: "000314"},
+		profile.GnbTemplate{Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203"})
+	require.NoError(t, err)
+	assoc := gnb.NewAssociation(gnbEnd, id, netip.MustParseAddr("10.0.1.100"), &gnb.TeidAllocator{})
+	link, err := assoc.Attach()
+	require.NoError(t, err)
+	for range cap(link.Downlinks) { // a UE that stopped reading
+		link.Downlinks <- gnb.Downlink{Kind: gnb.DownlinkNas}
+	}
+	go func() { _ = assoc.Run() }()
+	_ = amfEnd.Close()
+
+	select {
+	case <-assoc.Lost():
+	case <-time.After(time.Second):
+		t.Fatal("Lost() must close when the association fails")
+	}
+	require.ErrorContains(t, assoc.Err(), "association lost")
+}

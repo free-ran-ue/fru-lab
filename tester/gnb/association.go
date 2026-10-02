@@ -63,13 +63,26 @@ type Association struct {
 	writeMu sync.Mutex
 	nextID  atomic.Int64
 
-	mu   sync.Mutex
-	ues  map[int64]*UeLink
-	lost error
+	mu     sync.Mutex
+	ues    map[int64]*UeLink
+	lost   error
+	lostCh chan struct{} // closed once when the association fails
 }
 
 func NewAssociation(conn Conn, id Identity, n3IP netip.Addr, teids *TeidAllocator) *Association {
-	return &Association{conn: conn, id: id, n3IP: n3IP, teids: teids, ues: map[int64]*UeLink{}}
+	return &Association{conn: conn, id: id, n3IP: n3IP, teids: teids, ues: map[int64]*UeLink{}, lostCh: make(chan struct{})}
+}
+
+// Lost is closed when the association fails. Unlike the DownlinkLost
+// event, which a UE with a full buffer would miss, it cannot be dropped,
+// so a waiting procedure always learns about the loss at once.
+func (a *Association) Lost() <-chan struct{} { return a.lostCh }
+
+// Err is the failure that closed Lost, nil before that.
+func (a *Association) Err() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lost
 }
 
 // Attach gives a UE a fresh RAN UE NGAP ID (a retry attaches again).
@@ -143,7 +156,12 @@ func (a *Association) Run() error {
 
 func (a *Association) fail(err error) {
 	a.mu.Lock()
+	if a.lost != nil {
+		a.mu.Unlock()
+		return
+	}
 	a.lost = fmt.Errorf("association lost: %w", err)
+	close(a.lostCh)
 	ues := a.ues
 	a.ues = map[int64]*UeLink{}
 	a.mu.Unlock()

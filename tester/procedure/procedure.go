@@ -59,7 +59,7 @@ func register(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.
 		return failed(err)
 	}
 	for {
-		d, err := next(link, deadline)
+		d, err := next(assoc, link, deadline)
 		if err != nil {
 			return failed(err)
 		}
@@ -81,7 +81,7 @@ func register(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.
 		switch r.Event {
 		case ue.EventRegistered:
 			done := time.Now()
-			awaitConfigUpdate(link, u, minTime(done.Add(configUpdateWait), deadline))
+			awaitConfigUpdate(assoc, link, u, minTime(done.Add(configUpdateWait), deadline))
 			return Outcome{Result: metrics.Accepted, DoneAt: done}
 		case ue.EventRegistrationRejected:
 			return Outcome{Result: metrics.Rejected, Cause: r.Cause}
@@ -103,7 +103,7 @@ func EstablishPdu(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout ti
 	}
 	var setup *gnb.PduSetup
 	for {
-		d, err := next(link, deadline)
+		d, err := next(assoc, link, deadline)
 		if err != nil {
 			return failed(err)
 		}
@@ -135,9 +135,9 @@ func EstablishPdu(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout ti
 // awaitConfigUpdate consumes downlinks until the Configuration Update
 // Command arrives or the deadline passes. Anything else that arrives in
 // that window (there should be nothing) is dropped.
-func awaitConfigUpdate(link *gnb.UeLink, u *ue.UE, deadline time.Time) {
+func awaitConfigUpdate(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.Time) {
 	for {
-		d, err := next(link, deadline)
+		d, err := next(assoc, link, deadline)
 		if err != nil || d.Kind != gnb.DownlinkNas {
 			return
 		}
@@ -154,12 +154,14 @@ func minTime(a, b time.Time) time.Time {
 	return b
 }
 
-func next(link *gnb.UeLink, deadline time.Time) (gnb.Downlink, error) {
+func next(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) (gnb.Downlink, error) {
 	t := time.NewTimer(time.Until(deadline))
 	defer t.Stop()
 	select {
 	case d := <-link.Downlinks:
 		return d, nil
+	case <-assoc.Lost():
+		return gnb.Downlink{}, assoc.Err()
 	case <-t.C:
 		return gnb.Downlink{}, errTimeout
 	}
