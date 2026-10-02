@@ -152,11 +152,20 @@ func testProfile() profile.Profile {
 		Scale: profile.Scale{GnbCount: 3, UeCount: 10},
 		Gnb: profile.GnbTemplate{GnbIDStart: "000314", NamePattern: "gNB-{i}",
 			Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203"},
+		Ue: profile.UeTemplate{MsinStart: "0000000001", Key: "8baf473f2f8fd09487cccbd7097c6862",
+			Opc: "8e27b6af0e692e750f32667a3b14605d", Amf: "8000", Sqn: "000000000023",
+			Integrity: "nia2", Ciphering: "nea0", Dnn: "internet", Sst: 1, Sd: "010203"},
 		Network: profile.Network{
 			N2: profile.N2Network{Interface: "eth-n2", Cidr: "10.0.1.0/24", StartIP: "10.0.1.10", AmfIP: "10.0.1.1", AmfPort: 38412},
 			N3: profile.N3Network{Interface: "eth-n3", Cidr: "10.0.2.0/24", StartIP: "10.0.2.10", UpfIP: "10.0.2.1", UpfPort: 2152},
 		},
-		Rates: profile.Rates{N2: profile.StageRate{TimeoutMs: 1000, Retries: 1}},
+		// N2-only tests use fakeConn, which never answers NAS: keep the UE
+		// stages short so Stop does not wait long for their timeouts.
+		Rates: profile.Rates{
+			N2:           profile.StageRate{TimeoutMs: 1000, Retries: 1},
+			Registration: profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
+			Pdu:          profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
+		},
 	}
 }
 

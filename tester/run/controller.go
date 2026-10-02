@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
-	"syscall"
 	"time"
 
 	loggergoModel "github.com/Alonza0314/logger-go/v2/model"
@@ -15,7 +14,9 @@ import (
 	"tester/gnb"
 	"tester/metrics"
 	"tester/netcfg"
+	"tester/procedure"
 	"tester/profile"
+	"tester/ue"
 )
 
 var (
@@ -154,7 +155,9 @@ func (c *Controller) Snapshot() Snapshot {
 	r := c.current
 	c.mu.Unlock()
 	if r == nil {
-		return Snapshot{State: StateIdle, Gnbs: []GnbStatus{}, N2: metrics.NewStage("n2", 0).Snapshot()}
+		empty := metrics.NewStage("", 0).Snapshot()
+		return Snapshot{State: StateIdle, Gnbs: []GnbStatus{}, FailedUes: []UeFailure{},
+			N2: empty, Registration: empty, Pdu: empty}
 	}
 	return r.snapshot()
 }
@@ -180,7 +183,11 @@ type run struct {
 	deps    Deps
 	notify  func()
 
-	n2   *metrics.Stage
+	n2, reg, pdu *metrics.Stage
+	regStage     *procStage
+	pduStage     *procStage
+	teids        gnb.TeidAllocator
+
 	stop context.CancelFunc
 	ctx  context.Context
 	done chan struct{}
@@ -192,7 +199,29 @@ type run struct {
 	stoppedAt time.Time
 	gnbs      []GnbStatus
 	conns     []gnb.Conn
+	assocs    []*gnb.Association
+	ues       []ueRun
+	summary   UeSummary
+	failures  []UeFailure
 	added     []addedAddr // in the order they were added
+}
+
+// ueRun is one UE's progress; guarded by run.mu except nas and link,
+// which only the UE's current attempt touches.
+type ueRun struct {
+	spec        profile.UeSpec
+	state       UeState
+	regAttempts int
+	pduAttempts int
+	regStart    time.Time
+	pduStart    time.Time
+	regDone     bool // has a final registration outcome (or was skipped)
+	pduDone     bool
+	ueIP        string
+	pduSetup    *gnb.PduSetup
+
+	nas  *ue.UE
+	link *gnb.UeLink
 }
 
 type addedAddr struct {
@@ -205,6 +234,8 @@ func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify 
 	r := &run{
 		id: id, profile: p, plan: plan, deps: deps, notify: notify,
 		n2:        metrics.NewStage("n2", len(plan.Gnbs)),
+		reg:       metrics.NewStage("registration", len(plan.Ues)),
+		pdu:       metrics.NewStage("pdu", len(plan.Ues)),
 		ctx:       ctx,
 		stop:      cancel,
 		done:      make(chan struct{}),
@@ -212,10 +243,19 @@ func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify 
 		startedAt: deps.Now(),
 		gnbs:      make([]GnbStatus, len(plan.Gnbs)),
 		conns:     make([]gnb.Conn, len(plan.Gnbs)),
+		assocs:    make([]*gnb.Association, len(plan.Gnbs)),
+		ues:       make([]ueRun, len(plan.Ues)),
+		failures:  []UeFailure{},
 	}
 	for i, spec := range plan.Gnbs {
 		r.gnbs[i] = GnbStatus{GnbSpec: spec, State: GnbPending}
 	}
+	for i, spec := range plan.Ues {
+		r.ues[i] = ueRun{spec: spec, state: UePending}
+	}
+	r.summary.Pending = len(plan.Ues)
+	r.regStage = newProcStage(p.Rates.Registration, len(plan.Ues), r.attemptRegistration)
+	r.pduStage = newProcStage(p.Rates.Pdu, len(plan.Ues), r.attemptPdu)
 	return r
 }
 
@@ -243,6 +283,13 @@ func (r *run) updateGnb(i int, f func(*GnbStatus)) {
 	r.notify()
 }
 
+// setUeState must be called with r.mu held.
+func (r *run) setUeState(i int, st UeState) {
+	r.summary.add(r.ues[i].state, -1)
+	r.summary.add(st, 1)
+	r.ues[i].state = st
+}
+
 func (r *run) requestStop() { r.stop() }
 
 func (r *run) snapshot() Snapshot {
@@ -250,8 +297,10 @@ func (r *run) snapshot() Snapshot {
 	defer r.mu.Unlock()
 	snap := Snapshot{
 		RunID: r.id, ProfileName: r.profile.Name, State: r.st, Error: r.errMsg,
-		N2:   r.n2.Snapshot(),
-		Gnbs: append([]GnbStatus(nil), r.gnbs...),
+		N2: r.n2.Snapshot(), Registration: r.reg.Snapshot(), Pdu: r.pdu.Snapshot(),
+		Gnbs:      append([]GnbStatus(nil), r.gnbs...),
+		Ues:       r.summary,
+		FailedUes: append([]UeFailure(nil), r.failures...),
 	}
 	started := r.startedAt
 	snap.StartedAt = &started
@@ -274,7 +323,11 @@ func (r *run) execute() {
 		return
 	}
 
+	var pipelines sync.WaitGroup
 	if r.ctx.Err() == nil { // Stop may arrive while IPs are being added
+		pipelines.Add(2)
+		go func() { defer pipelines.Done(); r.regStage.run(r.ctx) }()
+		go func() { defer pipelines.Done(); r.pduStage.run(r.ctx) }()
 		r.setState(StateN2)
 		r.runN2()
 	}
@@ -284,9 +337,42 @@ func (r *run) execute() {
 	}
 
 	r.setState(StateStopping)
+	pipelines.Wait() // in-flight procedures finish or time out (design N4)
+	r.skipUnfinished()
 	r.closeConns()
 	r.removeIPs()
 	r.setState(StateStopped)
+}
+
+// skipUnfinished closes every stage after Stop: gNBs still waiting for
+// N2 and UEs still queued are counted as skipped, so each stage is Done
+// and its total time stops growing.
+func (r *run) skipUnfinished() {
+	r.regStage.drain()
+	r.pduStage.drain()
+	r.mu.Lock()
+	for i := range r.gnbs {
+		if s := r.gnbs[i].State; s == GnbPending || s == GnbConnecting {
+			r.n2.Skip()
+		}
+	}
+	for i := range r.ues {
+		u := &r.ues[i]
+		if !u.regDone {
+			u.regDone = true
+			r.reg.Skip()
+		}
+		if !u.pduDone {
+			u.pduDone = true
+			r.pdu.Skip()
+		}
+		switch u.state {
+		case UePending, UeRegistering, UeRegistered, UeEstablishing:
+			r.setUeState(i, UeCancelled)
+		}
+	}
+	r.mu.Unlock()
+	r.notify()
 }
 
 func (r *run) configureIPs() error {
@@ -432,17 +518,14 @@ func (r *run) attemptN2(n *n2Round, i int) {
 	r.n2.Begin(attempt > 1)
 	r.notify()
 
-	conn, err := r.connectGnb(spec, n.timeout)
+	conn, id, err := r.connectGnb(spec, n.timeout)
 	latency := r.deps.Now().Sub(n.firstAttempt[i])
 	if err == nil {
-		r.mu.Lock()
-		r.conns[i] = conn
-		r.mu.Unlock()
 		r.n2.Finish(metrics.Accepted, latency, "")
 		r.updateGnb(i, func(g *GnbStatus) {
 			g.State, g.LatencyMs, g.Cause = GnbUp, float64(latency)/float64(time.Millisecond), ""
 		})
-		go r.watchConn(i, conn)
+		r.startGnb(i, conn, id)
 		n.finished()
 		return
 	}
@@ -456,53 +539,194 @@ func (r *run) attemptN2(n *n2Round, i int) {
 	}
 	r.n2.Finish(Classify(err), latency, CauseOf(err))
 	r.updateGnb(i, func(g *GnbStatus) { g.State, g.Cause = GnbFailed, err.Error() })
+	r.skipGnbUes(i)
 	n.finished()
 }
 
-// watchConn reads the association until it fails, discarding whatever
-// the AMF sends (phase 1 handles no AMF-initiated procedures). A read
-// error while the run is not stopping means the AMF side went away.
-// EAGAIN is just SO_RCVTIMEO expiring on an idle association, and EINTR
-// is a signal interrupting recvmsg (not restarted when SO_RCVTIMEO is
-// set, see signal(7)); neither means the association is gone.
-func (r *run) watchConn(i int, conn gnb.Conn) {
-	buf := make([]byte, 4096)
-	for {
-		_, err := conn.Read(buf)
-		if err == nil || errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EINTR) {
-			continue
+// startGnb wraps an up gNB's association and releases its UEs into the
+// registration stage.
+func (r *run) startGnb(i int, conn gnb.Conn, id gnb.Identity) {
+	n3, _ := netip.ParseAddr(r.plan.Gnbs[i].N3IP)
+	assoc := gnb.NewAssociation(conn, id, n3, &r.teids)
+	r.mu.Lock()
+	r.conns[i] = conn
+	r.assocs[i] = assoc
+	r.mu.Unlock()
+	go r.watchAssociation(i, conn, assoc)
+	for u := range r.ues {
+		if r.ues[u].spec.Gnb == i {
+			r.regStage.enqueue(u)
 		}
-		if r.ctx.Err() != nil {
-			return // our own Close during Stop
-		}
-		r.mu.Lock()
-		if r.conns[i] == conn {
-			r.conns[i] = nil
-		}
-		r.mu.Unlock()
-		_ = conn.Close()
-		r.updateGnb(i, func(g *GnbStatus) { g.State, g.Cause = GnbLost, "association lost: "+err.Error() })
-		return
 	}
 }
 
-func (r *run) connectGnb(spec profile.GnbSpec, timeout time.Duration) (gnb.Conn, error) {
+// watchAssociation runs the gNB's NGAP read loop. If it ends while the
+// run is not stopping, the AMF side went away: the gNB is marked lost,
+// and its UEs' procedures fail through DownlinkLost.
+func (r *run) watchAssociation(i int, conn gnb.Conn, assoc *gnb.Association) {
+	err := assoc.Run()
+	if r.ctx.Err() != nil {
+		return // our own Close during Stop
+	}
+	r.mu.Lock()
+	if r.conns[i] == conn {
+		r.conns[i] = nil
+	}
+	r.mu.Unlock()
+	_ = conn.Close()
+	r.updateGnb(i, func(g *GnbStatus) { g.State, g.Cause = GnbLost, "association lost: "+err.Error() })
+}
+
+// skipGnbUes marks every UE of a gNB that never came up.
+func (r *run) skipGnbUes(gi int) {
+	r.mu.Lock()
+	for i := range r.ues {
+		u := &r.ues[i]
+		if u.spec.Gnb != gi {
+			continue
+		}
+		u.regDone, u.pduDone = true, true
+		r.reg.Skip()
+		r.pdu.Skip()
+		r.setUeState(i, UeSkipped)
+	}
+	r.mu.Unlock()
+	r.notify()
+}
+
+func (r *run) recordFailure(i int, stage, cause string, attempts int) {
+	if len(r.failures) < maxFailuresListed {
+		r.failures = append(r.failures, UeFailure{
+			Supi: r.ues[i].spec.Supi, Gnb: r.gnbs[r.ues[i].spec.Gnb].Name,
+			Stage: stage, Cause: cause, Attempts: attempts,
+		})
+	}
+}
+
+// attemptRegistration is the registration stage's callback; it returns
+// true when the UE should be requeued for another attempt.
+func (r *run) attemptRegistration(i int) bool {
+	rates := r.profile.Rates.Registration
+	r.mu.Lock()
+	u := &r.ues[i]
+	u.regAttempts++
+	attempt := u.regAttempts
+	if attempt == 1 {
+		u.regStart = r.deps.Now()
+	}
+	assoc := r.assocs[u.spec.Gnb]
+	r.setUeState(i, UeRegistering)
+	r.mu.Unlock()
+	r.reg.Begin(attempt > 1)
+	r.notify()
+
+	var out procedure.Outcome
+	if u.nas == nil {
+		var err error
+		if u.nas, err = ue.New(ue.ConfigFrom(u.spec, r.profile.Gnb, r.profile.Ue)); err != nil {
+			out = procedure.Outcome{Result: metrics.Failed, Cause: err.Error()}
+		}
+	}
+	if u.nas != nil {
+		u.link, out = procedure.Register(assoc, u.nas, time.Duration(rates.TimeoutMs)*time.Millisecond)
+	}
+	latency := r.deps.Now().Sub(u.regStart)
+
+	if out.Result == metrics.Accepted {
+		r.reg.Finish(metrics.Accepted, latency, "")
+		r.mu.Lock()
+		u.regDone = true
+		r.setUeState(i, UeRegistered)
+		r.gnbs[u.spec.Gnb].Registered++
+		r.mu.Unlock()
+		r.pduStage.enqueue(i)
+		r.notify()
+		return false
+	}
+	if attempt <= rates.Retries && r.ctx.Err() == nil {
+		r.reg.Retrying()
+		r.mu.Lock()
+		r.setUeState(i, UePending)
+		r.mu.Unlock()
+		r.notify()
+		return true
+	}
+	r.reg.Finish(out.Result, latency, out.Cause)
+	r.pdu.Skip()
+	r.mu.Lock()
+	u.regDone, u.pduDone = true, true
+	r.setUeState(i, UeFailed)
+	r.recordFailure(i, "registration", out.Cause, attempt)
+	r.mu.Unlock()
+	r.notify()
+	return false
+}
+
+// attemptPdu is the PDU stage's callback.
+func (r *run) attemptPdu(i int) bool {
+	rates := r.profile.Rates.Pdu
+	r.mu.Lock()
+	u := &r.ues[i]
+	u.pduAttempts++
+	attempt := u.pduAttempts
+	if attempt == 1 {
+		u.pduStart = r.deps.Now()
+	}
+	assoc := r.assocs[u.spec.Gnb]
+	r.setUeState(i, UeEstablishing)
+	r.mu.Unlock()
+	r.pdu.Begin(attempt > 1)
+	r.notify()
+
+	out := procedure.EstablishPdu(assoc, u.link, u.nas, time.Duration(rates.TimeoutMs)*time.Millisecond)
+	latency := r.deps.Now().Sub(u.pduStart)
+
+	if out.Result == metrics.Accepted {
+		r.pdu.Finish(metrics.Accepted, latency, "")
+		r.mu.Lock()
+		u.pduDone = true
+		u.ueIP, u.pduSetup = out.UeIP.String(), out.Pdu
+		r.setUeState(i, UeEstablished)
+		r.gnbs[u.spec.Gnb].Established++
+		r.mu.Unlock()
+		r.notify()
+		return false
+	}
+	if attempt <= rates.Retries && r.ctx.Err() == nil {
+		r.pdu.Retrying()
+		r.mu.Lock()
+		r.setUeState(i, UeRegistered)
+		r.mu.Unlock()
+		r.notify()
+		return true
+	}
+	r.pdu.Finish(out.Result, latency, out.Cause)
+	r.mu.Lock()
+	u.pduDone = true
+	r.setUeState(i, UeFailed)
+	r.recordFailure(i, "pdu", out.Cause, attempt)
+	r.mu.Unlock()
+	r.notify()
+	return false
+}
+
+func (r *run) connectGnb(spec profile.GnbSpec, timeout time.Duration) (gnb.Conn, gnb.Identity, error) {
 	id, err := gnb.NewIdentity(spec, r.profile.Gnb)
 	if err != nil {
-		return nil, err
+		return nil, id, err
 	}
 	req, err := id.NGSetupRequest()
 	if err != nil {
-		return nil, fmt.Errorf("encode ng setup request: %w", err)
+		return nil, id, fmt.Errorf("encode ng setup request: %w", err)
 	}
 	n2 := r.profile.Network.N2
 	conn, err := r.deps.Dialer.Dial(spec.N2IP, n2.AmfIP, n2.AmfPort, timeout)
 	if err != nil {
-		return nil, err
+		return nil, id, err
 	}
 	if err := gnb.ExchangeNGSetup(conn, req); err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, id, err
 	}
-	return conn, nil
+	return conn, id, nil
 }
