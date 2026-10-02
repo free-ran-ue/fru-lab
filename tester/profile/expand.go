@@ -132,8 +132,10 @@ func validateFields(p Profile, verr *ValidationError) {
 	}
 	validateEndpoint(verr, "network.n2", p.Network.N2.Interface, p.Network.N2.Cidr, p.Network.N2.StartIP, "amfIp", p.Network.N2.AmfIP, "amfPort", p.Network.N2.AmfPort)
 	validateEndpoint(verr, "network.n3", p.Network.N3.Interface, p.Network.N3.Cidr, p.Network.N3.StartIP, "upfIp", p.Network.N3.UpfIP, "upfPort", p.Network.N3.UpfPort)
-	if p.Rates.N2.TimeoutMs < 1 {
-		verr.add("rates.n2.timeoutMs", "must be at least 1")
+	// The upper bound keeps Stop prompt: in-flight attempts finish within
+	// their timeout before teardown can start.
+	if p.Rates.N2.TimeoutMs < 1 || p.Rates.N2.TimeoutMs > 60000 {
+		verr.add("rates.n2.timeoutMs", "must be between 1 and 60000")
 	}
 	if p.Rates.N2.Retries < 0 {
 		verr.add("rates.n2.retries", "must not be negative")

@@ -329,7 +329,14 @@ func (r *run) removeIPs() {
 	}
 }
 
+// maxConcurrentCloses bounds teardown goroutines. Each SCTP Close may
+// block up to 1 s (free5gc/sctp sets SO_LINGER=1s), so closing serially
+// would outlast `docker stop`'s grace period and leak gNB IPs.
+const maxConcurrentCloses = 256
+
 func (r *run) closeConns() {
+	sem := make(chan struct{}, maxConcurrentCloses)
+	var wg sync.WaitGroup
 	for i := range r.conns {
 		r.mu.Lock()
 		conn := r.conns[i]
@@ -338,9 +345,15 @@ func (r *run) closeConns() {
 		if conn == nil {
 			continue
 		}
-		_ = conn.Close()
-		r.updateGnb(i, func(g *GnbStatus) { g.State = GnbClosed })
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem; wg.Done() }()
+			_ = conn.Close()
+			r.updateGnb(i, func(g *GnbStatus) { g.State = GnbClosed })
+		}()
 	}
+	wg.Wait()
 }
 
 // runN2 brings every gNB up concurrently. A failed attempt with retries

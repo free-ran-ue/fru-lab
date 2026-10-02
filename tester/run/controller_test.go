@@ -78,6 +78,8 @@ type fakeConn struct {
 	drop   chan struct{}
 	once   sync.Once
 	reads  int
+	// closeDelay mimics free5gc/sctp's Close blocking up to 1 s (SO_LINGER)
+	closeDelay time.Duration
 }
 
 func (c *fakeConn) Write(b []byte) (int, error) { return len(b), nil }
@@ -97,7 +99,11 @@ func (c *fakeConn) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 }
-func (c *fakeConn) Close() error { c.once.Do(func() { close(c.closed) }); return nil }
+func (c *fakeConn) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	time.Sleep(c.closeDelay)
+	return nil
+}
 
 // fakeDialer: script[localIP] returns per-attempt behaviour.
 type fakeDialer struct {
@@ -105,6 +111,8 @@ type fakeDialer struct {
 	script func(localIP string, attempt int) (reply func() ([]byte, error), dialErr error)
 	counts map[string]int
 	opened []*fakeConn
+	// closeDelay is copied into every conn this dialer opens
+	closeDelay time.Duration
 }
 
 func (d *fakeDialer) Dial(localIP, amfIP string, amfPort int, timeout time.Duration) (gnb.Conn, error) {
@@ -116,7 +124,7 @@ func (d *fakeDialer) Dial(localIP, amfIP string, amfPort int, timeout time.Durat
 	if dialErr != nil {
 		return nil, dialErr
 	}
-	c := &fakeConn{reply: reply, closed: make(chan struct{}), drop: make(chan struct{})}
+	c := &fakeConn{reply: reply, closed: make(chan struct{}), drop: make(chan struct{}), closeDelay: d.closeDelay}
 	d.mu.Lock()
 	d.opened = append(d.opened, c)
 	d.mu.Unlock()
@@ -394,4 +402,22 @@ func TestLostAssociationIsReported(t *testing.T) {
 	_, err = c.Stop()
 	require.NoError(t, err)
 	waitState(t, c, StateStopped)
+}
+
+// Each SCTP Close can block up to 1 s (SO_LINGER); closing serially would
+// outlast docker stop's grace period with many gNBs and leak their IPs.
+func TestStopClosesAssociationsConcurrently(t *testing.T) {
+	addrs := &fakeAddrs{}
+	dialer := newFakeDialer(func(string, int) (func() ([]byte, error), error) { return accept(t), nil })
+	dialer.closeDelay = 300 * time.Millisecond
+	c := newTestController(addrs, dialer)
+	_, err := c.Start(testProfile())
+	require.NoError(t, err)
+	waitState(t, c, StateRunning)
+
+	start := time.Now()
+	_, err = c.Stop()
+	require.NoError(t, err)
+	waitState(t, c, StateStopped)
+	require.Less(t, time.Since(start), 600*time.Millisecond, "3 closes of 300 ms each should overlap")
 }

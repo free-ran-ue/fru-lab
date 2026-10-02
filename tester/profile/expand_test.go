@@ -103,3 +103,12 @@ func TestExpandSharedN2N3CidrNeverReusesAnIP(t *testing.T) {
 	require.Equal(t, []string{"10.0.1.5", "10.0.1.7", "10.0.1.8"},
 		[]string{plan.Gnbs[0].N3IP, plan.Gnbs[1].N3IP, plan.Gnbs[2].N3IP})
 }
+
+func TestExpandBoundsN2Timeout(t *testing.T) {
+	p := sampleProfile()
+	p.Rates.N2.TimeoutMs = 60001
+	_, err := Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "rates.n2.timeoutMs", Message: "must be between 1 and 60000"}}, verr.Errors)
+}
