@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import Sidebar from '../../components/sidebar/Sidebar'
-import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
@@ -135,8 +134,8 @@ export default function TesterHistoryPage() {
                     <th>Started</th>
                     <th>Profile</th>
                     <th>Result</th>
-                    {METRICS.map(([label]) => <th key={label}>{label}</th>)}
                     <th>Export</th>
+                    {METRICS.map(([label]) => <th key={label}>{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -153,13 +152,11 @@ export default function TesterHistoryPage() {
                           {result(r)}
                         </span>
                       </td>
-                      {METRICS.map(([label, f]) => <td key={label} className={styles.mono}>{f(r)}</td>)}
                       <td>
-                        <div className={styles.headerActions}>
-                          <Button variant="secondary" onClick={() => download(r, 'json')}>JSON</Button>
-                          <Button variant="secondary" onClick={() => download(r, 'csv')}>CSV</Button>
-                        </div>
+                        <button type="button" className={styles.linkButton} onClick={() => download(r, 'json')}>JSON</button>
+                        <button type="button" className={styles.linkButton} onClick={() => download(r, 'csv')}>CSV</button>
                       </td>
+                      {METRICS.map(([label, f]) => <td key={label} className={styles.mono}>{f(r)}</td>)}
                     </tr>
                   ))}
                 </tbody>

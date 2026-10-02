@@ -24,6 +24,8 @@
 .table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .table th { text-align: left; font-size: 0.72rem; color: #64748b; font-weight: 600; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
 .table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid #f1f5f9; color: #0f172a; white-space: nowrap; }
+.linkButton { background: none; border: 0; padding: 0 0.5rem 0 0; color: #4338ca; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.linkButton:hover { text-decoration: underline; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
 .causeCell { white-space: normal; color: #64748b; font-size: 0.8rem; min-width: 16rem; }
 
