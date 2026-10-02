@@ -5,11 +5,19 @@ import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterFieldError, TesterProfile, TesterValidateResponse } from '../../api'
+import type { TesterFieldError, TesterPlan, TesterProfile, TesterValidateResponse } from '../../api'
 import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
 import styles from './tester.module.css'
 
 const PREVIEW_ROWS = 10
+
+// lastSupi is the SUPI of the plan's last UE (the last gNB may own none).
+function lastSupi(plan: TesterPlan): string {
+  for (let i = plan.gnbs.length - 1; i >= 0; i--) {
+    if (plan.gnbs[i].lastSupi) return plan.gnbs[i].lastSupi
+  }
+  return ''
+}
 
 // Sets a value at a dotted path ("network.n2.cidr") on a deep copy, so
 // one onChange handler serves every field.
@@ -32,24 +40,44 @@ interface FieldProps {
   profile: TesterProfile
   errors: TesterFieldError[]
   numeric?: boolean
+  options?: string[] // render a select instead of an input
   onChange: (path: string, value: string | number) => void
 }
 
-function Field({ label, path, profile, errors, numeric = false, onChange }: FieldProps) {
+function Field({ label, path, profile, errors, numeric = false, options, onChange }: FieldProps) {
   const message = errors.find((e) => e.field === path)?.message
   const value = getPath(profile, path)
+  const className = `${styles.input} ${message ? styles.inputError : ''}`
   return (
     <div className={styles.field}>
       <label htmlFor={path}>{label}</label>
-      <input
-        id={path}
-        className={`${styles.input} ${message ? styles.inputError : ''}`}
-        type={numeric ? 'number' : 'text'}
-        value={numeric && Number.isNaN(value) ? '' : value}
-        onChange={(e) => onChange(path, numeric ? e.target.valueAsNumber : e.target.value)}
-      />
+      {options ? (
+        <select id={path} className={className} value={value} onChange={(e) => onChange(path, e.target.value)}>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input
+          id={path}
+          className={className}
+          type={numeric ? 'number' : 'text'}
+          value={numeric && Number.isNaN(value) ? '' : value}
+          onChange={(e) => onChange(path, numeric ? e.target.valueAsNumber : e.target.value)}
+        />
+      )}
       {message && <p className={styles.fieldError}>{message}</p>}
     </div>
+  )
+}
+
+// RateFields renders one per-UE stage's pacing knobs.
+function RateFields({ stage, fieldProps }: { stage: 'registration' | 'pdu', fieldProps: Omit<FieldProps, 'label' | 'path'> }) {
+  return (
+    <>
+      <Field label="Starts per second" path={`rates.${stage}.ratePerSec`} numeric {...fieldProps} />
+      <Field label="Max in flight" path={`rates.${stage}.maxInFlight`} numeric {...fieldProps} />
+      <Field label="Timeout per attempt (ms)" path={`rates.${stage}.timeoutMs`} numeric {...fieldProps} />
+      <Field label="Retries" path={`rates.${stage}.retries`} numeric {...fieldProps} />
+    </>
   )
 }
 
@@ -132,7 +160,7 @@ export default function TesterSetupPage() {
         <header className={styles.header}>
           <div>
             <h2 className={styles.title}>Throughput Tester · Setup</h2>
-            <p className={styles.subtitle}>Describe the gNBs to simulate. Phase 1 brings up N2 (SCTP + NG Setup) for every gNB and holds it until you stop the run.</p>
+            <p className={styles.subtitle}>Describe the gNBs and UEs to simulate. A run brings up N2 for every gNB, registers its UEs and establishes one PDU session each, then holds everything until you stop it.</p>
           </div>
           <div className={styles.headerActions}>
             <Button variant="secondary" onClick={handleSave} disabled={isLoading || isBusy}>Save</Button>
@@ -172,6 +200,29 @@ export default function TesterSetupPage() {
             </section>
 
             <section className={styles.card}>
+              <h3 className={styles.cardTitle}>UE template</h3>
+              <div className={styles.fieldGrid}>
+                <Field label="First MSIN" path="ue.msinStart" {...fieldProps} />
+                <Field label="Key (K)" path="ue.key" {...fieldProps} />
+                <Field label="OPc" path="ue.opc" {...fieldProps} />
+                <Field label="AMF" path="ue.amf" {...fieldProps} />
+                <Field label="SQN" path="ue.sqn" {...fieldProps} />
+                <Field label="Integrity" path="ue.integrity" options={['nia0', 'nia1', 'nia2', 'nia3']} {...fieldProps} />
+                <Field label="Ciphering" path="ue.ciphering" options={['nea0', 'nea1', 'nea2', 'nea3']} {...fieldProps} />
+                <Field label="DNN" path="ue.dnn" {...fieldProps} />
+                <Field label="SST" path="ue.sst" numeric {...fieldProps} />
+                <Field label="SD (hex, optional)" path="ue.sd" {...fieldProps} />
+              </div>
+              <p className={styles.hint}>
+                UEs use the gNB template's PLMN; the MSIN is incremented per UE. The tester does not create subscribers: add
+                {plan && plan.gnbs.length > 0
+                  ? <> <span className={styles.mono}>{plan.gnbs[0].firstSupi}</span> … <span className={styles.mono}>{lastSupi(plan)}</span></>
+                  : ' every UE'}
+                {' '}to the core with these keys and a slice the gNB advertises.
+              </p>
+            </section>
+
+            <section className={styles.card}>
               <h3 className={styles.cardTitle}>N2 · gNB ↔ AMF</h3>
               <div className={styles.fieldGrid}>
                 <Field label="Local interface" path="network.n2.interface" {...fieldProps} />
@@ -205,6 +256,22 @@ export default function TesterSetupPage() {
             </section>
 
             <section className={styles.card}>
+              <h3 className={styles.cardTitle}>Registration pacing</h3>
+              <div className={styles.fieldGrid}>
+                <RateFields stage="registration" fieldProps={fieldProps} />
+              </div>
+              <p className={styles.hint}>Starts per second caps how fast new registrations begin; max in flight caps how many wait for the core at once.</p>
+            </section>
+
+            <section className={styles.card}>
+              <h3 className={styles.cardTitle}>PDU session pacing</h3>
+              <div className={styles.fieldGrid}>
+                <RateFields stage="pdu" fieldProps={fieldProps} />
+              </div>
+              <p className={styles.hint}>A UE moves on to its PDU session as soon as it is registered.</p>
+            </section>
+
+            <section className={styles.card}>
               <h3 className={styles.cardTitle}>Plan preview</h3>
               {!validation && <p className={styles.hint}>Checking…</p>}
               {validation && !validation.valid && (
@@ -214,7 +281,7 @@ export default function TesterSetupPage() {
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
                     <thead>
-                      <tr><th>#</th><th>Name</th><th>gNB ID</th><th>N2 IP</th><th>N3 IP</th><th>UEs</th></tr>
+                      <tr><th>#</th><th>Name</th><th>gNB ID</th><th>N2 IP</th><th>N3 IP</th><th>UEs</th><th>SUPIs</th></tr>
                     </thead>
                     <tbody>
                       {plan.gnbs.slice(0, PREVIEW_ROWS).map((g) => (
@@ -225,6 +292,7 @@ export default function TesterSetupPage() {
                           <td className={styles.mono}>{g.n2Ip}/{plan.n2Prefix}</td>
                           <td className={styles.mono}>{g.n3Ip}/{plan.n3Prefix}</td>
                           <td>{g.ueCount ? `${g.ueCount} (#${g.ueFirst}–${g.ueLast})` : '0'}</td>
+                          <td className={styles.mono}>{g.ueCount ? `${g.firstSupi} … ${g.lastSupi.slice(-4)}` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>

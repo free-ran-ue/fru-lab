@@ -3,6 +3,8 @@ import type { TesterProfile } from '../../api'
 // Starting point for a first-time setup page; values match the basic
 // free5GC template fru-lab deploys (AMF 10.0.1.3, UPF 10.0.1.5 on the
 // frulab-cn-ran bridge, host side docker-cn-ran) so it runs as-is there.
+// The UE template matches free-ran-ue's sample ue.yaml subscriber; create
+// subscribers imsi-208930000000001.. in the core with the same keys.
 export const DEFAULT_TESTER_PROFILE: TesterProfile = {
   name: 'basic',
   scale: { gnbCount: 10, ueCount: 1000 },
@@ -15,11 +17,27 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     sst: 1,
     sd: '010203',
   },
+  ue: {
+    msinStart: '0000000001',
+    key: '8baf473f2f8fd09487cccbd7097c6862',
+    opc: '8e27b6af0e692e750f32667a3b14605d',
+    amf: '8000',
+    sqn: '000000000023',
+    integrity: 'nia2',
+    ciphering: 'nea0',
+    dnn: 'internet',
+    sst: 1,
+    sd: '010203',
+  },
   network: {
     n2: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', amfIp: '10.0.1.3', amfPort: 38412 },
     n3: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', upfIp: '10.0.1.5', upfPort: 2152 },
   },
-  rates: { n2: { timeoutMs: 5000, retries: 1 } },
+  rates: {
+    n2: { timeoutMs: 5000, retries: 1 },
+    registration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
+    pdu: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
+  },
 }
 
 // normalizeProfile turns whatever was saved into a complete profile:
