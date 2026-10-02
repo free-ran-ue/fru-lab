@@ -2,13 +2,14 @@
 
 The Throughput Tester is a lab tool that sits next to fru-lab's deploy features. It simulates many gNBs against **any** 5G core. It does not depend on the free5GC that fru-lab deploys.
 
-A run currently does three things, with live statistics for each:
+A run does four things, with live statistics for each:
 
 1. Brings up N2 for every simulated gNB (an SCTP association plus NG Setup).
 2. Registers each gNB's UEs as soon as that gNB is up.
 3. Establishes one PDU session per registered UE.
+4. Starts fixed-rate uplink and downlink traffic for each UE as soon as its PDU session is up, and checks that it comes back through the UPF.
 
-Everything is then held until you press **Stop**. The data plane (UL/DL traffic) comes in a later phase.
+Traffic runs until you press **Stop**, which halts it at once and then cleans up.
 
 The UEs never open a radio link: each gNB carries its UEs' NAS messages inside NGAP itself, over its single SCTP association.
 
@@ -32,6 +33,23 @@ fru-tester never creates subscribers. Every UE in the run needs a subscriber in 
 The defaults match free-ran-ue's sample subscriber, `imsi-208930000000001` with K `8baf…6862` and OPc `8e27…605d`, on slice 1/010203.
 
 If a subscriber is missing or its keys differ, that UE fails registration. If its slice is not one the gNB advertises, the AMF rejects it with `5gmm(62)` ("no network slices available").
+
+## Data plane
+
+No TUN devices are created; the tester writes the packets itself.
+
+| Direction | Path | Received at |
+|---|---|---|
+| Uplink | GTP-U from the gNB's N3 IP to the UPF's N3, inner IPv4/UDP from the UE's IP to the **sink IP** | the sink IP on the N6 interface, after the UPF decapsulated it |
+| Downlink | plain UDP from the sink IP to the UE's IP, routed via the **UPF N6 IP** | the gNB's N3 IP, as GTP-U |
+
+Every packet carries a small header with the UE, a sequence number and the send time. Packets are matched to UEs even when the UPF rewrites the source address (fru-lab's UPF does), and leftovers from an earlier run are ignored.
+
+For the run, the tester adds each gNB's N3 IP, the sink IP if the host doesn't have it, and the route `UE pool via UPF N6 IP`. Afterwards it removes exactly what it added. It never overwrites an existing route to the UE pool through a different gateway; the run fails with a message instead.
+
+fru-lab's free5GC has no separate N6 network: the UPF sends decapsulated uplink out on `docker-cn-ran`. So the defaults use the host's own address there (`10.0.1.1`) as the sink, `10.0.1.5` as the UPF N6 IP, and `10.60.0.0/16` as the UE pool.
+
+Rates are per UE (uplink and downlink Mbps, 0 = off) with one packet size. The Setup page shows the total load for the run.
 
 ## Pacing
 
@@ -93,6 +111,16 @@ What each stage times:
 
 If **every** PDU session of a run times out while registration succeeds, look at the core first. Check the SMF log for charging (CHF) timeouts; the usual cause is CHF billing (CGF) being on (see Known limitations).
 
+The **Data plane** card shows, per direction:
+
+- **Sent / received**: the rate over the last second. *Received* is what actually made it through the UPF.
+- **Packets per second** and **Total sent / received**: totals count inner IP packet bytes.
+- **Loss**: `1 - received/sent` for the run so far.
+- **Latency p50 / p99**: one way; send and receive use the same host clock.
+- **Out of order** and **Send errors** (the local socket refused a packet).
+
+The chart plots the last 5 minutes: solid lines are received, dashed lines are sent. The gNB table adds the bytes received per gNB in each direction, with their loss.
+
 The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). It also lists the first 200 failed UEs with their SUPI, gNB, stage, cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 
 gNB states: `pending` → `connecting` → `up` or `failed`.
@@ -108,3 +136,7 @@ gNB states: `pending` → `connecting` → `up` or `failed`.
 - free5GC's CHF stops answering charging requests after the first few UEs when its CDR delivery to the webconsole billing FTP (`chfcfg.yaml` → `cgf.enable`) is on. The SMF then waits 10 s per PDU session and the sessions time out (the SMF logs `Send Charging Data Request ... Failed`). fru-lab's free5GC templates therefore ship with `cgf.enable: false`. A core deployed by an older fru-lab, or any other core with CGF on, needs the same change and a CHF restart.
 - The SQN in the network's AUTN is accepted without a freshness check (as in free-ran-ue), so re-running the same UEs never needs a resynchronisation.
 - A UE that reached `established` on a gNB later marked `lost` still counts as established.
+- A few downlink packets right after each PDU session comes up are lost: they leave before the UPF has been told the gNB's tunnel. Real networks behave the same way. Loss is counted over the whole run, so this share shrinks as the run goes on.
+- The sender uses plain UDP sockets. On the test host, downlink topped out at about 78 k packets/s (~875 Mbps at 1400-byte packets).
+- High rates need the SMF's `urrThreshold` raised. At a few hundred bytes, the UPF sends a usage report every packet or two, PFCP starves, and downlink stops reaching the gNB. fru-lab's templates set it to 10 GB. A core deployed by an older fru-lab, or any other core, needs the same change.
+- Back-to-back runs with the same UEs can leave free5GC with duplicate PDU sessions (`Duplicated PDU session ID` in the AMF log), so their PDU sessions time out. Restart the core, or wait for the next phase, which releases sessions and deregisters UEs on Stop.
