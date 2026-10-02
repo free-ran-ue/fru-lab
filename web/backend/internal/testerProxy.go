@@ -2,12 +2,15 @@ package internal
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 )
+
+var errTesterTokenMismatch = errors.New("fru-tester rejected the API token: backend.tester.apiToken does not match fru-tester's apiToken")
 
 // newTesterProxy forwards /api/tester/<rest> to <testerURL>/api/<rest>.
 // The caller has already checked the user's JWT; the proxy replaces it
@@ -30,12 +33,22 @@ func newTesterProxy(testerURL, apiToken string) (*httputil.ReverseProxy, error) 
 			pr.Out.Host = target.Host
 			pr.Out.Header.Set("Authorization", "Bearer "+apiToken)
 		},
+		// fru-tester only answers 401 when our apiToken is wrong. Passing
+		// that through would make the frontend drop the user's login.
+		ModifyResponse: func(resp *http.Response) error {
+			if resp.StatusCode == http.StatusUnauthorized {
+				return errTesterTokenMismatch
+			}
+			return nil
+		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+			message := "fru-tester is unreachable: " + err.Error()
+			if errors.Is(err, errTesterTokenMismatch) {
+				message = err.Error()
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadGateway)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"message": "fru-tester is unreachable: " + err.Error(),
-			})
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": message})
 		},
 	}, nil
 }

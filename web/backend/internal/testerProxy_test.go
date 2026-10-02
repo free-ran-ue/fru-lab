@@ -108,3 +108,25 @@ func TestTesterRoutesAnswer503WhenNotConfigured(t *testing.T) {
 		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
 	}
 }
+
+// fru-tester answering 401 means fru-lab's tester.apiToken is wrong. That
+// must not reach the browser as 401, which the frontend treats as an
+// expired login and logs the user out.
+func TestTesterProxyMapsUpstream401To502(t *testing.T) {
+	tester := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"message":"missing or wrong API token"}`, http.StatusUnauthorized)
+	}))
+	defer tester.Close()
+
+	proxy, err := newTesterProxy(tester.URL, "wrong")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	proxy.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/tester/run", nil))
+	var body map[string]string
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(body["message"], "backend.tester.apiToken") {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+}
