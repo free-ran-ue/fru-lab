@@ -45,58 +45,133 @@ function gnbTraffic(t: TesterGnbTraffic | undefined, dir: 'ul' | 'dl'): string {
   return `${formatBytes(rx)} (${formatLoss(rx < tx ? 1 - rx / tx : 0)} lost)`
 }
 
-function DirectionStats({ title, d }: { title: string, d: TesterTrafficDirection }) {
+// niceStep rounds a grid step up to 1, 2, 2.5 or 5 x 10^n so the grid
+// lines land on round rates.
+function niceStep(v: number): number {
+  const p = 10 ** Math.floor(Math.log10(v))
+  return ([1, 2, 2.5, 5, 10].find((m) => m * p >= v) ?? 10) * p
+}
+
+// axisBps is a short rate for the chart axis, e.g. 500M or 1.5G.
+function axisBps(bps: number): string {
+  if (!bps) return '0'
+  const [v, u] = bps >= 1e9 ? [bps / 1e9, 'G'] : bps >= 1e6 ? [bps / 1e6, 'M'] : [bps / 1e3, 'k']
+  return `${Number(v.toFixed(2))}${u}`
+}
+
+// useWidth tracks an element's rendered width, so the chart is drawn in
+// real pixels and its text stays small however wide the card is.
+function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
+  const [el, setEl] = useState<T | null>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setWidth(Math.floor(e.contentRect.width)))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el])
+  return [setEl, width]
+}
+
+type Dir = 'ul' | 'dl'
+
+// RateChart plots one direction's sent (Tx) and received (Rx) rate.
+function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) {
+  const [ref, W] = useWidth<HTMLDivElement>()
+  const [hover, setHover] = useState<number | null>(null)
+  const H = 150
+  const pad = { l: 40, r: 8, t: 8, b: 20 }
+  const tx = (p: TesterTrafficPoint) => (dir === 'ul' ? p.ulTxBps : p.dlTxBps)
+  const rx = (p: TesterTrafficPoint) => (dir === 'ul' ? p.ulRxBps : p.dlRxBps)
+  if (series.length < 2) {
+    return <div ref={ref} className={styles.chartEmpty}>The chart starts after two seconds of traffic.</div>
+  }
+  const t0 = series[0].t
+  const t1 = series[series.length - 1].t
+  const peak = Math.max(1000, ...series.flatMap((p) => [tx(p), rx(p)]))
+  const gridStep = niceStep(peak / 4)
+  const top = Math.ceil(peak / gridStep) * gridStep
+  const plotW = Math.max(1, W - pad.l - pad.r)
+  const x = (t: number) => pad.l + ((t - t0) / Math.max(1, t1 - t0)) * plotW
+  const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
+  const line = (f: (p: TesterTrafficPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
+  const span = Math.max(1, t1 - t0)
+  const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => span / s <= Math.max(2, plotW / 90)) ?? 60
+  const ticks: number[] = []
+  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) ticks.push(t)
+  const h = hover === null ? null : series[hover]
+  const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
+    const px = ev.clientX - ev.currentTarget.getBoundingClientRect().left
+    const t = t0 + ((px - pad.l) / plotW) * span
+    let best = 0
+    series.forEach((p, k) => { if (Math.abs(p.t - t) < Math.abs(series[best].t - t)) best = k })
+    setHover(best)
+  }
   return (
-    <div>
-      <h4 className={styles.subTitle}>{title}</h4>
-      <dl className={styles.kv}>
-        <dt>Sent / received</dt><dd>{formatBps(d.txBps)} / {formatBps(d.rxBps)}</dd>
-        <dt>Packets per second</dt><dd>{Math.round(d.txPps).toLocaleString()} / {Math.round(d.rxPps).toLocaleString()}</dd>
-        <dt>Total sent / received</dt><dd>{formatBytes(d.txBytes)} / {formatBytes(d.rxBytes)}</dd>
-        <dt>Loss</dt><dd>{formatLoss(d.lossRate)}</dd>
-        <dt>Latency p50 / p99</dt><dd>{formatMs(d.latency.p50Ms)} / {formatMs(d.latency.p99Ms)}</dd>
-        <dt>Out of order</dt><dd>{d.outOfOrder}</dd>
-        <dt>Send errors</dt><dd>{d.sendErrors}</dd>
-        {d.misrouted > 0 && <><dt>Misrouted</dt><dd>{d.misrouted}</dd></>}
-      </dl>
+    <div ref={ref} className={styles.chartBox}>
+      {W > 0 && (
+        <svg width={W} height={H} className={styles.chart} role="img" aria-label={`${dir === 'ul' ? 'Uplink' : 'Downlink'} rate over time`}
+          onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+          {Array.from({ length: Math.round(top / gridStep) + 1 }, (_, k) => k * gridStep).map((v) => (
+            <g key={v}>
+              <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className={styles.chartGrid} />
+              <text x={pad.l - 6} y={y(v) + 3.5} textAnchor="end" className={styles.chartAxis}>{axisBps(v)}</text>
+            </g>
+          ))}
+          {ticks.map((t) => (
+            <text key={t} x={x(t)} y={H - 5} textAnchor="middle" className={styles.chartAxis}>{t}s</text>
+          ))}
+          <polyline points={line(rx)} className={styles.lineRx} />
+          <polyline points={line(tx)} className={styles.lineTx} />
+          {h && (
+            <g>
+              <line x1={x(h.t)} x2={x(h.t)} y1={pad.t} y2={H - pad.b} className={styles.chartCursor} />
+              <circle cx={x(h.t)} cy={y(rx(h))} r={3} className={styles.dotRx} />
+              <circle cx={x(h.t)} cy={y(tx(h))} r={3} className={styles.dotTx} />
+            </g>
+          )}
+        </svg>
+      )}
+      {h && W > 0 && (
+        <div className={styles.chartTip} style={{ left: Math.min(x(h.t) + 10, W - 150) }}>
+          <b>{Math.round(h.t)}s</b>
+          <span><i className={styles.swatchTx} />Tx {formatBps(tx(h))}</span>
+          <span><i className={styles.swatchRx} />Rx {formatBps(rx(h))}</span>
+        </div>
+      )}
     </div>
   )
 }
 
-// TrafficChart plots the last seconds of received (solid) and sent
-// (dashed) throughput per direction.
-function TrafficChart({ series }: { series: TesterTrafficPoint[] }) {
-  const W = 600
-  const H = 180
-  const pad = { l: 64, r: 12, t: 10, b: 22 }
-  if (series.length < 2) return <p className={styles.hint}>The chart starts after two seconds of traffic.</p>
-  const t0 = series[0].t
-  const t1 = series[series.length - 1].t
-  const peak = Math.max(1, ...series.flatMap((p) => [p.ulTxBps, p.ulRxBps, p.dlTxBps, p.dlRxBps]))
-  const x = (t: number) => pad.l + ((t - t0) / Math.max(1, t1 - t0)) * (W - pad.l - pad.r)
-  const y = (v: number) => H - pad.b - (v / peak) * (H - pad.t - pad.b)
-  const line = (k: keyof TesterTrafficPoint) => series.map((p) => `${x(p.t).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ')
+function Stat({ label, value }: { label: string, value: React.ReactNode }) {
+  return <div className={styles.stat}><span>{label}</span><b>{value}</b></div>
+}
+
+// DirectionPanel is one direction: live Tx/Rx, its chart and its numbers.
+function DirectionPanel({ dir, d, series }: { dir: Dir, d: TesterTrafficDirection, series: TesterTrafficPoint[] }) {
+  const lossy = d.lossRate > 0.001
   return (
-    <div>
-      <div className={styles.legend}>
-        <span><i className={styles.swatchDl} />Downlink received</span>
-        <span><i className={styles.swatchUl} />Uplink received</span>
-        <span className={styles.hint}>dashed = sent</span>
+    <div className={styles.dirPanel}>
+      <div className={styles.dirHead}>
+        <div>
+          <h4 className={styles.dirTitle}>{dir === 'ul' ? 'Uplink' : 'Downlink'}</h4>
+          <span className={styles.dirPath}>{dir === 'ul' ? 'UE → N3 → UPF → N6' : 'N6 → UPF → N3 → UE'}</span>
+        </div>
+        <span className={`${styles.pill} ${lossy ? styles.pillBad : styles.pillOk}`}>loss {formatLoss(d.lossRate)}</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className={styles.chart} role="img" aria-label="Throughput over time">
-        {[0, 0.5, 1].map((f) => (
-          <g key={f}>
-            <line x1={pad.l} x2={W - pad.r} y1={y(peak * f)} y2={y(peak * f)} className={styles.chartGrid} />
-            <text x={pad.l - 6} y={y(peak * f) + 4} textAnchor="end" className={styles.chartAxis}>{formatBps(peak * f)}</text>
-          </g>
-        ))}
-        <text x={pad.l} y={H - 4} className={styles.chartAxis}>{Math.round(t0)} s</text>
-        <text x={W - pad.r} y={H - 4} textAnchor="end" className={styles.chartAxis}>{Math.round(t1)} s</text>
-        <polyline points={line('dlTxBps')} className={styles.lineDl} strokeDasharray="4 3" />
-        <polyline points={line('ulTxBps')} className={styles.lineUl} strokeDasharray="4 3" />
-        <polyline points={line('dlRxBps')} className={styles.lineDl} />
-        <polyline points={line('ulRxBps')} className={styles.lineUl} />
-      </svg>
+      <div className={styles.legend}>
+        <span><i className={styles.swatchTx} />Tx <b>{formatBps(d.txBps)}</b></span>
+        <span><i className={styles.swatchRx} />Rx <b>{formatBps(d.rxBps)}</b></span>
+      </div>
+      <RateChart series={series} dir={dir} />
+      <div className={styles.statGrid}>
+        <Stat label="Packets/s Tx / Rx" value={`${Math.round(d.txPps).toLocaleString()} / ${Math.round(d.rxPps).toLocaleString()}`} />
+        <Stat label="Total Tx / Rx" value={`${formatBytes(d.txBytes)} / ${formatBytes(d.rxBytes)}`} />
+        <Stat label="Latency p50 / p99" value={`${formatMs(d.latency.p50Ms)} / ${formatMs(d.latency.p99Ms)}`} />
+        <Stat label="Out of order" value={d.outOfOrder.toLocaleString()} />
+        <Stat label="Send errors" value={d.sendErrors.toLocaleString()} />
+        {d.misrouted > 0 && <Stat label="Misrouted" value={d.misrouted.toLocaleString()} />}
+      </div>
     </div>
   )
 }
@@ -108,10 +183,9 @@ function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
         <h3 className={styles.cardTitle}>Data plane</h3>
         <span className={`${styles.pill} ${dp.activeUes ? styles.pillActive : styles.pillMuted}`}>{dp.activeUes} UEs sending</span>
       </div>
-      <TrafficChart series={dp.series} />
       <div className={styles.dirRow}>
-        <DirectionStats title="Uplink · UE → N3 → UPF → N6" d={dp.ul} />
-        <DirectionStats title="Downlink · N6 → UPF → N3 → UE" d={dp.dl} />
+        <DirectionPanel dir="ul" d={dp.ul} series={dp.series} />
+        <DirectionPanel dir="dl" d={dp.dl} series={dp.series} />
       </div>
     </section>
   )

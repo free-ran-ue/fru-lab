@@ -120,7 +120,7 @@ The **Data plane** card shows, per direction:
 - **Out of order** and **Send errors** (the local socket refused a packet).
 - **Misrouted** (shown only when not 0): downlink that came back in another UE's tunnel or at another gNB. It is not counted as received.
 
-The chart plots the last 5 minutes: solid lines are received, dashed lines are sent. The gNB table adds the bytes received per gNB in each direction, with their loss.
+Uplink and downlink each have their own panel and chart over the last 5 minutes: the dashed orange line is sent (Tx), the solid green line is received (Rx). When they overlap, nothing is being lost. Hover over a chart to read both rates at that second. The gNB table adds the bytes received per gNB in each direction, with their loss.
 
 The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). It also lists the first 200 failed UEs with their SUPI, gNB, stage, cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 
