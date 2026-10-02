@@ -6,7 +6,7 @@ backend:
 
   jwt:
     secret: "fru-lab"
-    expiresIn: 1h
+    expiresIn: 24h
 
   db:
     type: "bbolt"
