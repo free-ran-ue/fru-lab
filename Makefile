@@ -1,6 +1,7 @@
 .PHONY: backend frontend tester openapi openapi-webconsole run run-tester test tidy lint clean docker
 
 BACKEND_SRC := $(shell find web/backend -name "*.go")
+TESTER_SRC := $(shell find tester -name "*.go") tester/go.mod tester/go.sum
 FRONTEND_SRC := $(shell find web/frontend -type f ! -path "web/frontend/dist/*" ! -path "web/frontend/node_modules/*")
 FRONTEND_STAMP := build/frontend/.stamp
 
@@ -23,6 +24,14 @@ build/frontend: $(FRONTEND_SRC)
 	@mkdir -p build/frontend
 	@cp -r web/frontend/dist/. build/frontend/
 	@touch $(FRONTEND_STAMP)
+
+build/fru-tester: $(TESTER_SRC)
+	@echo "[+] Building fru-tester..."
+	mkdir -p build
+	cd tester && go build -o ../build/fru-tester .
+	@echo "[✔] fru-tester build finished"
+
+tester: build/fru-tester
 
 backend:
 	@if [ -f build/fru-lab ]; then \
@@ -54,6 +63,11 @@ openapi-webconsole:
 
 run:
 	./build/fru-lab -c config.yaml
+
+# needs root for netlink (gNB IPs) and the sctp kernel module
+run-tester:
+	sudo modprobe sctp
+	sudo ./build/fru-tester -c tester.yaml
 
 test:
 	cd tester && go test -race ./...
