@@ -6,11 +6,13 @@ import (
 	"backend/model"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -69,6 +71,11 @@ type sharedNetwork struct {
 
 type composeContextIE struct {
 	WorkDir string
+	// WebconsolePort is the host port free5GC's webconsole is published on.
+	WebconsolePort int
+	// DeployTimeout bounds one deploy; a deploy that fails or runs over is
+	// taken down again.
+	DeployTimeout time.Duration
 
 	*logger.BackendLogger
 }
@@ -78,6 +85,8 @@ type composeContext struct {
 	service   api.Compose
 
 	workDir        string
+	webconsolePort int
+	deployTimeout  time.Duration
 	targets        map[string]composeTarget
 	sharedNetworks []sharedNetwork
 
@@ -103,55 +112,10 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		dockerCli: dockerCli,
 		service:   compose.NewComposeService(dockerCli),
 
-		workDir: ie.WorkDir,
-		targets: map[string]composeTarget{
-			constant.DEPLOY_TARGET_FREE5GC: {
-				projectName: "frulab-free5gc",
-				composeTemplate: composeTemplate{
-					templateFS:  free5gcTemplateFS,
-					templateDir: "templates/free5gc",
-				},
-				variants: map[string]composeTemplate{
-					constant.FREE5GC_TEMPLATE_BASIC: {
-						templateFS:  free5gcTemplateFS,
-						templateDir: "templates/free5gc",
-					},
-					constant.FREE5GC_TEMPLATE_ULCL: {
-						templateFS:  free5gcUlclTemplateFS,
-						templateDir: "templates/free5gc-ulcl",
-					},
-					constant.FREE5GC_TEMPLATE_ULCL_2SLICE: {
-						templateFS:  free5gcUlcl2SliceTemplateFS,
-						templateDir: "templates/free5gc-ulcl-2slice",
-					},
-				},
-			},
-			constant.DEPLOY_TARGET_GNB: {
-				projectName: "frulab-gnb",
-				composeTemplate: composeTemplate{
-					templateFS:  gnbTemplateFS,
-					templateDir: "templates/gnb",
-				},
-			},
-			// gnb-slice1/gnb-slice2 are independent targets (own compose
-			// project, own container, own cn-ran/ran-ue IPs) rather than
-			// variants of gnb, since under FREE5GC_TEMPLATE_ULCL_2SLICE both
-			// need to be deployable at the same time.
-			constant.DEPLOY_TARGET_GNB_SLICE1: {
-				projectName: "frulab-gnb-slice1",
-				composeTemplate: composeTemplate{
-					templateFS:  gnbSlice1TemplateFS,
-					templateDir: "templates/gnb-slice1",
-				},
-			},
-			constant.DEPLOY_TARGET_GNB_SLICE2: {
-				projectName: "frulab-gnb-slice2",
-				composeTemplate: composeTemplate{
-					templateFS:  gnbSlice2TemplateFS,
-					templateDir: "templates/gnb-slice2",
-				},
-			},
-		},
+		workDir:        ie.WorkDir,
+		webconsolePort: ie.WebconsolePort,
+		deployTimeout:  ie.DeployTimeout,
+		targets:        defaultTargets(),
 		sharedNetworks: []sharedNetwork{
 			// free5gc (amf/upf) <-> gnb
 			{name: "frulab-cn-ran", subnet: "10.0.1.0/24", bridgeName: "docker-cn-ran"},
@@ -169,6 +133,58 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 	}
 
 	return c, nil
+}
+
+// defaultTargets are the deployable compose stacks and their templates.
+func defaultTargets() map[string]composeTarget {
+	return map[string]composeTarget{
+		constant.DEPLOY_TARGET_FREE5GC: {
+			projectName: "frulab-free5gc",
+			composeTemplate: composeTemplate{
+				templateFS:  free5gcTemplateFS,
+				templateDir: "templates/free5gc",
+			},
+			variants: map[string]composeTemplate{
+				constant.FREE5GC_TEMPLATE_BASIC: {
+					templateFS:  free5gcTemplateFS,
+					templateDir: "templates/free5gc",
+				},
+				constant.FREE5GC_TEMPLATE_ULCL: {
+					templateFS:  free5gcUlclTemplateFS,
+					templateDir: "templates/free5gc-ulcl",
+				},
+				constant.FREE5GC_TEMPLATE_ULCL_2SLICE: {
+					templateFS:  free5gcUlcl2SliceTemplateFS,
+					templateDir: "templates/free5gc-ulcl-2slice",
+				},
+			},
+		},
+		constant.DEPLOY_TARGET_GNB: {
+			projectName: "frulab-gnb",
+			composeTemplate: composeTemplate{
+				templateFS:  gnbTemplateFS,
+				templateDir: "templates/gnb",
+			},
+		},
+		// gnb-slice1/gnb-slice2 are independent targets (own compose
+		// project, own container, own cn-ran/ran-ue IPs) rather than
+		// variants of gnb, since under FREE5GC_TEMPLATE_ULCL_2SLICE both
+		// need to be deployable at the same time.
+		constant.DEPLOY_TARGET_GNB_SLICE1: {
+			projectName: "frulab-gnb-slice1",
+			composeTemplate: composeTemplate{
+				templateFS:  gnbSlice1TemplateFS,
+				templateDir: "templates/gnb-slice1",
+			},
+		},
+		constant.DEPLOY_TARGET_GNB_SLICE2: {
+			projectName: "frulab-gnb-slice2",
+			composeTemplate: composeTemplate{
+				templateFS:  gnbSlice2TemplateFS,
+				templateDir: "templates/gnb-slice2",
+			},
+		},
+	}
 }
 
 func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
@@ -271,8 +287,33 @@ func (c *composeContext) loadProject(ctx context.Context, target string, variant
 	}
 
 	stampComposeLabels(project)
+	if target == constant.DEPLOY_TARGET_FREE5GC {
+		publishWebconsole(project, c.webconsolePort)
+	}
 
 	return project, nil
+}
+
+// webconsoleService is the free5GC webconsole's service name in every
+// free5gc template; it listens on webconsoleContainerPort.
+const (
+	webconsoleService       = "webconsole"
+	webconsoleContainerPort = 5000
+)
+
+// publishWebconsole publishes only the webconsole's HTTP port, on the host
+// port fru-lab is configured with (deploy.webconsole.port), so a host that
+// already uses 5000 can still deploy. Its FTP ports (2121/2122, CDR upload
+// from the CHF) stay inside the compose network.
+func publishWebconsole(project *types.Project, hostPort int) {
+	service, ok := project.Services[webconsoleService]
+	if !ok {
+		return
+	}
+	service.Ports = []types.ServicePortConfig{{
+		Mode: "ingress", Protocol: "tcp", Target: webconsoleContainerPort, Published: strconv.Itoa(hostPort),
+	}}
+	project.Services[webconsoleService] = service
 }
 
 // stampComposeLabels stamps the standard com.docker.compose.* labels onto
@@ -314,12 +355,48 @@ func (c *composeContext) Up(ctx context.Context, target string, templateVariant 
 	}
 
 	c.CtxLog.Infof("Deploying target %s (project %s, template %s)", target, project.Name, templateVariant)
-	return c.service.Up(ctx, project, api.UpOptions{
+	return c.up(ctx, project)
+}
+
+// downAfterFailedUpTimeout bounds the cleanup after a failed deploy.
+const downAfterFailedUpTimeout = time.Minute
+
+// up starts project, giving up after deployTimeout. A deploy that fails
+// or runs over is taken down again, so no container is left in "created"
+// (which the dashboard would show as deploying forever), and the error
+// says why it failed.
+func (c *composeContext) up(ctx context.Context, project *types.Project) error {
+	upCtx, cancel := context.WithTimeout(ctx, c.deployTimeout)
+	defer cancel()
+	err := c.service.Up(upCtx, project, api.UpOptions{
 		Create: api.CreateOptions{},
 		Start: api.StartOptions{
 			Project: project,
 		},
 	})
+	if err == nil {
+		return nil
+	}
+	if errors.Is(upCtx.Err(), context.DeadlineExceeded) {
+		err = fmt.Errorf("did not finish within %s", c.deployTimeout)
+	}
+	c.CtxLog.Warnf("Deploy of %s failed, taking it down: %v", project.Name, err)
+	downCtx, cancelDown := context.WithTimeout(context.Background(), downAfterFailedUpTimeout)
+	defer cancelDown()
+	if downErr := c.service.Down(downCtx, project.Name, api.DownOptions{Project: project}); downErr != nil {
+		c.CtxLog.Errorf("Failed to take %s down after the failed deploy: %v", project.Name, downErr)
+	}
+	return explainUpError(err, c.webconsolePort)
+}
+
+// explainUpError adds what to do about the usual cause of a failed deploy:
+// a host port that is already taken.
+func explainUpError(err error, webconsolePort int) error {
+	msg := err.Error()
+	if strings.Contains(msg, "port is already allocated") || strings.Contains(msg, "address already in use") {
+		return fmt.Errorf("%w (a port this deployment publishes is already in use on the host; if it is the webconsole's port %d, set deploy.webconsole.port in config.yaml)", err, webconsolePort)
+	}
+	return err
 }
 
 func (c *composeContext) Down(ctx context.Context, target string) error {
@@ -603,12 +680,7 @@ func (c *composeContext) UpUe(ctx context.Context, instanceID string, cfg *UeIns
 	}
 
 	c.CtxLog.Infof("Deploying ue instance %s (project %s)", instanceID, project.Name)
-	return c.service.Up(ctx, project, api.UpOptions{
-		Create: api.CreateOptions{},
-		Start: api.StartOptions{
-			Project: project,
-		},
-	})
+	return c.up(ctx, project)
 }
 
 func (c *composeContext) DownUe(ctx context.Context, instanceID string) error {

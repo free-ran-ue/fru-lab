@@ -42,7 +42,7 @@ func (p *Processor) DeployUp(ctx context.Context, target string, templateVariant
 		p.ProcLog.Errorf("Failed to deploy up target %s: %v", target, err)
 		return nil, &model.ErrorDetail{
 			HttpStatus: http.StatusInternalServerError,
-			Detail:     "Failed to deploy " + target,
+			Detail:     "Failed to deploy " + target + ", so it was taken down again: " + err.Error(),
 		}
 	}
 
@@ -141,7 +141,7 @@ func (p *Processor) DeployUeUp(ctx context.Context, instance string, req *model.
 		p.ProcLog.Errorf("Failed to deploy up ue instance %s: %v", instance, err)
 		return nil, &model.ErrorDetail{
 			HttpStatus: http.StatusInternalServerError,
-			Detail:     "Failed to deploy ue " + instance,
+			Detail:     "Failed to deploy ue " + instance + ", so it was taken down again: " + err.Error(),
 		}
 	}
 

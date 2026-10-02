@@ -250,8 +250,6 @@ services:
           - webconsole
     ports:
       - "5000:5000"
-      - "2122:2122"
-      - "2121:2121"
     depends_on:
       - db
       - nrf

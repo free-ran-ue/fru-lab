@@ -14,6 +14,13 @@ backend:
 
   deploy:
     workDir: "/tmp/frulab-deploy"
+    # a deploy that fails or takes longer than this is taken down again
+    timeout: 5m
+    webconsole:
+      # host port free5GC's webconsole is published on; change it if 5000
+      # is taken on this host (the browser reaches it through fru-lab)
+      port: 5000
+      host: "localhost"
 
   frontendFilePath: "build/frontend"
 

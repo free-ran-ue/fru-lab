@@ -1,12 +1,18 @@
 package context
 
-import "backend/logger"
+import (
+	"time"
+
+	"backend/logger"
+)
 
 type FlCotextIE struct {
 	DbType string
 	DbPath string
 
-	DeployWorkDir string
+	DeployWorkDir  string
+	WebconsolePort int
+	DeployTimeout  time.Duration
 
 	*logger.BackendLogger
 }
@@ -31,7 +37,9 @@ func NewFlContext(ie *FlCotextIE) *FlContext {
 	}
 
 	composeContext, err := newComposeContext(&composeContextIE{
-		WorkDir: ie.DeployWorkDir,
+		WorkDir:        ie.DeployWorkDir,
+		WebconsolePort: ie.WebconsolePort,
+		DeployTimeout:  ie.DeployTimeout,
 
 		BackendLogger: ie.BackendLogger,
 	})
