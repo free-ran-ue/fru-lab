@@ -29,3 +29,14 @@ func TestHistogramEdges(t *testing.T) {
 	// sub-microsecond samples share bucket 0, reported as its 1µs bound
 	require.Equal(t, time.Microsecond, h.quantile(0.5))
 }
+
+func TestLatencySnapshot(t *testing.T) {
+	var l Latency
+	require.Equal(t, LatencySnapshot{}, l.Snapshot())
+	l.Record(2 * time.Millisecond)
+	l.Record(4 * time.Millisecond)
+	s := l.Snapshot()
+	require.Equal(t, uint64(2), s.Count)
+	require.InDelta(t, 3.0, s.AvgMs, 0.001)
+	require.InDelta(t, 4.0, s.MaxMs, 0.001)
+}
