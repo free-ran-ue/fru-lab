@@ -272,7 +272,7 @@ ul.tight li { margin: 3px 0; }
   <h1 style="margin-top:10px">5G Throughput Tester</h1>
   <p class="lede">一個自己掌控的 Landslide 類壓測工具：大量模擬 gNB 與 UE，依序完成 N2 建線、註冊、PDU Session，再直接對 UPF 打 GTP-U 上行與 N6 下行流量，並把每個階段的成功率、時間與吞吐量即時呈現出來。</p>
   <div class="meta">
-    <span class="pill ok">v3 · Q1–Q17、N1–N7 全部確認</span><span class="pill acc">第 1–3 期已完成</span>
+    <span class="pill ok">v3 · Q1–Q17、N1–N7 全部確認</span><span class="pill acc">第 1–4 期已完成</span>
     <span>依據：5g-throughput-tester.md</span>
     <span>參考程式：free-ran-ue (gnb/, ue/)</span>
     <span>2026-10-02</span>
@@ -363,7 +363,7 @@ ul.tight li { margin: 3px 0; }
       <h4>測試怎麼結束？</h4>
       <p>打完流量後，UE 的 PDU session、註冊狀態、SCTP 連線都還在核網裡。下一次測試用同樣的 IMSI 可能會撞到舊的 context，AMF 內的資源也不會釋放。</p>
       <div class="fix"><b>建議：</b>加一個收尾階段：停流量 → PDU Release → Deregistration → 關 SCTP，同樣計數與計時；另有「立即中止」按鈕只關連線。</div>
-      <div class="dec"><b>決定：</b>按 Stop 後流量立即全停，再反向做 PDU Release → UE Dereg → gNB SCTP 斷線，每段都統計，全部停完才算結束（Q12、N5）。可另設最長執行時間，預設無限（N6）。</div>
+      <div class="dec"><b>決定：</b>按 Stop 後流量立即全停，再反向做 UE Dereg → gNB SCTP 斷線，每段都統計，全部停完才算結束（Q12）。原本 N5 的 PDU Release 在第 4 期實作前取消，改由核網在 Dereg 時一併釋放。可另設最長執行時間，預設無限（N6）。</div>
     </div>
   </div>
 </section>
@@ -1263,7 +1263,7 @@ ul.tight li { margin: 3px 0; }
       <tr><td class="mono">Q9</td><td>PDU 建好就開始打，不等全部</td><td>拿掉流量閘門與 ramp-up；UE 進入資料面就立刻加入發送</td></tr>
       <tr><td class="mono">Q10</td><td>固定速率，一組 UL / DL</td><td>設定頁只有每 UE 的 UL、DL 速率與封包大小</td></tr>
       <tr><td class="mono">Q11</td><td>需要收包驗證</td><td>維持 N6 收 UL、N3 收 DL、payload 標頭、丟包與延遲</td></tr>
-      <tr><td class="mono">Q12</td><td>Stop 按鈕觸發收尾：流量立即全停，再反向 UE Dereg → gNB SCTP 斷線，同樣統計，全部停完才算結束</td><td>流量持續到按 Stop（或最長執行時間到）；新增三個收尾階段卡片（含 N5 的 PDU Release）</td></tr>
+      <tr><td class="mono">Q12</td><td>Stop 按鈕觸發收尾：流量立即全停，再反向 UE Dereg → gNB SCTP 斷線，同樣統計，全部停完才算結束</td><td>流量持續到按 Stop（或最長執行時間到）；新增兩個收尾階段卡片：UE Dereg、gNB SCTP 斷線</td></tr>
       <tr><td class="mono">Q13</td><td>資料面以外每個流程都有重試欄位</td><td>速率頁每一列都有「重試次數」，含 N2、註冊、PDU、PDU Release、Dereg、SCTP 斷線</td></tr>
       <tr><td class="mono">Q14</td><td>一個 PDU session、單一 DNN</td><td>UE 樣板只有一組 DNN / S-NSSAI</td></tr>
       <tr><td class="mono">Q15</td><td>GTP-U 不帶 QFI</td><td>沿用 free-ran-ue 的 12 bytes 標頭</td></tr>
@@ -1282,7 +1282,7 @@ ul.tight li { margin: 3px 0; }
       <tr><td class="mono">N2</td><td>CIDR 裡哪些 IP 不能用？</td><td>照建議</td><td>自動跳過網路 / 廣播位址、核網端 IP、網卡上已有的 IP；不夠就擋下並顯示缺幾個</td></tr>
       <tr><td class="mono">N3</td><td>重試的方式</td><td>重新排隊</td><td>失敗的 UE 放回同一站隊伍最後，重新拿速率 token；重試成功另外計數，耗時從第一次開始算</td></tr>
       <tr><td class="mono">N4</td><td>Stop 時進行中的 UE</td><td>照建議</td><td>排隊中的標記「已取消」；進行中的等完成或逾時再收尾；只釋放實際建立過的</td></tr>
-      <tr><td class="mono">N5</td><td>Dereg 前先做 PDU Release？</td><td>要</td><td>收尾變成 PDU Release → UE Dereg → SCTP 斷線三段，各自有速率、重試、統計</td></tr>
+      <tr><td class="mono">N5</td><td>Dereg 前先做 PDU Release？</td><td>要 → <b>2026-10-02 改為不要</b></td><td>不做 PDU Release，直接 UE Dereg，核網在 Dereg 時釋放 PDU session（和 free-ran-ue 一樣）。收尾是 UE Dereg → SCTP 斷線兩段</td></tr>
       <tr><td class="mono">N6</td><td>自動停止條件</td><td>提供最長執行時間，含「無限」</td><td>設定頁新增「最長執行時間」，預設無限；時間到觸發和 Stop 相同的流程</td></tr>
       <tr><td class="mono">N7</td><td>歷史結果</td><td>照建議</td><td>存在 fru-lab 的 bbolt，保留最近 50 筆，可匯出 CSV（時序）與 JSON（報告）</td></tr>
     </table>
@@ -1305,9 +1305,12 @@ ul.tight li { margin: 3px 0; }
     <div class="phase"><div class="p">第 3 期 <span class="pill ok">已完成</span></div><h4>資料面（UDP socket PoC）</h4>
       <ul><li>封包模板與 payload 標頭</li><li>UE 一就緒就加入發送分組</li><li>N3 / N6 收包驗證、丟包、延遲</li><li>UE pool 路由自動加入與移除</li><li>吞吐曲線</li></ul>
       <div class="done-when">完成標準：設定 1 Gbps DL，收到的量與 UPF 側計數一致</div></div>
-    <div class="phase"><div class="p">第 4 期</div><h4>Stop 與收尾</h4>
-      <ul><li>Stop：流量立即停止</li><li>PDU Release、UE Dereg、gNB SCTP 斷線，含統計與重試</li><li>最長執行時間（含無限）</li><li>清除 Tester 加的 IP 與路由</li><li>歷史結果：最近 50 筆、CSV / JSON 匯出</li></ul>
+    <div class="phase"><div class="p">第 4 期 <span class="pill ok">已完成</span></div><h4>Stop 與收尾</h4>
+      <ul><li>Stop：流量立即停止</li><li>UE Dereg（核網一併釋放 PDU）、gNB SCTP 斷線，含統計與重試</li><li>最長執行時間（含無限）</li><li>清除 Tester 加的 IP 與路由</li><li>歷史結果：最近 50 筆、CSV / JSON 匯出</li></ul>
       <div class="done-when">完成標準：同一份設定連跑兩次結果一致，核網與主機都沒有殘留</div></div>
+    <div class="phase"><div class="p">待優化</div><h4>資料面效能</h4>
+      <ul><li>發送速率上限：一個 socket 約 1 Gbps，發送線數改跟 CPU 核心數走，UL 也拆多個 socket；再上去用 sendmmsg / UDP GSO</li><li>CPU 分配：發送／接收線綁核、和 UPF 的 softirq 錯開；或 tester 與核網分機器</li></ul>
+      <div class="done-when">細節見第 13 節第 3 期「留到之後處理」</div></div>
     <div class="phase"><div class="p">之後</div><h4>依需求</h4>
       <ul><li>AF_PACKET / AF_XDP 發送器</li><li>多 slice、多 session</li><li>流量 profile（burst、IMIX）</li><li>註冊細分（Auth / SMC 各段耗時）</li></ul>
       <div class="done-when">PoC 量到 UDP socket 的上限後再排</div></div>
@@ -1505,6 +1508,63 @@ ul.tight li { margin: 3px 0; }
       <li><b>可改善：發送速率上限。</b>一個 UDP socket 約 1 Gbps（1400 bytes 封包）。目前 UL 每個 gNB 一個 socket、DL 固定 4 個，所以單一 gNB 的 UL、單一 UE 的 DL 上限都約 1 Gbps，DL 總上限約 4 Gbps。改法：發送線數跟 CPU 核心數走，UL 也照樣拆成多個 socket；再往上可以改用 sendmmsg 批次送或 UDP GSO。</li>
       <li><b>可改善：CPU 分配。</b>目前沒有任何分配：不綁核、不設 GOMAXPROCS，UPF container 也沒有 CPU 限制，全部交給 Go runtime 和 Linux 排程（測試機是 6 vCPU 的 VM）。資料面的 goroutine：UL 發送每個 gNB 一條、DL 發送固定 4 條、DL 接收每個 gNB 一條、UL 接收（sink）1 條、統計 1 條。要注意的是，tester 呼叫 sendto 後，封包經 veth 進 UPF、gtp5g 封裝或解封裝、再經 bridge 回到 tester 的 socket，這段 kernel 處理大多在送出封包的那顆 CPU 上做完（softirq），所以 UPF 的工作有一部分算在 tester 頭上。實測：DL 900 Mbps 時 fru-tester 約 230% CPU，整台約 40% 忙；每次 sendto 約 10 µs。發送線數跟核心數走之後，下一個瓶頸會是 CPU 本身，可以考慮：發送線、接收線分別綁核，和 UPF 的 softirq 錯開；用 sendmmsg / recvmmsg 減少系統呼叫；把 tester 和核網放在不同機器。</li>
       <li>重開核網時要先重開 NRF，再重開其他 NF，而且 SMF 要在 UPF 之後，不然 PFCP 關聯會斷，PDU 全部逾時。</li>
+    </ul>
+  </div>
+  <div class="log-entry">
+    <div class="log-head"><h3>第 4 期 · Stop、收尾與歷史結果</h3><span class="pill ok">已完成</span></div>
+    <div class="log-meta">
+      <span>2026-10-02</span>
+      <span>分支 feat/throughput-tester-phase4（接在第 3 期之後，尚未合併）</span>
+      <span>計畫：docs/superpowers/plans/2026-10-02-throughput-tester-phase4.md</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/ue、procedure</td><td>UE 發起的 Deregistration（一般，非關機），等 Deregistration Accept，再等 AMF 的 UE Context Release；可被第二次 Stop 中斷</td></tr>
+        <tr><td class="mono">tester/run</td><td>按 Stop 後：流量立即停 → 進行中的註冊／PDU 跑完 → 每個註冊成功的 UE 做 Dereg（和註冊一樣有每秒速率、同時上限、逾時、重試） → 每個 gNB 關 SCTP（計時） → 移除 IP 與路由。兩段收尾都是統計卡片。收尾中再按一次 Stop 會略過還沒送的 Dereg，但 SCTP 一樣會關、IP 一樣會清。最長執行時間到就自動走同一套流程</td></tr>
+        <tr><td class="mono">tester/api</td><td><code>GET /api/run/reports</code>：最近 10 個已結束 run 的設定與最終結果</td></tr>
+        <tr><td class="mono">web/backend</td><td>每 3 秒向 fru-tester 拿已結束的 run，沒存過的寫進 bbolt，只留最新 50 筆；提供列表、JSON 報告、CSV 時序三個 API</td></tr>
+        <tr><td class="mono">web/frontend</td><td>Setup 頁：Dereg 步調、最長執行時間（分鐘，0 = 不限）。Run 頁：兩張收尾卡片、「Skip cleanup」按鈕、達到最長時間的標示、UE 的 Deregistering／Deregistered。新的 History 頁：最近 50 筆、勾兩筆並排比較、每筆可下載 JSON 與 CSV</td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>自動測試</td><td>fru-tester 11 個 Go 套件、fru-lab 後端在 -race 下全部通過（含 Stop 時還在註冊、gNB 中途斷線、Dereg 逾時、第二次 Stop 中斷收尾、最長執行時間、連跑兩次的報告都保留）；兩邊 lint 0 issues；前端 build 成功</td></tr>
+        <tr><td>真實 free5GC，2 gNB、4 UE、1/1 Mbps，連跑兩次</td><td><span class="pill ok">通過</span> 兩次都是註冊 4/4、PDU 4/4、Dereg 4/4（平均約 20 ms）、SCTP 關閉 2/2，UL/DL 0 掉包；第二次沒有再出現 <code>Duplicated PDU session ID</code>（第 3 期留下的問題解決了）。SMF log 有每個 UE 的 PDU session 釋放、UE IP 回收</td></tr>
+        <tr><td>最長執行時間 1 分鐘</td><td><span class="pill ok">通過</span> 開始後約 60 秒自己停止，原因記為 maxDuration，一樣 Dereg 4/4、SCTP 2/2</td></tr>
+        <tr><td>主機殘留</td><td><span class="pill ok">通過</span> 每次結束後 UE pool 路由與 gNB IP 都移除</td></tr>
+        <tr><td>歷史結果</td><td><span class="pill ok">通過</span> History 頁列出所有 run，比較與 JSON／CSV 下載都在瀏覽器實測過</td></tr>
+        <tr><td>驗收時發現的問題（已修）</td><td><span class="pill ok">已解決</span> 原本 fru-tester 只保留最後一個 run，fru-lab 每 3 秒拉一次：如果按完 Stop 立刻開始下一個 run，前一個就不會進到歷史。改成 fru-tester 保留最近 10 個已結束的 run</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li><b>依你的要求取消 PDU Release（N5）</b>：直接 UE Dereg，核網在 Dereg 時一併釋放 PDU session。收尾從三段變成兩段。</li>
+      <li>SCTP 斷線這段只有統計，沒有速率與重試設定：關 SCTP 沒有東西可以重試（Q13 原本也列了這段）。</li>
+      <li>第二次 Stop 不只略過排隊中的 Dereg，也不再等已經送出的（記為「cleanup skipped」，UE 標成已取消），否則要等滿逾時才會結束。</li>
+      <li>核網拒絕 Dereg 時不重試；逾時或連線錯誤才照重試次數重試。</li>
+      <li>fru-tester 關閉（例如 docker stop）時直接略過 Dereg，只關 SCTP、清 IP，避免慢的核網卡住關機。</li>
+      <li>歷史結果的 API 即使沒有設定 fru-tester 也能讀，已存的結果不會因此看不到。</li>
+    </ul>
+
+    <h4>最後 code review 修掉的問題</h4>
+    <ul class="tight">
+      <li>按 Stop 之後 UE 狀態統計會錯：PDU 失敗的 UE 收尾後從「失敗」變成「已 Dereg」，和失敗清單對不上；被第二次 Stop 略過的 UE 停在「已建立」或「Dereg 中」。現在失敗的 UE 保持失敗，被略過的一律記為已取消，並補了測試。</li>
+      <li>使用說明對「第二次 Stop 略過的 Dereg 怎麼計數」寫錯了，已改正。</li>
+    </ul>
+    <p>另有 9 個小問題先記下，之後再處理，例如：fru-tester 保留的 10 個舊 run 佔的記憶體偏多、fru-lab 每 3 秒都把 10 份報告整包拉一次、同一秒開始的兩個 run 會撞 ID、Safari 下載匯出檔可能失敗。</p>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>收尾被略過（第二次 Stop 或 fru-tester 被強制關掉）的 UE 會留在核網裡；再跑同一批 UE 可能又遇到 Duplicated PDU session ID，要重開核網。</li>
+      <li>fru-lab 關著的時候如果結束了超過 10 個 run，較舊的不會進到歷史。</li>
+      <li>資料面效能的兩個待優化項目（見第 12 節「待優化」卡片）。</li>
     </ul>
   </div>
 </section>
