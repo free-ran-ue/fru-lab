@@ -8,7 +8,11 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import type { Subscriber } from '../../webconsoleApi'
 import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
-import { BULK_CONCURRENCY, PAGE_SIZE, pageOf, runLimited } from './bulk'
+import { BULK_CONCURRENCY, runLimited } from './bulk'
+import Pager from '../../components/pager/Pager'
+import { pageOf } from '../../components/pager/paging'
+
+const PAGE_SIZE = 10
 import styles from './webconsole-style.module.css'
 
 export default function SubscribersPage() {
@@ -243,19 +247,8 @@ export default function SubscribersPage() {
               </table>
             )}
 
-            {!isLoading && !loadError && shown.pages > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
-                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                  {shown.from}–{shown.to} of {filteredSubscribers.length}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Button variant="secondary" onClick={() => setPage(1)} disabled={shown.page === 1}>«</Button>
-                  <Button variant="secondary" onClick={() => setPage(shown.page - 1)} disabled={shown.page === 1}>‹ Prev</Button>
-                  <span style={{ fontSize: '0.85rem', minWidth: '6rem', textAlign: 'center' }}>Page {shown.page} / {shown.pages}</span>
-                  <Button variant="secondary" onClick={() => setPage(shown.page + 1)} disabled={shown.page === shown.pages}>Next ›</Button>
-                  <Button variant="secondary" onClick={() => setPage(shown.pages)} disabled={shown.page === shown.pages}>»</Button>
-                </div>
-              </div>
+            {!isLoading && !loadError && (
+              <Pager page={shown} total={filteredSubscribers.length} onChange={setPage} />
             )}
 
             <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add Subscriber</Button>

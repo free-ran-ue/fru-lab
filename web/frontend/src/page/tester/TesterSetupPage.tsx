@@ -9,8 +9,11 @@ import type { TesterFieldError, TesterPlan, TesterProfile, TesterValidateRespons
 import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
 import { formatBps } from './testerFormat'
 import styles from './tester.module.css'
+import Pager from '../../components/pager/Pager'
+import { pageOf } from '../../components/pager/paging'
 
-const PREVIEW_ROWS = 10
+// PREVIEW_PAGE is how many gNBs one page of the plan preview shows.
+const PREVIEW_PAGE = 10
 
 // totalRate is the whole run's offered load for one direction.
 function totalRate(mbps: number, ues: number, packetSize: number): string {
@@ -93,6 +96,7 @@ export default function TesterSetupPage() {
   const navigate = useNavigate()
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [profile, setProfile] = useState<TesterProfile>(DEFAULT_TESTER_PROFILE)
+  const [previewPage, setPreviewPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [validation, setValidation] = useState<TesterValidateResponse | null>(null)
   const [isBusy, setIsBusy] = useState(false)
@@ -328,7 +332,7 @@ export default function TesterSetupPage() {
                       <tr><th>#</th><th>Name</th><th>gNB ID</th><th>N2 IP</th><th>N3 IP</th><th>UEs</th><th>SUPIs</th></tr>
                     </thead>
                     <tbody>
-                      {plan.gnbs.slice(0, PREVIEW_ROWS).map((g) => (
+                      {pageOf(plan.gnbs, previewPage, PREVIEW_PAGE).items.map((g) => (
                         <tr key={g.index}>
                           <td>{g.index}</td>
                           <td>{g.name}</td>
@@ -341,9 +345,7 @@ export default function TesterSetupPage() {
                       ))}
                     </tbody>
                   </table>
-                  {plan.gnbs.length > PREVIEW_ROWS && (
-                    <p className={styles.hint}>…and {plan.gnbs.length - PREVIEW_ROWS} more gNBs, last one {plan.gnbs[plan.gnbs.length - 1].name} at {plan.gnbs[plan.gnbs.length - 1].n2Ip}.</p>
-                  )}
+                  <Pager page={pageOf(plan.gnbs, previewPage, PREVIEW_PAGE)} total={plan.gnbs.length} onChange={setPreviewPage} />
                 </div>
               )}
             </section>

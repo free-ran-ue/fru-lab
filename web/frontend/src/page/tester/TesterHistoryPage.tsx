@@ -6,6 +6,11 @@ import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterHistorySummary } from '../../api'
 import { formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
 import styles from './tester.module.css'
+import Pager from '../../components/pager/Pager'
+import { pageOf } from '../../components/pager/paging'
+
+// HISTORY_PAGE is how many runs one page of the history shows.
+const HISTORY_PAGE = 20
 
 function seconds(r: TesterHistorySummary): number {
   if (!r.startedAt || !r.stoppedAt) return 0
@@ -59,6 +64,7 @@ export default function TesterHistoryPage() {
   const { errors, successes, addError, removeNotification } = useNotifications()
   const [runs, setRuns] = useState<TesterHistorySummary[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     api.testerHistoryList()
@@ -81,6 +87,7 @@ export default function TesterHistoryPage() {
   }
 
   const compared = (runs ?? []).filter((r) => selected.includes(r.runId))
+  const shown = pageOf(runs ?? [], page, HISTORY_PAGE)
 
   return (
     <div className={styles.layout}>
@@ -139,7 +146,7 @@ export default function TesterHistoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {runs.map((r) => (
+                  {shown.items.map((r) => (
                     <tr key={r.runId}>
                       <td>
                         <input type="checkbox" aria-label={`Compare run ${r.runId}`}
@@ -161,6 +168,7 @@ export default function TesterHistoryPage() {
                   ))}
                 </tbody>
               </table>
+              <Pager page={shown} total={runs.length} onChange={setPage} />
             </div>
           )}
         </section>
