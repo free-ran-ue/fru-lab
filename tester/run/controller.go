@@ -26,6 +26,7 @@ import (
 var (
 	ErrRunActive  = errors.New("a run is already active; stop it first")
 	ErrNotRunning = errors.New("no active run to stop")
+	ErrNoReport   = errors.New("no finished run")
 )
 
 // Deps are the controller's side effects, injected so tests can fake them.
@@ -199,6 +200,21 @@ func (c *Controller) Snapshot() Snapshot {
 			Dataplane: emptyDataplane()}
 	}
 	return r.snapshot()
+}
+
+// Report returns the current run once it has finished (stopped or
+// failed), for fru-lab's history; ErrNoReport before that.
+func (c *Controller) Report() (Report, error) {
+	c.mu.Lock()
+	r := c.current
+	c.mu.Unlock()
+	if r == nil {
+		return Report{}, ErrNoReport
+	}
+	if st := r.state(); st != StateStopped && st != StateFailed {
+		return Report{}, ErrNoReport
+	}
+	return Report{Profile: r.profile, Snapshot: r.snapshot()}, nil
 }
 
 // Shutdown stops any active run and waits for teardown, for process exit.

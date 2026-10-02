@@ -351,3 +351,23 @@ func TestMaxDurationStopsTheRun(t *testing.T) {
 	require.Equal(t, "maxDuration", snap.StopReason)
 	require.Equal(t, int64(10), snap.Deregistration.Accepted)
 }
+
+func TestReportOnlyForAFinishedRun(t *testing.T) {
+	c, _ := newE2EController(amfDialer{amf: newFakeAMF(nil)})
+	_, err := c.Report()
+	require.ErrorIs(t, err, ErrNoReport)
+
+	p := e2eProfile()
+	_, err = c.Start(p)
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	_, err = c.Report()
+	require.ErrorIs(t, err, ErrNoReport, "still running")
+
+	stopAndWait(t, c)
+	rep, err := c.Report()
+	require.NoError(t, err)
+	require.Equal(t, p.Name, rep.Profile.Name)
+	require.Equal(t, StateStopped, rep.Snapshot.State)
+	require.Equal(t, "e2e", rep.Snapshot.RunID)
+}

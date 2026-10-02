@@ -22,6 +22,8 @@ type fakeCtrl struct {
 	stopErr     error
 	snap        run.Snapshot
 	changed     chan struct{}
+	report      run.Report
+	reportErr   error
 }
 
 func (f *fakeCtrl) Validate(profile.Profile) (*profile.Plan, error) {
@@ -34,6 +36,7 @@ func (f *fakeCtrl) Start(profile.Profile) (run.Snapshot, error) { return f.snap,
 func (f *fakeCtrl) Stop() (run.Snapshot, error)                 { return f.snap, f.stopErr }
 func (f *fakeCtrl) Snapshot() run.Snapshot                      { return f.snap }
 func (f *fakeCtrl) Changed() <-chan struct{}                    { return f.changed }
+func (f *fakeCtrl) Report() (run.Report, error)                 { return f.report, f.reportErr }
 
 func do(t *testing.T, h http.Handler, method, path, body, token string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -140,4 +143,20 @@ func TestStreamCoalescesBurstsOfChanges(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, time.Since(start), 3*minFrameGap-20*time.Millisecond,
 		"4 frames need at least 3 gaps")
+}
+
+func TestReportIs404UntilARunFinished(t *testing.T) {
+	h := NewRouter(&fakeCtrl{reportErr: run.ErrNoReport}, "t")
+	rec := do(t, h, http.MethodGet, "/api/run/report", "", "t")
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	require.Contains(t, rec.Body.String(), "no finished run")
+}
+
+func TestReportCarriesProfileAndSnapshot(t *testing.T) {
+	rep := run.Report{Profile: profile.Profile{Name: "basic"}, Snapshot: run.Snapshot{RunID: "r1", State: run.StateStopped}}
+	h := NewRouter(&fakeCtrl{report: rep}, "t")
+	rec := do(t, h, http.MethodGet, "/api/run/report", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"profile":{"name":"basic"`)
+	require.Contains(t, rec.Body.String(), `"snapshot":{"runId":"r1"`)
 }
