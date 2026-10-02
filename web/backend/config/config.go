@@ -20,6 +20,15 @@ type BackendIE struct {
 	Deploy DeployIE `yaml:"deploy" valid:"required"`
 
 	FrontendFilePath string `yaml:"frontendFilePath" valid:"required"`
+
+	Tester TesterIE `yaml:"tester"`
+}
+
+// TesterIE points at the fru-tester engine. Leaving URL empty disables the
+// Throughput Tester pages' backend routes (they answer 503).
+type TesterIE struct {
+	URL      string `yaml:"url"`
+	ApiToken string `yaml:"apiToken"`
 }
 
 type JWTIE struct {

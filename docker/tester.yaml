@@ -1,0 +1,7 @@
+# fru-tester runs on the host network, so this port is reachable from the
+# host's interfaces; apiToken must match docker/config.yaml backend.tester.
+listen: "0.0.0.0:9100"
+apiToken: "frulab-tester"
+
+logger:
+  level: "info"

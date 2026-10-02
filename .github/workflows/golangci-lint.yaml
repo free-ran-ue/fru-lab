@@ -7,11 +7,14 @@ on:
 
 jobs:
   golangci:
-    name: lint
+    name: lint (${{ matrix.module }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         go: [ '1.26.2' ]
+        # each Go module has its own go.mod and .golangci.yaml
+        module: [ web/backend, tester ]
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -24,5 +27,5 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.11.4
-          working-directory: web/backend
+          working-directory: ${{ matrix.module }}
           args: ./...

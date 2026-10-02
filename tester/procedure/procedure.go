@@ -1,0 +1,240 @@
+// Package procedure drives one UE through registration and PDU session
+// establishment over its gNB's association, and reports how it ended in
+// the terms the stage cards count (metrics.Outcome + cause).
+package procedure
+
+import (
+	"errors"
+	"fmt"
+	"net/netip"
+	"time"
+
+	"tester/gnb"
+	"tester/metrics"
+	"tester/ue"
+)
+
+// Outcome is how one attempt ended.
+type Outcome struct {
+	Result metrics.Outcome
+	Cause  string        // empty when Accepted
+	UeIP   netip.Addr    // PDU only
+	Pdu    *gnb.PduSetup // PDU only; nil if the accept came without a resource setup
+	DoneAt time.Time     // registration: Registration Complete sent; deregistration: accept received
+}
+
+// configUpdateWait bounds how long Register waits, after Registration
+// Complete, for the AMF's Configuration Update Command. free5GC sends it
+// once it has finished handling the registration; waiting for it before
+// the PDU request is what a real UE (and free-ran-ue) does. Cores that
+// never send it just cost this much once per UE.
+var configUpdateWait = time.Second
+
+var errTimeout = errors.New("timeout")
+
+// ErrAborted is the Outcome cause when the caller gave up waiting
+// (Deregister's abort channel); the core may still answer later.
+var ErrAborted = errors.New("aborted")
+
+// Register runs one initial registration attempt. On success the returned
+// link stays attached for the PDU session; on failure it is detached.
+// Timing: from sending Initial UE Message to sending Registration Complete
+// (Outcome.DoneAt); Register then waits for the Configuration Update
+// Command before returning, so the PDU stage starts after the AMF is done.
+func Register(assoc *gnb.Association, u *ue.UE, timeout time.Duration) (*gnb.UeLink, Outcome) {
+	link, err := assoc.Attach()
+	if err != nil {
+		return nil, Outcome{Result: metrics.Failed, Cause: err.Error()}
+	}
+	out := register(assoc, link, u, time.Now().Add(timeout))
+	if out.Result != metrics.Accepted {
+		assoc.Detach(link)
+		return nil, out
+	}
+	return link, out
+}
+
+func register(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.Time) Outcome {
+	req, err := u.RegistrationRequest()
+	if err != nil {
+		return failed(fmt.Errorf("encode registration request: %w", err))
+	}
+	if err := assoc.SendInitialUE(link, req); err != nil {
+		return failed(err)
+	}
+	for {
+		d, err := next(assoc, link, deadline, nil)
+		if err != nil {
+			return failed(err)
+		}
+		switch d.Kind {
+		case gnb.DownlinkLost:
+			return failed(fmt.Errorf("association lost: %w", d.Err))
+		case gnb.DownlinkReleased:
+			return Outcome{Result: metrics.Rejected, Cause: "ue context released"}
+		}
+		r, err := u.Handle(d.Nas)
+		if err != nil {
+			return failed(err)
+		}
+		if r.Reply != nil {
+			if err := assoc.SendUplinkNas(link, r.Reply); err != nil {
+				return failed(err)
+			}
+		}
+		switch r.Event {
+		case ue.EventRegistered:
+			done := time.Now()
+			awaitConfigUpdate(assoc, link, u, minTime(done.Add(configUpdateWait), deadline))
+			return Outcome{Result: metrics.Accepted, DoneAt: done}
+		case ue.EventRegistrationRejected:
+			return Outcome{Result: metrics.Rejected, Cause: r.Cause}
+		}
+	}
+}
+
+// EstablishPdu runs one PDU session attempt for a registered UE.
+// Timing: from sending the request to receiving the accept, by which point
+// the gNB has already answered the PDU Session Resource Setup.
+func EstablishPdu(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time.Duration) Outcome {
+	deadline := time.Now().Add(timeout)
+	req, err := u.PduSessionRequest()
+	if err != nil {
+		return failed(err)
+	}
+	if err := assoc.SendUplinkNas(link, req); err != nil {
+		return failed(err)
+	}
+	var setup *gnb.PduSetup
+	for {
+		d, err := next(assoc, link, deadline, nil)
+		if err != nil {
+			return failed(err)
+		}
+		switch d.Kind {
+		case gnb.DownlinkLost:
+			return failed(fmt.Errorf("association lost: %w", d.Err))
+		case gnb.DownlinkReleased:
+			return Outcome{Result: metrics.Rejected, Cause: "ue context released"}
+		}
+		if d.Pdu != nil {
+			setup = d.Pdu
+		}
+		if d.Nas == nil {
+			continue
+		}
+		r, err := u.Handle(d.Nas)
+		if err != nil {
+			return failed(err)
+		}
+		switch r.Event {
+		case ue.EventPduEstablished:
+			return Outcome{Result: metrics.Accepted, UeIP: r.UeIP, Pdu: setup}
+		case ue.EventPduRejected:
+			return Outcome{Result: metrics.Rejected, Cause: r.Cause}
+		}
+	}
+}
+
+// releaseWait bounds how long Deregister waits, after the Deregistration
+// Accept, for the AMF's UE Context Release Command, so the AMF is done
+// with the UE before cleanup closes the association.
+var releaseWait = time.Second
+
+// Deregister runs one UE-originating deregistration attempt; the core
+// releases the PDU session with it. Timing: from sending the request to
+// receiving Deregistration Accept (DoneAt). The link stays attached so a
+// retry can reuse its AMF UE NGAP ID; the caller detaches it. Closing
+// abort (nil = never) stops waiting at once: Result Failed, Cause
+// ErrAborted's text.
+func Deregister(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time.Duration, abort <-chan struct{}) Outcome {
+	deadline := time.Now().Add(timeout)
+	req, err := u.DeregistrationRequest()
+	if err != nil {
+		return failed(err)
+	}
+	if err := assoc.SendUplinkNas(link, req); err != nil {
+		return failed(err)
+	}
+	for {
+		d, err := next(assoc, link, deadline, abort)
+		if err != nil {
+			return failed(err)
+		}
+		switch d.Kind {
+		case gnb.DownlinkLost:
+			return failed(fmt.Errorf("association lost: %w", d.Err))
+		case gnb.DownlinkReleased:
+			return Outcome{Result: metrics.Rejected, Cause: "ue context released without deregistration accept"}
+		}
+		if d.Nas == nil {
+			continue
+		}
+		r, err := u.Handle(d.Nas)
+		if err != nil {
+			return failed(err)
+		}
+		if r.Event == ue.EventDeregistered {
+			done := time.Now()
+			awaitRelease(assoc, link, done.Add(releaseWait))
+			return Outcome{Result: metrics.Accepted, DoneAt: done}
+		}
+	}
+}
+
+// awaitRelease consumes downlinks until the UE Context Release Command
+// (DownlinkReleased) or the deadline.
+func awaitRelease(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) {
+	for {
+		d, err := next(assoc, link, deadline, nil)
+		if err != nil || d.Kind != gnb.DownlinkNas {
+			return
+		}
+	}
+}
+
+// awaitConfigUpdate consumes downlinks until the Configuration Update
+// Command arrives or the deadline passes. Anything else that arrives in
+// that window (there should be nothing) is dropped.
+func awaitConfigUpdate(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.Time) {
+	for {
+		d, err := next(assoc, link, deadline, nil)
+		if err != nil || d.Kind != gnb.DownlinkNas {
+			return
+		}
+		if r, err := u.Handle(d.Nas); err == nil && r.Event == ue.EventConfigUpdate {
+			return
+		}
+	}
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+// next waits for the UE's next downlink. abort (nil = never) ends the
+// wait early with ErrAborted.
+func next(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time, abort <-chan struct{}) (gnb.Downlink, error) {
+	t := time.NewTimer(time.Until(deadline))
+	defer t.Stop()
+	select {
+	case d := <-link.Downlinks:
+		return d, nil
+	case <-assoc.Lost():
+		return gnb.Downlink{}, assoc.Err()
+	case <-t.C:
+		return gnb.Downlink{}, errTimeout
+	case <-abort:
+		return gnb.Downlink{}, ErrAborted
+	}
+}
+
+func failed(err error) Outcome {
+	if errors.Is(err, errTimeout) {
+		return Outcome{Result: metrics.TimedOut, Cause: "timeout"}
+	}
+	return Outcome{Result: metrics.Failed, Cause: err.Error()}
+}

@@ -26,6 +26,13 @@ export default function Sidebar() {
           <NavLink to="/logs" className={navItemClassName}>Logs</NavLink>
           <NavLink to="/images" className={navItemClassName}>Images</NavLink>
         </nav>
+
+        <p className={styles.navGroup}>Throughput Tester</p>
+        <nav className={styles.nav}>
+          <NavLink to="/tester" end className={navItemClassName}>Setup</NavLink>
+          <NavLink to="/tester/run" className={navItemClassName}>Run</NavLink>
+          <NavLink to="/tester/history" className={navItemClassName}>History</NavLink>
+        </nav>
       </div>
 
       <div>

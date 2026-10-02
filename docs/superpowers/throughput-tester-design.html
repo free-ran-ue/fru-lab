@@ -1,0 +1,1572 @@
+<title>5G Throughput Tester 設計稿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: single reading column (~760px) with wide breakout bands for mockups and diagrams; sticky section index on wide screens. */
+:root {
+  --bg: #f5f6fa;
+  --paper: #ffffff;
+  --ink: #141a2e;
+  --ink-2: #4a5270;
+  --ink-3: #7d849e;
+  --line: #dfe2ec;
+  --line-2: #eceef5;
+  --accent: #4338ca;
+  --accent-soft: #eceafd;
+  --dl: #0f8a7e;
+  --dl-soft: #e1f4f1;
+  --ok: #1f8a4c;
+  --ok-soft: #e3f4e9;
+  --bad: #c2362f;
+  --bad-soft: #fbe7e5;
+  --warn: #a8670a;
+  --warn-soft: #fbf0dc;
+  --chip: #eef0f6;
+  --screen-bg: #f8fafc;
+  --shadow: 0 1px 2px rgba(20,26,46,.05), 0 8px 24px rgba(20,26,46,.06);
+
+  --f-sans: "IBM Plex Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --f-body: "Noto Sans TC", "IBM Plex Sans", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10131d; --paper: #171b28; --ink: #e7e9f2; --ink-2: #b2b7cc; --ink-3: #848aa3;
+    --line: #2b3144; --line-2: #222738; --accent: #9d97ff; --accent-soft: #26244a;
+    --dl: #4fc9ba; --dl-soft: #15322f; --ok: #5ccf8a; --ok-soft: #173225; --bad: #f07b72; --bad-soft: #3a1d1c;
+    --warn: #e8b259; --warn-soft: #36290f; --chip: #232839; --screen-bg: #131723;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10131d; --paper: #171b28; --ink: #e7e9f2; --ink-2: #b2b7cc; --ink-3: #848aa3;
+  --line: #2b3144; --line-2: #222738; --accent: #9d97ff; --accent-soft: #26244a;
+  --dl: #4fc9ba; --dl-soft: #15322f; --ok: #5ccf8a; --ok-soft: #173225; --bad: #f07b72; --bad-soft: #3a1d1c;
+  --warn: #e8b259; --warn-soft: #36290f; --chip: #232839; --screen-bg: #131723;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15.5px; line-height: 1.75; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; }
+.col { max-width: 780px; }
+h1, h2, h3, h4 { font-family: var(--f-sans); text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 1.5rem; font-weight: 700; margin-top: 8px; }
+h3 { font-size: 1.12rem; font-weight: 600; margin-top: 28px; margin-bottom: 6px; }
+h4 { font-size: .98rem; font-weight: 600; }
+p { margin: 10px 0; }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+code { background: var(--chip); padding: 1px 6px; border-radius: 4px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.eyebrow { font-family: var(--f-mono); font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: 680px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--f-mono); font-size: .8rem; color: var(--ink-3); margin-top: 18px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: .76rem; font-weight: 600; font-family: var(--f-sans); line-height: 1.6; white-space: nowrap; }
+.pill.draft { background: var(--warn-soft); color: var(--warn); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.acc { background: var(--accent-soft); color: var(--accent); }
+.pill.dl { background: var(--dl-soft); color: var(--dl); }
+.pill.muted { background: var(--chip); color: var(--ink-2); }
+
+header.top { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 22px; }
+.toc a { text-decoration: none; color: var(--ink-2); font-size: .84rem; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); font-family: var(--f-sans); }
+.toc a:hover { border-color: var(--accent); color: var(--accent); }
+.toc a .n { font-family: var(--f-mono); color: var(--ink-3); margin-right: 6px; }
+
+section.sec { padding-top: 56px; scroll-margin-top: 16px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; }
+.sec-num { font-family: var(--f-mono); font-size: .85rem; color: var(--ink-3); font-weight: 500; }
+
+.callout { border: 1px solid var(--line); background: var(--paper); border-radius: 10px; padding: 14px 18px; margin: 16px 0; }
+.callout.q { border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: var(--warn-soft); }
+.callout .lbl { font-family: var(--f-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--warn); }
+.callout.why .lbl { color: var(--accent); }
+
+/* challenge cards */
+.challenges { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 20px; }
+.ch { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ch .said { font-size: .84rem; color: var(--ink-3); }
+.ch .said::before { content: "原文："; font-weight: 600; }
+.ch h4 { margin-top: 2px; }
+.ch p { margin: 0; font-size: .92rem; color: var(--ink-2); }
+.ch .fix { font-size: .9rem; color: var(--ink); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
+.ch .fix b { color: var(--accent); font-weight: 600; }
+.ch .dec { font-size: .88rem; background: var(--ok-soft); color: var(--ink); padding: 6px 10px; border-radius: 6px; }
+.ch .dec b { color: var(--ok); font-weight: 600; }
+.callout.done { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); background: var(--ok-soft); }
+.callout.done .lbl { color: var(--ok); }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; margin: 14px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+th { font-family: var(--f-sans); font-weight: 600; font-size: .78rem; letter-spacing: .03em; color: var(--ink-3); background: var(--line-2); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.mono, td .mono { font-family: var(--f-mono); font-size: .84rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* diagrams */
+.figure { margin: 22px 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.figure .scroll { overflow-x: auto; }
+.figure svg { display: block; min-width: 760px; width: 100%; height: auto; }
+.figcap { font-size: .85rem; color: var(--ink-3); margin-top: 10px; }
+svg text { font-family: var(--f-sans); }
+.s-box { fill: var(--paper); stroke: var(--line); stroke-width: 1.2; }
+.s-box-acc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }
+.s-box-dl { fill: var(--dl-soft); stroke: var(--dl); stroke-width: 1.2; }
+.s-box-bad { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.2; }
+.s-box-chip { fill: var(--chip); stroke: var(--line); stroke-width: 1; }
+.s-group { fill: none; stroke: var(--ink-3); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.s-t { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.s-s { fill: var(--ink-2); font-size: 11.5px; }
+.s-xs { fill: var(--ink-3); font-size: 10.5px; }
+.s-acc-t { fill: var(--accent); font-size: 11.5px; font-weight: 600; }
+.s-dl-t { fill: var(--dl); font-size: 11.5px; font-weight: 600; }
+.s-bad-t { fill: var(--bad); font-size: 11.5px; font-weight: 600; }
+.s-line { stroke: var(--ink-3); stroke-width: 1.4; fill: none; }
+.s-line-acc { stroke: var(--accent); stroke-width: 2; fill: none; }
+.s-line-dl { stroke: var(--dl); stroke-width: 2; fill: none; }
+.s-line-bad { stroke: var(--bad); stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+.ah { fill: var(--ink-3); }
+.ah-acc { fill: var(--accent); }
+.ah-dl { fill: var(--dl); }
+.ah-bad { fill: var(--bad); }
+
+/* mockup screens */
+.screen { margin: 22px 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--screen-bg); box-shadow: var(--shadow); }
+.screen-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--paper); font-family: var(--f-mono); font-size: .74rem; color: var(--ink-3); }
+.dots { display: flex; gap: 5px; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: block; }
+.screen-body { display: grid; grid-template-columns: 188px minmax(0, 1fr); min-height: 300px; }
+.m-side { background: var(--paper); border-right: 1px solid var(--line); padding: 16px 12px; display: flex; flex-direction: column; gap: 3px; font-family: var(--f-sans); }
+.m-badge { align-self: flex-start; font-size: .62rem; font-weight: 700; letter-spacing: .05em; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 999px; }
+.m-brand { font-weight: 700; font-size: .92rem; margin: 6px 0 12px; }
+.m-nav { font-size: .82rem; color: var(--ink-2); padding: 6px 10px; border-radius: 6px; }
+.m-nav.act { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.m-group { font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 14px 10px 4px; font-weight: 600; }
+.m-sub { font-size: .8rem; color: var(--ink-2); padding: 5px 10px 5px 22px; border-radius: 6px; }
+.m-sub.act { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.m-main { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; font-family: var(--f-sans); }
+.m-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.m-title h4 { font-size: 1.05rem; }
+.m-steps { display: flex; flex-wrap: wrap; gap: 6px; font-size: .74rem; }
+.m-steps span { padding: 3px 10px; border-radius: 999px; background: var(--chip); color: var(--ink-3); }
+.m-steps span.on { background: var(--accent); color: var(--paper); font-weight: 600; }
+.m-steps span.done { background: var(--accent-soft); color: var(--accent); }
+.m-card { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.m-card h5 { margin: 0 0 10px; font-size: .82rem; font-weight: 600; color: var(--ink-2); font-family: var(--f-sans); }
+.m-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.m-field { display: flex; flex-direction: column; gap: 4px; font-size: .74rem; color: var(--ink-3); min-width: 0; }
+.m-input { border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font-family: var(--f-mono); font-size: .82rem; color: var(--ink); background: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-input.unit { display: flex; justify-content: space-between; gap: 8px; }
+.m-input.unit span { color: var(--ink-3); }
+.m-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; font-size: .76rem; }
+.m-seg span { padding: 5px 10px; color: var(--ink-2); }
+.m-seg span.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.m-btn { display: inline-block; padding: 6px 14px; border-radius: 7px; font-size: .8rem; font-weight: 600; background: var(--accent); color: var(--paper); white-space: nowrap; }
+.m-btn.ghost { background: var(--paper); color: var(--ink-2); border: 1px solid var(--line); }
+.m-btn.danger { background: var(--bad); color: var(--paper); }
+.m-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.m-note { font-size: .74rem; color: var(--ink-3); }
+.m-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: .78rem; color: var(--ink-2); }
+.m-sum b { font-family: var(--f-mono); color: var(--ink); font-weight: 600; }
+.m-warn { font-size: .76rem; background: var(--warn-soft); color: var(--warn); padding: 6px 10px; border-radius: 6px; }
+
+.gnb-alloc { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.gnb-col { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--screen-bg); }
+.gnb-col .h { display: flex; justify-content: space-between; font-size: .74rem; font-family: var(--f-mono); color: var(--ink-2); margin-bottom: 6px; }
+.ue-dots { display: flex; flex-wrap: wrap; gap: 4px; }
+.ue-dots i { width: 14px; height: 14px; border-radius: 3px; background: var(--accent); opacity: .85; display: block; }
+.ue-dots i.empty { background: transparent; border: 1px dashed var(--line); opacity: 1; }
+
+.m-tbl { width: 100%; border-collapse: collapse; font-size: .76rem; }
+.m-tbl th, .m-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--line-2); text-align: left; white-space: nowrap; }
+.m-tbl th { font-size: .68rem; background: transparent; color: var(--ink-3); letter-spacing: .03em; }
+.m-tbl td { font-family: var(--f-mono); color: var(--ink); }
+.m-tbl td.lbl { font-family: var(--f-sans); color: var(--ink-2); }
+.m-scroll { overflow-x: auto; }
+
+/* dashboard */
+.stage-row { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.stage { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px 13px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.stage .top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.stage .name { font-size: .8rem; font-weight: 600; color: var(--ink-2); }
+.stage .big { font-family: var(--f-mono); font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stage .big small { font-size: .74rem; color: var(--ink-3); font-weight: 400; }
+.bar { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--line-2); }
+.bar .a { background: var(--ok); }
+.bar .r { background: var(--bad); }
+.bar .f { background: var(--accent); opacity: .45; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: .74rem; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.kv dd.ok { color: var(--ok); } .kv dd.bad { color: var(--bad); }
+.chart-card svg { width: 100%; height: auto; display: block; }
+.c-grid { stroke: var(--line-2); stroke-width: 1; }
+.c-axis { fill: var(--ink-3); font-size: 10px; font-family: var(--f-mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .74rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.dp-tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.dp-tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--screen-bg); }
+.dp-tile .k { font-size: .68rem; color: var(--ink-3); }
+.dp-tile .v { font-family: var(--f-mono); font-size: .95rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dp-tile .v.ul { color: var(--accent); } .dp-tile .v.dl { color: var(--dl); }
+.sample-tag { font-family: var(--f-mono); font-size: .66rem; color: var(--warn); background: var(--warn-soft); padding: 1px 7px; border-radius: 4px; }
+
+/* state machine chips */
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0; font-family: var(--f-sans); font-size: .82rem; }
+.flow .st { padding: 4px 11px; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); white-space: nowrap; }
+.flow .st.acc { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.flow .st.bad { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+.flow .st.ok { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+.flow .ar { color: var(--ink-3); }
+
+/* open questions */
+.qs { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.qrow { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.qid { font-family: var(--f-mono); font-weight: 600; color: var(--warn); font-size: .9rem; }
+.qrow h4 { margin-bottom: 4px; }
+.qrow p { margin: 4px 0; font-size: .92rem; color: var(--ink-2); }
+.qrow .rec { font-size: .9rem; color: var(--ink); }
+.qrow .rec b { color: var(--accent); }
+.qrow .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+
+.phases { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px; }
+.phase { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.phase .p { font-family: var(--f-mono); font-size: .76rem; color: var(--accent); font-weight: 600; }
+.phase h4 { margin: 4px 0 6px; }
+.phase ul { margin: 0; padding-left: 18px; font-size: .88rem; color: var(--ink-2); }
+.phase .done-when { font-size: .82rem; color: var(--ink-3); margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+
+ul.tight { padding-left: 20px; margin: 8px 0; }
+ul.tight li { margin: 3px 0; }
+
+
+.log-entry { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 16px; }
+.log-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+.log-head h3 { margin: 0; }
+.log-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--f-mono); font-size: .78rem; color: var(--ink-3); margin-top: 6px; }
+.log-entry h4 { margin-top: 18px; margin-bottom: 4px; }
+@media (max-width: 720px) {
+  .screen-body { grid-template-columns: minmax(0, 1fr); }
+  .m-side { display: none; }
+  .qrow { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .wrap { padding-inline: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">fru-lab · 新功能設計稿</div>
+  <h1 style="margin-top:10px">5G Throughput Tester</h1>
+  <p class="lede">一個自己掌控的 Landslide 類壓測工具：大量模擬 gNB 與 UE，依序完成 N2 建線、註冊、PDU Session，再直接對 UPF 打 GTP-U 上行與 N6 下行流量，並把每個階段的成功率、時間與吞吐量即時呈現出來。</p>
+  <div class="meta">
+    <span class="pill ok">v3 · Q1–Q17、N1–N7 全部確認</span><span class="pill acc">第 1–4 期已完成</span>
+    <span>依據：5g-throughput-tester.md</span>
+    <span>參考程式：free-ran-ue (gnb/, ue/)</span>
+    <span>2026-10-02</span>
+  </div>
+  <nav class="toc" aria-label="章節">
+    <a href="#challenge"><span class="n">01</span>先挑戰原始需求</a>
+    <a href="#arch"><span class="n">02</span>整體架構</a>
+    <a href="#modules"><span class="n">03</span>模組拆分</a>
+    <a href="#direct"><span class="n">04</span>gNB 與 UE 直連</a>
+    <a href="#pipeline"><span class="n">05</span>UE 流水線</a>
+    <a href="#config"><span class="n">06</span>測試設定</a>
+    <a href="#network"><span class="n">07</span>網卡與路由</a>
+    <a href="#dataplane"><span class="n">08</span>資料面打流量</a>
+    <a href="#metrics"><span class="n">09</span>統計定義</a>
+    <a href="#dashboard"><span class="n">10</span>執行畫面</a>
+    <a href="#questions"><span class="n">11</span>已確認的決定</a>
+    <a href="#phases"><span class="n">12</span>分期計畫</a>
+    <a href="#log"><span class="n">13</span>實作紀錄</a>
+  </nav>
+</header>
+
+<!-- 01 -->
+<section class="sec" id="challenge">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">01</span><h2>先挑戰原始需求</h2></div>
+    <p>原始文件的流程方向是對的：先 N2、再註冊、再 PDU、最後打流量，每一步用 channel 把 UE 往下一站送。下面這些是我認為「照字面做會出問題」或「有兩種解讀」的地方。每一張卡片都會在後面的章節給出完整設計，最後在 <a href="#questions">第 11 節</a> 整理成需要你拍板的問題。</p>
+    <div class="callout done"><div class="lbl">v3 更新</div>每張卡片底部的綠色「決定」是你在文件裡的回覆。第 2–10 節已照 Q1–Q17 與 N1–N7 修改，完整對照表在 <a href="#questions">第 11 節</a>。</div>
+  </div>
+
+  <div class="challenges">
+    <div class="ch">
+      <span class="said">用 semaphore 做 rate 控管</span>
+      <h4>Semaphore 控的是「同時幾個」，不是「每秒幾個」</h4>
+      <p>Semaphore 限制同時進行中的程序數量。如果核網很快，每秒可能完成上千個註冊；如果核網變慢，速率會自己掉下來。兩種都不是你在設定頁輸入的「每秒 N 個」。</p>
+      <div class="fix"><b>建議：</b>兩個旋鈕都給。速率用 token bucket（每秒 N 個），同時進行數用 semaphore（最多 M 個 in-flight），防止核網卡住時請求無限堆積。</div>
+      <div class="dec"><b>決定：</b>照建議做；另外，資料面以外每個流程都有重試次數欄位（Q13）。</div>
+    </div>
+    <div class="ch">
+      <span class="said">統計目前的 throughput 與 pps</span>
+      <h4>只算送出去的量，不等於 UPF 真的轉了這麼多</h4>
+      <p>Tester 自己送出 5 Gbps，不代表 UPF 有轉發 5 Gbps。如果 UPF 丟包，畫面上的數字仍然漂亮。</p>
+      <div class="fix"><b>建議：</b>上行在 N6 收、下行在 N3 收，送和收兩邊都計數。這樣才能算出真正的吞吐、丟包率，還能順便量單向延遲（同一台機器、同一個時鐘）。</div>
+      <div class="dec"><b>決定：</b>需要收包驗證（Q11）。</div>
+    </div>
+    <div class="ch">
+      <span class="said">DL 的風暴，直接送進 N6</span>
+      <h4>下行封包要能被路由到 UPF，而且要穿過 NAT</h4>
+      <p>下行封包的目的 IP 是 UE IP（例如 10.60.0.12），Tester 主機必須知道「這個網段要交給 UPF N6」。另外 free5GC 的 N6 常開 MASQUERADE，上行封包離開 UPF 時來源 IP 會被改掉，無法從 IP 判斷是哪個 UE。</p>
+      <div class="fix"><b>建議：</b>設定頁要求填 UE IP pool 並自動檢查路由；每個測試封包的 payload 內嵌一個小標頭（UE 編號、序號、送出時間），不靠 IP 也能辨識。</div>
+      <div class="dec"><b>決定：</b>路由由 Tester 自動加入與移除，使用者不用處理（Q16）。</div>
+    </div>
+    <div class="ch">
+      <span class="said">（文件沒提到）</span>
+      <h4>核網裡沒有這些 UE 的訂閱資料，註冊會全部失敗</h4>
+      <p>1000 個 UE 就要在 free5GC 裡有 1000 筆 subscriber，而且 IMSI、Key、OPc、DNN、S-NSSAI 要和 Tester 產生的完全一致。</p>
+      <div class="fix"><b>建議：</b>流程中加一個「訂閱資料準備」步驟：沿用 fru-lab 現有的 webconsole API，用同一套遞增規則批次建立，並可選擇測完後刪除。</div>
+      <div class="dec"><b>決定：</b>訂閱資料由使用者自己建立，Tester 不處理（Q7）。</div>
+    </div>
+    <div class="ch">
+      <span class="said">平均分配到各個 gNB，最後一個可以不滿</span>
+      <h4>「平均分配」和「最後一個不滿」是兩種不同的分法</h4>
+      <p>10 個 UE、3 個 gNB：平均輪流是 4 / 3 / 3；依序填滿是 4 / 4 / 2。只有後者會出現「最後一個不滿」。</p>
+      <div class="fix"><b>建議：</b>預設「依序填滿」，每個 gNB 容量 = 向上取整(UE 數 ÷ gNB 數)，也可以直接指定每 gNB 上限。設定頁即時畫出分配結果（見第 6 節）。</div>
+      <div class="dec"><b>決定：</b>只做依序填滿，不提供選項（Q5）。</div>
+    </div>
+    <div class="ch">
+      <span class="said">總時長 / 平均時長</span>
+      <h4>「總時長」有兩種意思，而平均值會藏住慢的那一群</h4>
+      <p>可以是「這一階段從第一個開始到最後一個結束的牆鐘時間」，也可以是「每個 UE 耗時加總」。另外，平均 50 ms 可能是 99% 很快、1% 卡 5 秒。</p>
+      <div class="fix"><b>建議：</b>兩種都顯示並清楚命名（階段耗時 / 累計耗時），另外加 p50、p95、p99、最大值。定義見第 9 節。</div>
+      <div class="dec"><b>決定：</b>總時長 = 第一個開始到最後一個完成（Q8）；平均與 p95 照樣顯示。</div>
+    </div>
+    <div class="ch">
+      <span class="said">完全 copy free-ran-ue 但要拆得更細</span>
+      <h4>free-ran-ue 的 UE 是「一個行程一個 UE、阻塞讀 socket」</h4>
+      <p><code>ue.go</code> 的註冊流程是對 TCP 連線依序 read/write；gNB 也假設每個 UE 是一條真實連線。要撐幾千個 UE，必須改成「訊息驅動」的狀態機，NAS 的編解碼與安全函式可以保留。</p>
+      <div class="fix"><b>建議：</b>保留 <code>nas.go</code>、<code>security.go</code>、<code>ngapBuilder.go</code>、TEID / NGAP ID 產生器，把流程控制重寫成第 4、5 節的形式。</div>
+    </div>
+    <div class="ch">
+      <span class="said">直接 format 出 gtp 封包</span>
+      <h4>GTP-U 標頭可能需要帶 QFI（PDU Session Container）</h4>
+      <p>free-ran-ue 目前上行用 12 bytes 標頭、下一個擴充標頭類型為 0，沒有帶 QFI。部分 UPF 會要求 PDU Session Container 才能匹配 QoS 規則。</p>
+      <div class="fix"><b>建議：</b>封包模板支援「無擴充 / 帶 QFI」兩種，預設帶 QFI（從 PDU Session Resource Setup 的 QoS Flow 取得），對 free5GC 先實測確認。</div>
+      <div class="dec"><b>決定：</b>不帶 QFI，沿用 free-ran-ue 的 12 bytes 標頭（Q15）。</div>
+    </div>
+    <div class="ch">
+      <span class="said">（文件沒提到）</span>
+      <h4>測試怎麼結束？</h4>
+      <p>打完流量後，UE 的 PDU session、註冊狀態、SCTP 連線都還在核網裡。下一次測試用同樣的 IMSI 可能會撞到舊的 context，AMF 內的資源也不會釋放。</p>
+      <div class="fix"><b>建議：</b>加一個收尾階段：停流量 → PDU Release → Deregistration → 關 SCTP，同樣計數與計時；另有「立即中止」按鈕只關連線。</div>
+      <div class="dec"><b>決定：</b>按 Stop 後流量立即全停，再反向做 UE Dereg → gNB SCTP 斷線，每段都統計，全部停完才算結束（Q12）。原本 N5 的 PDU Release 在第 4 期實作前取消，改由核網在 Dereg 時一併釋放。可另設最長執行時間，預設無限（N6）。</div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 -->
+<section class="sec" id="arch">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">02</span><h2>整體架構</h2></div>
+    <p>最大的決定是：<strong>壓測引擎要跑在哪裡</strong>。fru-lab 本身跑在 Docker container 裡，透過 Docker socket 去部署 free5GC 和 gNB / UE。打流量需要直接存取主機網卡、可能需要 raw socket 權限，還會吃滿 CPU，這些都不適合塞進 fru-lab 後端行程。</p>
+    <p>建議把引擎做成獨立的程式 <code>fru-tester</code>，用 host network 跑（和 fru-lab 現在部署 gNB 的方式一樣，由 fru-lab 起一個 container）。fru-lab 只負責：存設定、按開始 / 停止、把引擎推來的即時統計轉給瀏覽器、存歷史結果。</p>
+  </div>
+
+  <div class="figure">
+    <div class="scroll">
+    <svg viewBox="0 0 900 370" role="img" aria-label="架構圖：瀏覽器、fru-lab 後端、fru-tester 引擎、free5GC">
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-acc"/></marker>
+        <marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-dl"/></marker>
+      </defs>
+      <!-- browser -->
+      <rect x="20" y="50" width="180" height="76" rx="8" class="s-box"/>
+      <text x="34" y="76" class="s-t">瀏覽器</text>
+      <text x="34" y="96" class="s-s">側邊欄新分頁</text>
+      <text x="34" y="113" class="s-s">Throughput Tester</text>
+      <!-- backend -->
+      <rect x="20" y="196" width="180" height="104" rx="8" class="s-box"/>
+      <text x="34" y="222" class="s-t">fru-lab 後端</text>
+      <text x="34" y="242" class="s-s">測試設定與歷史 (bbolt)</text>
+      <text x="34" y="259" class="s-s">啟動 / 停止引擎</text>
+      <text x="34" y="276" class="s-s">轉發即時統計</text>
+      <line x1="110" y1="128" x2="110" y2="192" class="s-line" marker-start="url(#m1)" marker-end="url(#m1)"/>
+      <text x="118" y="164" class="s-xs">REST + WebSocket</text>
+      <!-- engine group -->
+      <rect x="250" y="20" width="390" height="330" rx="12" class="s-group"/>
+      <text x="266" y="42" class="s-t">fru-tester 引擎</text>
+      <text x="390" y="42" class="s-xs">獨立行程 · host network · 一次一個 run</text>
+      <rect x="268" y="56" width="354" height="40" rx="7" class="s-box-chip"/>
+      <text x="282" y="81" class="s-s"><tspan font-weight="600" class="s-t" style="font-size:12px">Run 控制器</tspan>  階段切換、計時、停止條件</text>
+      <rect x="268" y="112" width="166" height="74" rx="7" class="s-box"/>
+      <text x="280" y="134" class="s-t">UE 模組</text>
+      <text x="280" y="153" class="s-s">NAS 狀態機、金鑰</text>
+      <text x="280" y="170" class="s-s">不開 socket、不開 TUN</text>
+      <rect x="456" y="112" width="166" height="74" rx="7" class="s-box-acc"/>
+      <text x="468" y="134" class="s-t">gNB 模組</text>
+      <text x="468" y="153" class="s-s">每 gNB 一條 SCTP</text>
+      <text x="468" y="170" class="s-s">NGAP 編解碼、分派</text>
+      <line x1="436" y1="149" x2="454" y2="149" class="s-line" marker-start="url(#m1)" marker-end="url(#m1)"/>
+      <rect x="268" y="202" width="354" height="58" rx="7" class="s-box"/>
+      <text x="280" y="224" class="s-t">流水線 (Pipeline)</text>
+      <text x="280" y="244" class="s-s">註冊 workers → PDU workers → 資料面，以 channel 串接</text>
+      <rect x="268" y="276" width="110" height="58" rx="7" class="s-box-chip"/>
+      <text x="280" y="300" class="s-t">Metrics</text>
+      <text x="280" y="318" class="s-xs">計數、直方圖、時序</text>
+      <rect x="392" y="276" width="230" height="58" rx="7" class="s-box-dl"/>
+      <text x="404" y="300" class="s-t">資料面 (Data Plane)</text>
+      <text x="404" y="318" class="s-s">UL 產生 · DL 產生 · 收包驗證</text>
+      <!-- backend to engine -->
+      <line x1="202" y1="248" x2="264" y2="230" class="s-line" marker-end="url(#m1)"/>
+      <text x="206" y="222" class="s-xs">控制 API</text>
+      <line x1="266" y1="305" x2="202" y2="280" class="s-line" marker-end="url(#m1)"/>
+      <text x="206" y="312" class="s-xs">統計串流</text>
+      <!-- core -->
+      <rect x="700" y="56" width="180" height="278" rx="12" class="s-group"/>
+      <text x="716" y="80" class="s-t">被測核網（任何一套）</text>
+      <rect x="716" y="104" width="148" height="64" rx="7" class="s-box"/>
+      <text x="730" y="130" class="s-t">AMF</text>
+      <text x="730" y="150" class="s-s">N2 · SCTP 38412</text>
+      <rect x="716" y="240" width="148" height="80" rx="7" class="s-box"/>
+      <text x="730" y="264" class="s-t">UPF</text>
+      <text x="730" y="284" class="s-s">N3 · GTP-U 2152</text>
+      <text x="730" y="302" class="s-s">N6 · 一般 IP</text>
+      <line x1="624" y1="140" x2="712" y2="140" class="s-line-acc" marker-start="url(#m2)" marker-end="url(#m2)"/>
+      <text x="636" y="132" class="s-acc-t">N2 NGAP</text>
+      <line x1="624" y1="290" x2="712" y2="280" class="s-line-dl" marker-start="url(#m3)" marker-end="url(#m3)"/>
+      <text x="640" y="272" class="s-dl-t">N3</text>
+      <line x1="624" y1="318" x2="712" y2="308" class="s-line-dl" marker-start="url(#m3)" marker-end="url(#m3)"/>
+      <text x="640" y="336" class="s-dl-t">N6</text>
+    </svg>
+    </div>
+    <div class="figcap">瀏覽器從不直接碰引擎。引擎只透過三張網卡和被測核網溝通：N2 走 SCTP 到 AMF，N3 走 GTP-U 到 UPF，N6 用一般 IP 從資料網路那一側送收封包。</div>
+  </div>
+
+  <div class="col">
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>選項</th><th>做法</th><th>優點</th><th>缺點</th></tr>
+        <tr><td><strong>A. 引擎內嵌在 fru-lab 後端</strong></td><td>同一個 Go 行程，goroutine 跑測試</td><td>最快做出來，不用 IPC</td><td>container 網路隔離、要開特權；打流量時 fru-lab UI 會跟著卡；崩潰會一起倒</td></tr>
+        <tr><td><strong>B. 獨立 fru-tester（已選定 · Q1）</strong></td><td>fru-lab 用 Docker 起一個 host-network container，透過 REST 控制、WebSocket 收統計</td><td>網卡權限、CPU 綁核都只影響引擎；也可以單獨在 CLI 跑，方便自動化</td><td>多一個 binary 和 API 合約要維護</td></tr>
+      </table>
+    </div>
+    <p>fru-lab 側邊欄新增一個獨立區塊，和現有的 Dashboard / Subscriber / Logs / Images 分開，表示它是 lab 的另一個工具，不依賴 fru-lab 部署的核網。被測核網可以是任何一套，使用哪張網卡、哪個 IP 全部手動填（Q2）。</p>
+  </div>
+</section>
+
+<!-- 03 -->
+<section class="sec" id="modules">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">03</span><h2>模組拆分</h2></div>
+    <p>你列的四塊（gNB SCTP、UE 註冊、PDU 建立、資料面）是主幹。再加上「設定展開」、「流水線排程」和「統計」三個橫向模組，每一塊都能單獨測試、單獨替換。原則是：<strong>模組之間只傳資料，不互相持有對方的內部狀態</strong>。</p>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>模組</th><th>負責什麼</th><th>輸入</th><th>輸出</th><th>從 free-ran-ue 沿用</th></tr>
+      <tr><td><strong>profile</strong><br><span class="mono" style="color:var(--ink-3)">設定展開</span></td><td>驗證設定，把「3 個 gNB、1000 個 UE、MSIN 從 0000000001 遞增」展開成 3 份 gNB 設定與 1000 份 UE 設定，從 CIDR 分配每個 gNB 的 IP 並檢查數量夠不夠，再依序填滿決定每個 UE 掛在哪個 gNB</td><td>使用者存的測試設定</td><td>具體的 gNB 清單、UE 清單、分配表</td><td><code>model/gnb.go</code>、<code>model/ue.go</code> 的欄位定義</td></tr>
+      <tr><td><strong>gnb</strong></td><td>在網卡上配置 gNB IP、建立 SCTP、做 NG Setup、NGAP 編解碼、分配 RAN UE NGAP ID 與 TEID，把下行 NGAP 依 UE 分派出去；自動回應 Initial Context Setup、PDU Session Resource Setup</td><td>gNB 設定、上行 NAS（來自 UE 模組）</td><td>每條 N2 的狀態、下行 NAS、UE 的 TEID 與 UPF 位址</td><td><code>ngapBuilder.go</code>、<code>ngapDispatcher.go</code> 的解析部分、<code>ranUe.go</code> 的 ID 產生器、<code>gtp.go</code> 的 TeidGenerator</td></tr>
+      <tr><td><strong>ue</strong></td><td>單一 UE 的 NAS 狀態與安全上下文：產生註冊請求、算 RES*、處理 Security Mode、產生 PDU 請求、解出 UE IP、產生 PDU Release 與 Deregistration。<strong>沒有任何網路 I/O</strong></td><td>收到的下行 NAS</td><td>要送的上行 NAS、目前狀態</td><td><code>nas.go</code>、<code>security.go</code> 幾乎整份；<code>ue.go</code> 拆掉 socket 與 TUN 部分</td></tr>
+      <tr><td><strong>procedure/registration</strong></td><td>驅動一個 UE 走完註冊，並記錄每一步時間與失敗原因</td><td>UE、它所屬的 gNB</td><td>成功 / 拒絕 / 逾時 + 耗時 + cause</td><td><code>processUeRegistration</code> 的流程順序</td></tr>
+      <tr><td><strong>procedure/pdusession</strong></td><td>驅動一個已註冊的 UE 建立 PDU Session</td><td>已註冊的 UE</td><td>UE IP、UL TEID、DL TEID、耗時</td><td><code>processPduSessionEstablishment</code></td></tr>
+      <tr><td><strong>procedure/pdurelease</strong></td><td>按 Stop 後驅動一個 UE 釋放它的 PDU Session</td><td>有 PDU Session 的 UE</td><td>成功 / 拒絕 / 逾時 + 耗時</td><td>無（新寫，NAS 訊息用 free5gc/nas）</td></tr>
+      <tr><td><strong>procedure/deregistration</strong></td><td>PDU Release 之後，驅動一個已註冊的 UE 做 Deregistration</td><td>已註冊的 UE</td><td>成功 / 拒絕 / 逾時 + 耗時</td><td><code>processUeDeregistration</code></td></tr>
+      <tr><td><strong>pipeline</strong></td><td>開 worker pool、用 channel 串階段、套用每秒速率與同時上限、逾時、重試；Stop 時取消還在排隊的 UE</td><td>UE 清單、速率設定</td><td>每個 UE 最終狀態</td><td>無（新寫）</td></tr>
+      <tr><td><strong>dataplane</strong></td><td>預先組好每個 UE 的封包模板，依設定速率送出 UL（N3）與 DL（N6），並在另一側收包、驗證、計數；開始前加入 UE pool 路由，結束後移除</td><td>Active UE 清單、流量設定、網卡設定</td><td>送出 / 收到的 bytes、packets、丟包、延遲</td><td><code>gtp.go</code> 的 GTP 標頭格式與解析</td></tr>
+      <tr><td><strong>metrics</strong></td><td>所有計數器與延遲直方圖，每秒取一次快照，推給 fru-lab；測試結束寫成報告</td><td>各模組的事件</td><td>即時快照、最終報告</td><td>無（新寫）</td></tr>
+      <tr><td><strong>controller / api</strong></td><td>一個 run 的生命週期、REST 控制介面、WebSocket 統計串流</td><td>fru-lab 的指令</td><td>run 狀態</td><td><code>console/backend</code> 的 gin 用法</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- 04 -->
+<section class="sec" id="direct">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">04</span><h2>gNB 與 UE 直連（不經 Uu）</h2></div>
+    <p>free-ran-ue 的 UE 和 gNB 之間是真的 TCP / UDP 連線，因為它們是兩個不同的行程。在 Tester 裡它們在同一個行程，所以把那條連線換成<strong>記憶體裡的信箱</strong>：</p>
+    <ul class="tight">
+      <li><strong>上行</strong>：UE 模組產生 NAS bytes，流程模組呼叫 gNB 的「送 Initial UE Message」或「送 Uplink NAS Transport」，gNB 包進 NGAP 送到 AMF。</li>
+      <li><strong>下行</strong>：gNB 的 SCTP 讀取迴圈收到 NGAP，用 RAN UE NGAP ID 查到 UE，把 NAS 放進那個 UE 的信箱（一個小的 buffered channel）。等待中的流程從信箱取出處理。</li>
+      <li><strong>gNB 自己能處理的</strong>：Initial Context Setup、PDU Session Resource Setup 這類只和 gNB 有關的訊息，gNB 直接回應，並把結果（TEID、UPF 位址）寫到 UE context，再把裡面夾帶的 NAS 轉進信箱。</li>
+    </ul>
+    <p>好處是每個 UE 不需要自己的 goroutine 一直讀 socket。一個 gNB 只有一個讀取迴圈，UE 數量再多也不會多開連線。</p>
+  </div>
+
+  <div class="figure">
+    <div class="scroll">
+    <svg viewBox="0 0 900 270" role="img" aria-label="註冊訊息在 UE 模組、gNB 模組、AMF 之間的流向">
+      <defs>
+        <marker id="d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-acc"/></marker>
+        <marker id="d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-dl"/></marker>
+      </defs>
+      <text x="100" y="26" class="s-t" text-anchor="middle">UE 模組 (UE #42)</text>
+      <text x="450" y="26" class="s-t" text-anchor="middle">gNB 模組 (gNB-2)</text>
+      <text x="800" y="26" class="s-t" text-anchor="middle">AMF</text>
+      <line x1="100" y1="38" x2="100" y2="258" class="s-line" stroke-dasharray="3 4"/>
+      <line x1="450" y1="38" x2="450" y2="258" class="s-line" stroke-dasharray="3 4"/>
+      <line x1="800" y1="38" x2="800" y2="258" class="s-line" stroke-dasharray="3 4"/>
+      <rect x="380" y="40" width="140" height="22" rx="5" class="s-box-chip"/>
+      <text x="450" y="55" class="s-xs" text-anchor="middle">信箱表：RAN UE ID → UE</text>
+
+      <line x1="104" y1="86" x2="444" y2="86" class="s-line-acc" marker-end="url(#d1)"/>
+      <text x="274" y="80" class="s-acc-t" text-anchor="middle">Registration Request（函式呼叫）</text>
+      <line x1="456" y1="86" x2="794" y2="86" class="s-line-acc" marker-end="url(#d1)"/>
+      <text x="625" y="80" class="s-acc-t" text-anchor="middle">Initial UE Message（SCTP）</text>
+
+      <line x1="796" y1="122" x2="456" y2="122" class="s-line-dl" marker-end="url(#d2)"/>
+      <text x="625" y="116" class="s-dl-t" text-anchor="middle">Downlink NAS Transport (Auth Request)</text>
+      <line x1="444" y1="122" x2="106" y2="122" class="s-line-dl" marker-end="url(#d2)"/>
+      <text x="274" y="116" class="s-dl-t" text-anchor="middle">放進 UE #42 的信箱</text>
+
+      <line x1="104" y1="158" x2="444" y2="158" class="s-line-acc" marker-end="url(#d1)"/>
+      <text x="274" y="152" class="s-acc-t" text-anchor="middle">Auth Response / SMC Complete …</text>
+      <line x1="456" y1="158" x2="794" y2="158" class="s-line-acc" marker-end="url(#d1)"/>
+      <text x="625" y="152" class="s-acc-t" text-anchor="middle">Uplink NAS Transport</text>
+
+      <line x1="796" y1="198" x2="456" y2="198" class="s-line-dl" marker-end="url(#d2)"/>
+      <text x="625" y="192" class="s-dl-t" text-anchor="middle">Initial Context Setup Request (+Reg Accept)</text>
+      <rect x="400" y="206" width="100" height="22" rx="5" class="s-box-acc"/>
+      <text x="450" y="221" class="s-xs" text-anchor="middle">gNB 自己回 Response</text>
+      <line x1="444" y1="240" x2="106" y2="240" class="s-line-dl" marker-end="url(#d2)"/>
+      <text x="274" y="234" class="s-dl-t" text-anchor="middle">只把 Registration Accept 交給 UE</text>
+    </svg>
+    </div>
+    <div class="figcap">左半邊是同一個行程裡的函式呼叫與 channel，右半邊才是真的網路封包。計時從 UE 送出 Registration Request 那一刻開始。</div>
+  </div>
+
+  <div class="col">
+    <h3>每個 UE 帶著走的資料（UE context）</h3>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>欄位</th><th>何時寫入</th><th>用途</th></tr>
+        <tr><td class="mono">index、SUPI、gNB index</td><td>設定展開時</td><td>識別、畫面顯示、分 gNB 統計</td></tr>
+        <tr><td class="mono">RAN UE NGAP ID / AMF UE NGAP ID</td><td>送出 Initial UE Message / 收到第一個下行</td><td>下行訊息分派</td></tr>
+        <tr><td class="mono">state</td><td>每一步</td><td>畫面上的狀態分布</td></tr>
+        <tr><td class="mono">各階段開始 / 結束時間</td><td>每一步</td><td>延遲統計</td></tr>
+        <tr><td class="mono">UE IP</td><td>PDU Session Accept</td><td>組資料面封包</td></tr>
+        <tr><td class="mono">UL TEID、DL TEID、UPF N3 位址</td><td>PDU Session Resource Setup</td><td>UL 封包的 TEID、DL 收包對應</td></tr>
+        <tr><td class="mono">失敗階段、cause</td><td>失敗時</td><td>失敗清單與原因統計</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 05 -->
+<section class="sec" id="pipeline">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">05</span><h2>UE 流水線</h2></div>
+    <p>這是你原本描述的結構，補上了速率控制、重試和失敗出口。每一站是一組 worker，站與站之間是一條 channel。一個 UE 註冊完就立刻被放進下一站，不必等其他 UE。</p>
+  </div>
+
+  <div class="figure">
+    <div class="scroll">
+    <svg viewBox="0 0 900 300" role="img" aria-label="UE 流水線：N2 閘門、註冊、PDU、資料面與失敗出口">
+      <defs>
+        <marker id="p1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+        <marker id="p2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-bad"/></marker>
+      </defs>
+      <rect x="20" y="16" width="860" height="38" rx="7" class="s-box-acc"/>
+      <text x="36" y="40" class="s-t">階段 0 · N2 建線</text>
+      <text x="170" y="40" class="s-s">所有 gNB 同時建 SCTP 並做 NG Setup。成功的 gNB 才放行它的 UE；失敗 gNB 底下的 UE 直接記為「未開始」。</text>
+
+      <rect x="20" y="86" width="120" height="96" rx="8" class="s-box-chip"/>
+      <text x="34" y="110" class="s-t">UE 產生器</text>
+      <text x="34" y="130" class="s-s">依 gNB 分配</text>
+      <text x="34" y="147" class="s-s">逐一建立</text>
+      <text x="34" y="164" class="s-s">UE context</text>
+
+      <rect x="152" y="122" width="50" height="22" rx="11" class="s-box"/>
+      <text x="177" y="137" class="s-xs" text-anchor="middle">regQ</text>
+      <line x1="140" y1="133" x2="150" y2="133" class="s-line"/>
+      <line x1="202" y1="133" x2="214" y2="133" class="s-line" marker-end="url(#p1)"/>
+
+      <rect x="216" y="80" width="180" height="108" rx="8" class="s-box"/>
+      <text x="230" y="104" class="s-t">註冊 workers</text>
+      <text x="230" y="124" class="s-s">速率：每秒 R₁ 個</text>
+      <text x="230" y="141" class="s-s">同時上限：C₁ 個</text>
+      <text x="230" y="158" class="s-s">逾時 T₁ 秒 · 重試 N₁ 次</text>
+      <text x="230" y="175" class="s-xs">計數：accept / reject / timeout</text>
+
+      <rect x="408" y="122" width="50" height="22" rx="11" class="s-box"/>
+      <text x="433" y="137" class="s-xs" text-anchor="middle">pduQ</text>
+      <line x1="396" y1="133" x2="406" y2="133" class="s-line"/>
+      <line x1="458" y1="133" x2="470" y2="133" class="s-line" marker-end="url(#p1)"/>
+
+      <rect x="472" y="80" width="180" height="108" rx="8" class="s-box"/>
+      <text x="486" y="104" class="s-t">PDU workers</text>
+      <text x="486" y="124" class="s-s">速率：每秒 R₂ 個</text>
+      <text x="486" y="141" class="s-s">同時上限：C₂ 個</text>
+      <text x="486" y="158" class="s-s">逾時 T₂ 秒 · 重試 N₂ 次</text>
+      <text x="486" y="175" class="s-xs">計數：accept / reject / timeout</text>
+
+      <rect x="664" y="122" width="50" height="22" rx="11" class="s-box"/>
+      <text x="689" y="137" class="s-xs" text-anchor="middle">dataQ</text>
+      <line x1="652" y1="133" x2="662" y2="133" class="s-line"/>
+      <line x1="714" y1="133" x2="726" y2="133" class="s-line" marker-end="url(#p1)"/>
+
+      <rect x="728" y="80" width="152" height="108" rx="8" class="s-box-dl"/>
+      <text x="742" y="104" class="s-t">資料面</text>
+      <text x="742" y="124" class="s-s">PDU 完成即加入</text>
+      <text x="742" y="141" class="s-s">UE 加入發送分組</text>
+      <text x="742" y="158" class="s-s">送 UL / DL</text>
+      <text x="742" y="175" class="s-xs">收包驗證</text>
+
+      <rect x="216" y="240" width="436" height="44" rx="8" class="s-box-bad"/>
+      <text x="232" y="267" class="s-t">失敗出口</text>
+      <text x="310" y="267" class="s-s">重試用完才進來；記錄失敗階段、cause、耗時</text>
+      <line x1="306" y1="190" x2="306" y2="236" class="s-line-bad" marker-end="url(#p2)"/>
+      <line x1="562" y1="190" x2="562" y2="236" class="s-line-bad" marker-end="url(#p2)"/>
+      <text x="314" y="218" class="s-bad-t">reject / timeout</text>
+      <text x="570" y="218" class="s-bad-t">reject / timeout</text>
+    </svg>
+    </div>
+    <div class="figcap">每條 channel 的容量設為 UE 總數，所以上一站永遠不會因為下一站慢而被卡住；「慢」只會反映在 channel 的排隊長度上，畫面會顯示出來。</div>
+  </div>
+
+  <div class="col">
+    <h3>速率與同時上限怎麼一起運作</h3>
+    <p>每個 worker 要開始處理一個 UE 前，先拿一個 token（決定「每秒幾個」），再拿一個 semaphore 名額（決定「最多幾個同時在跑」）。UE 完成或失敗時歸還名額。失敗且還有重試次數時，UE 放回同一站隊伍的最後面重新排隊（N3）。</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>情境</th><th>只有 semaphore</th><th>只有每秒速率</th><th>兩個都有</th></tr>
+        <tr><td>核網很快（20 ms 完成）</td><td>C=100 時實際每秒 5000 個，遠超設定</td><td>穩定每秒 R 個</td><td>穩定每秒 R 個</td></tr>
+        <tr><td>核網變慢（5 秒才回）</td><td>自動降速</td><td>進行中的請求不斷堆積，最後全部逾時</td><td>堆到 C 個就停下等待，畫面看到排隊變長</td></tr>
+      </table>
+    </div>
+
+    <h3>UE 狀態</h3>
+    <div class="flow">
+      <span class="st">等待</span><span class="ar">→</span>
+      <span class="st acc">註冊中</span><span class="ar">→</span>
+      <span class="st">已註冊</span><span class="ar">→</span>
+      <span class="st acc">PDU 建立中</span><span class="ar">→</span>
+      <span class="st ok">Active（打流量）</span><span class="ar">→</span>
+      <span class="st">Release / Dereg 中</span><span class="ar">→</span>
+      <span class="st">完成</span>
+    </div>
+    <div class="flow">
+      <span class="st bad">註冊失敗</span>
+      <span class="st bad">PDU 失敗</span>
+      <span class="st bad">gNB 未就緒（未開始）</span>
+      <span class="st bad">已取消（Stop 時還在排隊）</span>
+    </div>
+
+    <h3>什麼時候開始打流量</h3>
+    <p>依 Q9，UE 的 PDU 一建好就立刻加入發送，不等其他 UE。所以吞吐曲線的前段會跟著註冊與 PDU 的速率一起爬升，曲線變平的時間點大約就是最後一個 UE 進入資料面的時間。執行畫面會在圖上標出這個時間點，方便判斷哪一段才是穩定值。</p>
+
+    <h3>整個 run 的階段</h3>
+    <div class="flow">
+      <span class="st">草稿</span><span class="ar">→</span>
+      <span class="st">檢查設定、網路、CIDR</span><span class="ar">→</span>
+      <span class="st">配置 gNB IP 與路由</span><span class="ar">→</span>
+      <span class="st acc">N2 建線</span><span class="ar">→</span>
+      <span class="st ok">註冊 → PDU → 打流量（逐一加入，持續到按 Stop）</span>
+    </div>
+    <p>按下 Stop 後，順序和開始反過來：</p>
+    <div class="flow">
+      <span class="st bad">Stop</span><span class="ar">→</span>
+      <span class="st">流量立即全停</span><span class="ar">→</span>
+      <span class="st acc">PDU Release</span><span class="ar">→</span>
+      <span class="st acc">UE Dereg</span><span class="ar">→</span>
+      <span class="st acc">gNB SCTP 斷線</span><span class="ar">→</span>
+      <span class="st">移除 IP 與路由</span><span class="ar">→</span>
+      <span class="st ok">完成</span>
+    </div>
+    <p>PDU Release、UE Dereg、SCTP 斷線都有速率、逾時、重試與統計。按下 Stop 的當下，還在隊伍裡沒開始的 UE 直接標記為「已取消」；正在註冊或建 PDU 的，等它完成或逾時後再進入收尾；只有實際建立過的東西才需要釋放（N4）。所有 UE 與 gNB 都停完才算這個 run 結束，結束前不能開始下一個 run（Q17）。</p>
+    <p>如果設定了最長執行時間，時間到就自動觸發和 Stop 完全相同的流程；設為「無限」則只能手動 Stop（N6）。</p>
+  </div>
+</section>
+
+<!-- 06 -->
+<section class="sec" id="config">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">06</span><h2>測試設定</h2></div>
+    <p>設定拆成四個分頁，依序是：規模與流量、gNB / UE 樣板、網路、速率。每一頁右上角都會即時算出結果（總流量、最後一個 UE 的 IMSI 等），讓使用者在按開始之前就看到「會發生什麼」。</p>
+    <h3>畫面 1：規模與流量</h3>
+  </div>
+
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / new</div>
+    <div class="screen-body">
+      <aside class="m-side">
+        <span class="m-badge">FRU-LAB</span>
+        <div class="m-brand">5G Lab Console</div>
+        <div class="m-nav">Dashboard</div>
+        <div class="m-nav">5G Subscriber</div>
+        <div class="m-nav">Logs</div>
+        <div class="m-nav">Images</div>
+        <div class="m-group">Lab 工具</div>
+        <div class="m-nav act">Throughput Tester</div>
+        <div class="m-sub act">測試設定</div>
+        <div class="m-sub">執行中</div>
+        <div class="m-sub">歷史結果</div>
+      </aside>
+      <div class="m-main">
+        <div class="m-title">
+          <h4>新增測試 · 1000 UE 基準</h4>
+          <div class="m-row"><span class="m-btn ghost">存成草稿</span><span class="m-btn">下一步</span></div>
+        </div>
+        <div class="m-steps"><span class="on">1 規模與流量</span><span>2 gNB / UE 樣板</span><span>3 網路</span><span>4 速率</span></div>
+
+        <div class="m-card">
+          <h5>規模</h5>
+          <div class="m-grid">
+            <div class="m-field">gNB 數量<div class="m-input">3</div></div>
+            <div class="m-field">UE 總數<div class="m-input">10</div></div>
+            <div class="m-field">每 gNB 容量（自動，依序填滿）<div class="m-input unit">4 <span>= ⌈10 ÷ 3⌉</span></div></div>
+          </div>
+          <div style="margin-top:12px" class="gnb-alloc">
+            <div class="gnb-col"><div class="h"><span>gNB-1</span><span>4 / 4</span></div><div class="ue-dots"><i></i><i></i><i></i><i></i></div></div>
+            <div class="gnb-col"><div class="h"><span>gNB-2</span><span>4 / 4</span></div><div class="ue-dots"><i></i><i></i><i></i><i></i></div></div>
+            <div class="gnb-col"><div class="h"><span>gNB-3</span><span>2 / 4</span></div><div class="ue-dots"><i></i><i></i><i class="empty"></i><i class="empty"></i></div></div>
+          </div>
+          <p class="m-note" style="margin:8px 0 0">預覽：UE #1–4 → gNB-1、#5–8 → gNB-2、#9–10 → gNB-3。</p>
+        </div>
+
+        <div class="m-card">
+          <h5>每個 UE 的流量</h5>
+          <div class="m-grid">
+            <div class="m-field">上行 UL<div class="m-input unit">1 <span>Mbps</span></div></div>
+            <div class="m-field">下行 DL<div class="m-input unit">5 <span>Mbps</span></div></div>
+            <div class="m-field">封包大小（內層 IP）<div class="m-input unit">1400 <span>bytes</span></div></div>
+            <div class="m-field">最長執行時間<div class="m-seg"><span class="on">無限</span><span>指定 … 分鐘</span></div></div>
+          </div>
+          <div class="m-sum" style="margin-top:12px">
+            <span>總 UL <b>10 Mbps</b> · <b>893 pps</b></span>
+            <span>總 DL <b>50 Mbps</b> · <b>4,465 pps</b></span>
+            <span>N3 線路上（含外層標頭 40 B）UL <b>10.3 Mbps</b></span>
+            <span>無限：持續到按 Stop</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p>計算規則：每秒封包數 = 每 UE 速率 × UE 數 ÷ (封包大小 × 8)。如果總量超過網卡速度或引擎的已知上限，這裡直接出現黃色警告，而不是等跑起來才發現。</p>
+    <h3>畫面 2：gNB / UE 樣板與遞增規則</h3>
+    <p>每個欄位都有三種模式：<strong>固定</strong>（全部一樣）、<strong>遞增</strong>（指定起始值與步進，保留位數與進位制）、<strong>樣式</strong>（例如 <code>gNB-{i}</code>）。表格最右邊直接列出第 1 個、第 2 個、最後一個的實際值，遞增錯了一眼就看得到。</p>
+  </div>
+
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / new · 樣板</div>
+    <div class="screen-body">
+      <aside class="m-side">
+        <span class="m-badge">FRU-LAB</span>
+        <div class="m-brand">5G Lab Console</div>
+        <div class="m-group">Lab 工具</div>
+        <div class="m-nav act">Throughput Tester</div>
+        <div class="m-sub act">測試設定</div>
+        <div class="m-sub">執行中</div>
+        <div class="m-sub">歷史結果</div>
+      </aside>
+      <div class="m-main">
+        <div class="m-steps"><span class="done">1 規模與流量</span><span class="on">2 gNB / UE 樣板</span><span>3 網路</span><span>4 速率</span></div>
+        <div class="m-card">
+          <h5>gNB 樣板（3 個）</h5>
+          <div class="m-scroll">
+          <table class="m-tbl">
+            <tr><th>欄位</th><th>模式</th><th>起始 / 樣式</th><th>步進</th><th>#1</th><th>#2</th><th>#3（最後）</th></tr>
+            <tr><td class="lbl">gNB ID</td><td class="lbl">遞增 (hex)</td><td>000314</td><td>+1</td><td>000314</td><td>000315</td><td>000316</td></tr>
+            <tr><td class="lbl">gNB 名稱</td><td class="lbl">樣式</td><td>gNB-{i}</td><td>—</td><td>gNB-1</td><td>gNB-2</td><td>gNB-3</td></tr>
+            <tr><td class="lbl">本地 N2 IP</td><td class="lbl">CIDR 遞增</td><td>10.0.1.0/24 · 由 .2 起</td><td>+1</td><td>10.0.1.2</td><td>10.0.1.3</td><td>10.0.1.4</td></tr>
+            <tr><td class="lbl">本地 N3 IP</td><td class="lbl">CIDR 遞增</td><td>10.0.2.0/24 · 由 .2 起</td><td>+1</td><td>10.0.2.2</td><td>10.0.2.3</td><td>10.0.2.4</td></tr>
+            <tr><td class="lbl">PLMN / TAC</td><td class="lbl">固定</td><td>208-93 / 000001</td><td>—</td><td colspan="3">全部相同</td></tr>
+            <tr><td class="lbl">S-NSSAI</td><td class="lbl">固定</td><td>1 / 010203</td><td>—</td><td colspan="3">全部相同</td></tr>
+          </table>
+          </div>
+        </div>
+        <div class="m-card">
+          <h5>UE 樣板（10 個）</h5>
+          <div class="m-scroll">
+          <table class="m-tbl">
+            <tr><th>欄位</th><th>模式</th><th>起始 / 樣式</th><th>步進</th><th>#1</th><th>#2</th><th>#10（最後）</th></tr>
+            <tr><td class="lbl">MSIN</td><td class="lbl">遞增 (10 位)</td><td>0000000001</td><td>+1</td><td>0000000001</td><td>0000000002</td><td>0000000010</td></tr>
+            <tr><td class="lbl">→ SUPI</td><td class="lbl">推導</td><td>imsi-{mcc}{mnc}{msin}</td><td>—</td><td>imsi-208930000000001</td><td>…0002</td><td>…0010</td></tr>
+            <tr><td class="lbl">K / OPc</td><td class="lbl">固定</td><td>8baf47… / 8e27b6…</td><td>—</td><td colspan="3">全部相同</td></tr>
+            <tr><td class="lbl">SQN</td><td class="lbl">固定</td><td>000000000023</td><td>—</td><td colspan="3">全部相同</td></tr>
+            <tr><td class="lbl">完整性 / 加密</td><td class="lbl">固定</td><td>NIA2 / NEA0</td><td>—</td><td colspan="3">全部相同</td></tr>
+            <tr><td class="lbl">DNN / S-NSSAI</td><td class="lbl">固定</td><td>internet / 1-010203</td><td>—</td><td colspan="3">全部相同</td></tr>
+          </table>
+          </div>
+          <div class="m-row" style="margin-top:10px">
+            <span class="pill muted">需要的訂閱資料</span>
+            <span class="m-note mono">imsi-208930000000001 ～ imsi-208930000000010</span>
+            <span class="m-btn ghost">複製範圍</span>
+            <span class="m-note">請先在核網建立，Tester 不會檢查</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="callout done">
+      <div class="lbl">已確認（Q6）</div>
+      UE IP 由核網（SMF）分配，Tester 只負責記錄。需要遞增的是 <strong>gNB 這一側的 IP</strong>：N2、N3 各自輸入一個 CIDR 與起始 IP，各自遞增分配給每個 gNB（N1），開始前在網卡上加好、結束後移除。分配時自動跳過網路位址、廣播位址、核網端 IP 與網卡上已經有的 IP；扣掉這些之後不夠用，就直接擋下並顯示缺幾個（N2）。
+    </div>
+
+    <h3>畫面 4：速率（第 3 頁網路放在第 7 節）</h3>
+  </div>
+
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / new · 速率</div>
+    <div class="screen-body">
+      <aside class="m-side">
+        <span class="m-badge">FRU-LAB</span>
+        <div class="m-brand">5G Lab Console</div>
+        <div class="m-group">Lab 工具</div>
+        <div class="m-nav act">Throughput Tester</div>
+        <div class="m-sub act">測試設定</div>
+        <div class="m-sub">執行中</div>
+        <div class="m-sub">歷史結果</div>
+      </aside>
+      <div class="m-main">
+        <div class="m-steps"><span class="done">1 規模與流量</span><span class="done">2 gNB / UE 樣板</span><span class="done">3 網路</span><span class="on">4 速率</span></div>
+        <div class="m-card">
+          <div class="m-scroll">
+          <table class="m-tbl">
+            <tr><th>階段</th><th>每秒幾個</th><th>同時上限</th><th>單一程序逾時</th><th>失敗重試</th><th>預估完成</th></tr>
+            <tr><td class="lbl">N2 建線</td><td>全部同時</td><td>—</td><td>5 s</td><td>1 次</td><td>&lt; 1 s</td></tr>
+            <tr><td class="lbl">註冊</td><td>50 /s</td><td>200</td><td>10 s</td><td>1 次</td><td>≈ 20 s</td></tr>
+            <tr><td class="lbl">PDU Session</td><td>50 /s</td><td>200</td><td>10 s</td><td>1 次</td><td>與註冊重疊</td></tr>
+            <tr><td class="lbl">PDU Release（Stop 後）</td><td>100 /s</td><td>200</td><td>5 s</td><td>1 次</td><td>≈ 10 s</td></tr>
+            <tr><td class="lbl">UE Dereg（Release 後）</td><td>100 /s</td><td>200</td><td>5 s</td><td>1 次</td><td>≈ 10 s</td></tr>
+            <tr><td class="lbl">gNB SCTP 斷線（Stop 後）</td><td>全部同時</td><td>—</td><td>5 s</td><td>1 次</td><td>&lt; 1 s</td></tr>
+          </table>
+          </div>
+          <p class="m-note" style="margin:10px 0 0">「失敗重試」每一列都可以改，資料面沒有重試（Q13）。預估以 1000 UE 計算，表示「若核網跟得上」的最快時間。實際值見執行畫面。</p>
+        </div>
+        <div class="m-row" style="justify-content:flex-end"><span class="m-btn ghost">上一步</span><span class="m-btn">檢查並開始</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 -->
+<section class="sec" id="network">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">07</span><h2>網卡與路由</h2></div>
+    <p>原文第 3 點只列了「本地與核網的 N2 / N3 / N6 IP」。要讓 UL 和 DL 都能送到、而且收得回來，還需要兩個額外的資訊：<strong>UE IP pool</strong>（下行要路由的目的網段）和 <strong>N6 收包 IP</strong>（上行封包離開 UPF 後要去的地方）。另外依 Q6，N2 / N3 的本地端改填 CIDR，由 Tester 分配給每個 gNB。</p>
+  </div>
+
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / new · 網路</div>
+    <div class="screen-body">
+      <aside class="m-side">
+        <span class="m-badge">FRU-LAB</span>
+        <div class="m-brand">5G Lab Console</div>
+        <div class="m-group">Lab 工具</div>
+        <div class="m-nav act">Throughput Tester</div>
+        <div class="m-sub act">測試設定</div>
+        <div class="m-sub">執行中</div>
+        <div class="m-sub">歷史結果</div>
+      </aside>
+      <div class="m-main">
+        <div class="m-steps"><span class="done">1 規模與流量</span><span class="done">2 gNB / UE 樣板</span><span class="on">3 網路</span><span>4 速率</span></div>
+        <div class="m-card">
+          <div class="m-scroll">
+          <table class="m-tbl">
+            <tr><th>介面</th><th>本地網卡</th><th>本地 IP</th><th>核網端</th><th>核網 IP : port</th><th>檢查</th></tr>
+            <tr><td class="lbl">N2</td><td>ens19</td><td>10.0.1.0/24 由 .2 起</td><td class="lbl">AMF</td><td>10.0.1.1 : 38412</td><td><span class="pill ok">可用 253 · 需要 3</span></td></tr>
+            <tr><td class="lbl">N3</td><td>ens20</td><td>10.0.2.0/24 由 .2 起</td><td class="lbl">UPF N3</td><td>10.0.2.1 : 2152</td><td><span class="pill ok">可用 253 · 需要 3</span></td></tr>
+            <tr><td class="lbl">N6</td><td>ens21</td><td>10.0.3.2</td><td class="lbl">UPF N6</td><td>10.0.3.1</td><td><span class="pill ok">ARP 有回應</span></td></tr>
+          </table>
+          </div>
+        </div>
+        <div class="m-grid">
+          <div class="m-card">
+            <h5>下行路由</h5>
+            <div class="m-field">UE IP pool（核網 SMF 設定）<div class="m-input">10.60.0.0/16</div></div>
+            <p class="m-note" style="margin:8px 0">需要：10.60.0.0/16 經由 10.0.3.1 (ens21)</p>
+            <span class="pill acc">開始時由 Tester 自動加入，結束時移除</span>
+          </div>
+          <div class="m-card">
+            <h5>上行收包</h5>
+            <div class="m-field">N6 收包 IP（上行封包的目的地）<div class="m-input">10.0.3.2</div></div>
+            <p class="m-note" style="margin:8px 0">UPF 需要能把封包送到這個 IP；若 N6 有 NAT，收到的來源 IP 會被改寫，Tester 改用 payload 標頭辨識 UE。</p>
+            <span class="pill acc">偵測到 NAT 時自動切換</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>封包實際怎麼走</h3>
+  </div>
+  <div class="figure">
+    <div class="scroll">
+    <svg viewBox="0 0 900 320" role="img" aria-label="上行與下行封包在 Tester 與 UPF 之間的路徑">
+      <defs>
+        <marker id="n1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-acc"/></marker>
+        <marker id="n2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-dl"/></marker>
+      </defs>
+      <rect x="20" y="30" width="230" height="270" rx="12" class="s-group"/>
+      <text x="36" y="54" class="s-t">fru-tester 主機</text>
+      <rect x="130" y="76" width="120" height="70" rx="7" class="s-box"/>
+      <text x="142" y="98" class="s-t">N3 · 10.0.2.2</text>
+      <text x="142" y="116" class="s-s">UL 送出 (GTP-U)</text>
+      <text x="142" y="133" class="s-s">DL 收包 + 驗證</text>
+      <rect x="130" y="186" width="120" height="70" rx="7" class="s-box"/>
+      <text x="142" y="208" class="s-t">N6 · 10.0.3.2</text>
+      <text x="142" y="226" class="s-s">DL 送出 (一般 IP)</text>
+      <text x="142" y="243" class="s-s">UL 收包 + 驗證</text>
+      <text x="36" y="120" class="s-xs">發送分組</text>
+      <text x="36" y="135" class="s-xs">× CPU 核心數</text>
+      <text x="36" y="230" class="s-xs">收包分組</text>
+      <text x="36" y="245" class="s-xs">× CPU 核心數</text>
+
+      <rect x="650" y="30" width="230" height="270" rx="12" class="s-group"/>
+      <text x="666" y="54" class="s-t">UPF</text>
+      <rect x="650" y="76" width="120" height="70" rx="7" class="s-box"/>
+      <text x="662" y="98" class="s-t">N3 · 10.0.2.1</text>
+      <text x="662" y="116" class="s-s">依 UL TEID 解封裝</text>
+      <rect x="650" y="186" width="120" height="70" rx="7" class="s-box"/>
+      <text x="662" y="208" class="s-t">N6 · 10.0.3.1</text>
+      <text x="662" y="226" class="s-s">依 UE IP 找 DL TEID</text>
+      <text x="790" y="166" class="s-xs" text-anchor="middle">PDR / FAR</text>
+      <line x1="770" y1="146" x2="770" y2="184" class="s-line" stroke-dasharray="3 3"/>
+      <line x1="790" y1="146" x2="790" y2="184" class="s-line" stroke-dasharray="3 3"/>
+
+      <!-- UL: tester N3 -> UPF N3 -->
+      <line x1="252" y1="92" x2="646" y2="92" class="s-line-acc" marker-end="url(#n1)"/>
+      <text x="450" y="84" class="s-acc-t" text-anchor="middle">① UL · GTP-U [TEID=UL TEID] 內層 10.60.0.12 → 10.0.3.2</text>
+      <!-- UL exits N6 to tester N6 -->
+      <line x1="646" y1="204" x2="254" y2="204" class="s-line-acc" marker-end="url(#n1)"/>
+      <text x="450" y="196" class="s-acc-t" text-anchor="middle">② UL 解封裝後 · 一般 IP → 10.0.3.2（可能經 NAT）</text>
+      <!-- DL: tester N6 -> UPF N6 -->
+      <line x1="252" y1="240" x2="646" y2="240" class="s-line-dl" marker-end="url(#n2)"/>
+      <text x="450" y="258" class="s-dl-t" text-anchor="middle">③ DL · 一般 IP 10.0.3.2 → 10.60.0.12（需要 UE pool 路由）</text>
+      <!-- DL: UPF N3 -> tester N3 -->
+      <line x1="646" y1="128" x2="254" y2="128" class="s-line-dl" marker-end="url(#n2)"/>
+      <text x="450" y="146" class="s-dl-t" text-anchor="middle">④ DL · GTP-U [TEID=DL TEID] → 10.0.2.2:2152</text>
+    </svg>
+    </div>
+    <div class="figcap">UL 從 ① 送、② 收；DL 從 ③ 送、④ 收。送出和收到都在同一台主機，所以可以用同一個時鐘算單向延遲。④ 的目的地就是 gNB 在 PDU Session Resource Setup Response 裡告訴 UPF 的 N3 IP。</div>
+  </div>
+</section>
+
+<!-- 08 -->
+<section class="sec" id="dataplane">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">08</span><h2>資料面打流量</h2></div>
+    <p>目標是用最少的 CPU 打出最多的封包，所以不開 TUN、不為每個 UE 開 goroutine。</p>
+    <h3>發送</h3>
+    <ul class="tight">
+      <li><strong>分組</strong>：Active UE 平均切成 K 組（K = 可用 CPU 核心數），每組一個 goroutine 輪流替組內 UE 送封包。1 萬個 UE 也只有 K 個發送者。</li>
+      <li><strong>封包模板</strong>：UE 進入資料面時就把整個封包（GTP 標頭 + 內層 IP/UDP 標頭 + payload）預先組好，送的時候只改序號、時間戳與 checksum。</li>
+      <li><strong>控速</strong>：每組一個以 bytes 計算的 token bucket，組速率 = 組內 UE 數 × 每 UE 速率。每次批次送出多個封包（Linux <code>sendmmsg</code>），減少系統呼叫次數。</li>
+      <li><strong>逐一加入</strong>：UE 的 PDU 一建好就被放進目前 UE 最少的那一組（Q9），各組負載保持平均。按 Stop 時所有組立即停止發送。</li>
+    </ul>
+
+    <h3>測試封包 payload 標頭</h3>
+    <p>每個封包的 UDP payload 前 24 bytes 是固定格式，收包端靠它辨識，不依賴 IP（避開 NAT），也能算丟包、亂序與延遲。</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位移</th><th>長度</th><th>欄位</th><th>用途</th></tr>
+        <tr><td class="mono num">0</td><td class="mono num">4</td><td>magic</td><td>確認是 Tester 自己的封包，其他流量直接略過</td></tr>
+        <tr><td class="mono num">4</td><td class="mono num">4</td><td>run ID</td><td>避免收到上一輪殘留的封包</td></tr>
+        <tr><td class="mono num">8</td><td class="mono num">4</td><td>UE index + 方向</td><td>對應到哪個 UE、UL 或 DL</td></tr>
+        <tr><td class="mono num">12</td><td class="mono num">4</td><td>序號</td><td>丟包與亂序</td></tr>
+        <tr><td class="mono num">16</td><td class="mono num">8</td><td>送出時間（ns）</td><td>單向延遲</td></tr>
+      </table>
+    </div>
+
+    <h3>效能層級</h3>
+    <p>能打多快取決於送封包的技術。先用最簡單的做法把整條流程跑通，再視需要換掉發送器，這也是把資料面拆成獨立模組的理由。</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>層級</th><th>技術</th><th>粗估上限（單機、1400 B 封包）</th><th>代價</th></tr>
+        <tr><td><strong>1</strong> <span class="pill ok">PoC</span></td><td>一般 UDP socket + 批次送收</td><td>數 Gbps</td><td>無特殊權限，最好除錯</td></tr>
+        <tr><td><strong>2</strong></td><td>AF_PACKET (PACKET_MMAP)</td><td>約 10 Gbps</td><td>需 raw socket 權限，自己組 Ethernet / IP 標頭、自己處理 ARP</td></tr>
+        <tr><td><strong>3</strong></td><td>AF_XDP</td><td>數十 Gbps</td><td>需網卡驅動支援、綁核，開發成本最高</td></tr>
+      </table>
+    </div>
+    <p class="m-note" style="font-size:.85rem">以上是粗估，實際數字要在你的主機上量。依 Q4，PoC 只做層級 1，發送器保留可替換的介面。</p>
+  </div>
+</section>
+
+<!-- 09 -->
+<section class="sec" id="metrics">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">09</span><h2>統計定義</h2></div>
+    <p>「最重要的就是各個步驟的數據呈現」，所以每個數字都要有唯一的定義，否則兩次測試沒辦法比較。以下是建議的定義。</p>
+    <h3>每個控制面階段都有的數字</h3>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>名稱</th><th>定義</th></tr>
+      <tr><td><strong>嘗試 / 成功 / 拒絕 / 逾時</strong></td><td>嘗試 = 已開始的數量。拒絕 = 核網明確回 Reject 或 Failure（記錄 cause）。逾時 = 超過設定秒數沒回應。三者之和加上進行中 = 嘗試。</td></tr>
+      <tr><td><strong>進行中 / 排隊中</strong></td><td>進行中 = 已送出還沒結果。排隊中 = 在 channel 裡還沒輪到。這兩個數字是判斷「卡在 Tester 還是卡在核網」的關鍵。</td></tr>
+      <tr><td><strong>總時長</strong></td><td>這一階段第一個開始 → 最後一個完成的牆鐘時間（Q8）。</td></tr>
+      <tr><td><strong>重試</strong></td><td>第一次就成功、重試後成功、重試總次數分開計。重試成功的 UE，單筆耗時從第一次開始算。</td></tr>
+      <tr><td><strong>平均 / p50 / p95 / p99 / 最大</strong></td><td>只用<strong>成功</strong>的單筆耗時計算；失敗的另外顯示。以直方圖累積，記憶體固定，不需要保存每一筆。</td></tr>
+      <tr><td><strong>實際速率</strong></td><td>最近 1 秒完成的成功數，以及整段平均（成功數 ÷ 總時長）。</td></tr>
+      <tr><td><strong>失敗原因分布</strong></td><td>依 5GMM / 5GSM cause 或 NGAP cause 分組計數，例如「#7 5GS services not allowed × 6」。</td></tr>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>單筆耗時從哪裡量到哪裡</h3>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>階段</th><th>開始</th><th>結束（成功）</th><th>結束（失敗）</th></tr>
+      <tr><td>N2 建線</td><td>開始 SCTP connect</td><td>收到 NG Setup Response</td><td>SCTP 失敗、NG Setup Failure、逾時</td></tr>
+      <tr><td>註冊</td><td>送出 Initial UE Message（Registration Request）</td><td>送出 Registration Complete</td><td>Registration Reject、Authentication Reject、逾時</td></tr>
+      <tr><td>PDU Session</td><td>送出 UL NAS Transport（PDU Session Establishment Request）</td><td>收到 Accept 且已回 PDU Session Resource Setup Response</td><td>PDU Session Establishment Reject、逾時</td></tr>
+      <tr><td>PDU Release</td><td>送出 PDU Session Release Request</td><td>收到 Release Command、回 Release Complete，且 gNB 已回 PDU Session Resource Release Response</td><td>Reject、逾時</td></tr>
+      <tr><td>UE Dereg</td><td>送出 Deregistration Request</td><td>收到 Deregistration Accept 且 UE Context Release 完成</td><td>逾時</td></tr>
+      <tr><td>SCTP 斷線</td><td>開始關閉 association</td><td>SCTP shutdown 完成</td><td>逾時</td></tr>
+    </table>
+  </div>
+  <div class="col">
+    <p>N2 建線另外把 SCTP 連線時間和 NG Setup 時間分開記，因為前者是網路問題，後者是 AMF 問題。註冊也可以選擇性細分為 Authentication、Security Mode、Accept 三段，找出核網慢在哪一步。</p>
+
+    <h3>資料面的數字</h3>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>名稱</th><th>UL</th><th>DL</th><th>說明</th></tr>
+      <tr><td>送出 throughput / pps</td><td>N3 送出</td><td>N6 送出</td><td>內層 IP 封包大小計算，另顯示含外層標頭的線路速率</td></tr>
+      <tr><td>收到 throughput / pps</td><td>N6 收到</td><td>N3 收到</td><td>這才是 UPF 真正轉發的量</td></tr>
+      <tr><td>累計 bytes / packets</td><td colspan="2">送出與收到各一組</td><td>原文要求的「目前總共打了多少」</td></tr>
+      <tr><td>丟包率</td><td colspan="2">1 − 收到 ÷ 送出（扣除最後 1 秒還在路上的）</td><td>可展開看哪些 UE 丟最多</td></tr>
+      <tr><td>單向延遲 p50 / p99</td><td colspan="2">收到時間 − payload 裡的送出時間</td><td>同一時鐘，不需對時</td></tr>
+      <tr><td>亂序數</td><td colspan="2">序號比上一個小</td><td>多核 UPF 常見</td></tr>
+    </table>
+  </div>
+  <div class="col">
+    <p>所有數字每秒取一次快照推到畫面，同時保存成時序資料，測試結束後畫面上的曲線可以回放、匯出。</p>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="sec" id="dashboard">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">10</span><h2>執行畫面</h2></div>
+    <p>由上到下就是流水線的順序：四個階段卡片一排，下面是吞吐曲線與資料面數字，最下面是逐 gNB 明細。卡片裡的長條把成功、失敗、進行中用不同顏色畫在一起，一眼就能看出哪一站在堆積。</p>
+  </div>
+
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / runs / 2026-10-02-1432 <span class="sample-tag">示意數字</span></div>
+    <div class="screen-body">
+      <aside class="m-side">
+        <span class="m-badge">FRU-LAB</span>
+        <div class="m-brand">5G Lab Console</div>
+        <div class="m-nav">Dashboard</div>
+        <div class="m-nav">5G Subscriber</div>
+        <div class="m-nav">Logs</div>
+        <div class="m-nav">Images</div>
+        <div class="m-group">Lab 工具</div>
+        <div class="m-nav act">Throughput Tester</div>
+        <div class="m-sub">測試設定</div>
+        <div class="m-sub act">執行中</div>
+        <div class="m-sub">歷史結果</div>
+      </aside>
+      <div class="m-main">
+        <div class="m-title">
+          <div>
+            <h4>1000 UE 基準 · 10 gNB</h4>
+            <div class="m-row" style="margin-top:4px"><span class="pill dl">打流量中</span><span class="m-note mono">已執行 00:04:12 · 最長執行時間：無限</span></div>
+          </div>
+          <div class="m-row"><span class="m-btn danger">Stop</span></div>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage">
+            <div class="top"><span class="name">N2 建線</span><span class="pill ok">完成</span></div>
+            <div class="big">10<small> / 10 gNB</small></div>
+            <div class="bar"><span class="a" style="width:100%"></span></div>
+            <dl class="kv">
+              <dt>失敗</dt><dd>0</dd>
+              <dt>總時長</dt><dd>0.41 s</dd>
+              <dt>平均 / 最大</dt><dd>32 / 58 ms</dd>
+            </dl>
+          </div>
+          <div class="stage">
+            <div class="top"><span class="name">註冊</span><span class="pill ok">完成</span></div>
+            <div class="big">992<small> / 1000</small></div>
+            <div class="bar"><span class="a" style="width:99.2%"></span><span class="r" style="width:.8%"></span></div>
+            <dl class="kv">
+              <dt>拒絕 / 逾時</dt><dd class="bad">6 / 2</dd>
+              <dt>總時長</dt><dd>20.6 s</dd>
+              <dt>平均 · p95</dt><dd>48 · 112 ms</dd>
+              <dt>實際速率</dt><dd>48.2 /s</dd>
+            </dl>
+          </div>
+          <div class="stage">
+            <div class="top"><span class="name">PDU Session</span><span class="pill ok">完成</span></div>
+            <div class="big">988<small> / 992</small></div>
+            <div class="bar"><span class="a" style="width:99.6%"></span><span class="r" style="width:.4%"></span></div>
+            <dl class="kv">
+              <dt>拒絕 / 逾時</dt><dd class="bad">4 / 0</dd>
+              <dt>總時長</dt><dd>21.1 s</dd>
+              <dt>平均 · p95</dt><dd>36 · 74 ms</dd>
+              <dt>實際速率</dt><dd>47.9 /s</dd>
+            </dl>
+          </div>
+          <div class="stage">
+            <div class="top"><span class="name">資料面</span><span class="pill dl">進行中</span></div>
+            <div class="big">988<small> UE active</small></div>
+            <div class="bar"><span class="a" style="width:100%; background:var(--dl)"></span></div>
+            <dl class="kv">
+              <dt>UL 收 / 送</dt><dd>0.98 / 0.99 G</dd>
+              <dt>DL 收 / 送</dt><dd>4.87 / 4.93 G</dd>
+              <dt>丟包</dt><dd class="bad">1.2%</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="m-card chart-card">
+          <div class="m-title" style="margin-bottom:6px">
+            <h5 style="margin:0">吞吐量（收到）· Gbps</h5>
+            <div class="legend"><span><i style="background:var(--dl)"></i>DL 收到</span><span><i style="background:var(--accent)"></i>UL 收到</span><span><i style="background:var(--ink-3)"></i>目標</span></div>
+          </div>
+          <svg viewBox="0 0 600 200" role="img" aria-label="吞吐量曲線示意：DL 約 4.9 Gbps、UL 約 1 Gbps">
+            <line x1="40" y1="170" x2="590" y2="170" class="c-grid"/>
+            <line x1="40" y1="120" x2="590" y2="120" class="c-grid"/>
+            <line x1="40" y1="70" x2="590" y2="70" class="c-grid"/>
+            <line x1="40" y1="20" x2="590" y2="20" class="c-grid"/>
+            <text x="32" y="173" class="c-axis" text-anchor="end">0</text>
+            <text x="32" y="123" class="c-axis" text-anchor="end">2</text>
+            <text x="32" y="73" class="c-axis" text-anchor="end">4</text>
+            <text x="32" y="23" class="c-axis" text-anchor="end">6</text>
+            <text x="40" y="188" class="c-axis">0s</text>
+            <text x="150" y="188" class="c-axis" text-anchor="middle">60s</text>
+            <text x="260" y="188" class="c-axis" text-anchor="middle">120s</text>
+            <text x="370" y="188" class="c-axis" text-anchor="middle">180s</text>
+            <text x="480" y="188" class="c-axis" text-anchor="middle">240s</text>
+            <!-- targets: DL 5G => y=45, UL 1G => y=145 -->
+            <line x1="40" y1="45" x2="590" y2="45" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="4 4"/>
+            <line x1="40" y1="145" x2="590" y2="145" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="4 4"/>
+            <!-- DL area + line: ramp 0-30s (40..95), then steady; data up to ~252s (x=502) -->
+            <path d="M40,170 L67,140 L95,108 L122,76 L150,48 L177,47 L205,48 L232,47 L260,46 L287,48 L315,47 L342,49 L370,47 L397,48 L425,46 L452,48 L480,47 L502,48 L502,170 Z" fill="var(--dl)" opacity=".12"/>
+            <polyline points="40,170 67,140 95,108 122,76 150,48 177,47 205,48 232,47 260,46 287,48 315,47 342,49 370,47 397,48 425,46 452,48 480,47 502,48" fill="none" stroke="var(--dl)" stroke-width="2"/>
+            <polyline points="40,170 67,164 95,158 122,151 150,146 177,145 205,146 232,145 260,145 287,146 315,145 342,146 370,145 397,145 425,146 452,145 480,145 502,146" fill="none" stroke="var(--accent)" stroke-width="2"/>
+            <circle cx="502" cy="48" r="3.5" fill="var(--dl)"/>
+            <circle cx="502" cy="146" r="3.5" fill="var(--accent)"/>
+            <text x="510" y="44" class="c-axis" style="fill:var(--dl)">4.87</text>
+            <text x="510" y="142" class="c-axis" style="fill:var(--accent)">0.98</text>
+          </svg>
+        </div>
+
+        <div class="dp-tiles">
+          <div class="dp-tile"><div class="k">UL 已送 / 已收</div><div class="v ul">29.6 / 29.4 GB</div></div>
+          <div class="dp-tile"><div class="k">DL 已送 / 已收</div><div class="v dl">148.1 / 146.3 GB</div></div>
+          <div class="dp-tile"><div class="k">pps（UL + DL 收到）</div><div class="v">522,310</div></div>
+          <div class="dp-tile"><div class="k">單向延遲 p50 / p99</div><div class="v">0.21 / 1.9 ms</div></div>
+        </div>
+
+        <div class="m-card">
+          <h5>逐 gNB 明細（前 4 個）</h5>
+          <div class="m-scroll">
+          <table class="m-tbl">
+            <tr><th>gNB</th><th>N2</th><th>UE</th><th>註冊成功</th><th>PDU 成功</th><th>註冊 p95</th><th>DL 收到</th><th>丟包</th></tr>
+            <tr><td>gNB-1</td><td><span class="pill ok">up</span></td><td>100</td><td>100</td><td>100</td><td>98 ms</td><td>0.49 G</td><td>0.9%</td></tr>
+            <tr><td>gNB-2</td><td><span class="pill ok">up</span></td><td>100</td><td>99</td><td>99</td><td>104 ms</td><td>0.49 G</td><td>1.0%</td></tr>
+            <tr><td>gNB-3</td><td><span class="pill ok">up</span></td><td>100</td><td>96</td><td>94</td><td>131 ms</td><td>0.46 G</td><td>2.8%</td></tr>
+            <tr><td>gNB-4</td><td><span class="pill ok">up</span></td><td>100</td><td>100</td><td>100</td><td>101 ms</td><td>0.49 G</td><td>1.1%</td></tr>
+          </table>
+          </div>
+          <div class="m-row" style="margin-top:8px"><span class="m-btn ghost">查看 12 個失敗 UE 與原因</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>按 Stop 之後</h3>
+    <p>流量立即歸零，卡片列換成三個收尾階段，順序和開始相反。三個階段都完成（或重試用完）後，狀態變成「完成」，這時才能開始下一個 run。</p>
+  </div>
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / runs / 2026-10-02-1432 · 收尾中 <span class="sample-tag">示意數字</span></div>
+    <div class="m-main">
+      <div class="m-title">
+        <div>
+          <h4>1000 UE 基準 · 10 gNB</h4>
+          <div class="m-row" style="margin-top:4px"><span class="pill draft">收尾中</span><span class="m-note mono">Stop 於 00:06:30 · 收尾已 00:00:17</span></div>
+        </div>
+        <div class="m-row"><span class="m-btn ghost" style="opacity:.5">開始新的 run（收尾完成後可用）</span></div>
+      </div>
+      <div class="stage-row">
+        <div class="stage">
+          <div class="top"><span class="name">資料面</span><span class="pill muted">已停止</span></div>
+          <div class="big">0<small> bps</small></div>
+          <div class="bar"><span class="a" style="width:100%; background:var(--ink-3)"></span></div>
+          <dl class="kv"><dt>最終丟包</dt><dd class="bad">1.2%</dd><dt>總送出</dt><dd>230.4 GB</dd></dl>
+        </div>
+        <div class="stage">
+          <div class="top"><span class="name">PDU Release</span><span class="pill ok">完成</span></div>
+          <div class="big">986<small> / 988</small></div>
+          <div class="bar"><span class="a" style="width:99.8%"></span><span class="r" style="width:.2%"></span></div>
+          <dl class="kv"><dt>失敗</dt><dd class="bad">2</dd><dt>平均 · p95</dt><dd>18 · 40 ms</dd><dt>總時長</dt><dd>9.9 s</dd></dl>
+        </div>
+        <div class="stage">
+          <div class="top"><span class="name">UE Dereg</span><span class="pill acc">進行中</span></div>
+          <div class="big">702<small> / 992</small></div>
+          <div class="bar"><span class="a" style="width:70.4%"></span><span class="r" style="width:.4%"></span><span class="f" style="width:20%"></span></div>
+          <dl class="kv"><dt>失敗 / 重試中</dt><dd class="bad">4 / 2</dd><dt>進行中 / 排隊</dt><dd>200 / 84</dd><dt>平均 · p95</dt><dd>22 · 51 ms</dd><dt>總時長（至今）</dt><dd>7.1 s</dd></dl>
+        </div>
+        <div class="stage">
+          <div class="top"><span class="name">gNB SCTP 斷線</span><span class="pill muted">等待 Dereg</span></div>
+          <div class="big">0<small> / 10</small></div>
+          <div class="bar"></div>
+          <dl class="kv"><dt>失敗</dt><dd>—</dd><dt>總時長</dt><dd>—</dd></dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>歷史結果</h3>
+    <p>（N7：存在 fru-lab 的 bbolt，保留最近 50 筆，可匯出 CSV 時序與 JSON 報告。）每次 run 存一份「當時的設定快照 + 最終報告 + 每秒時序」。列表上直接顯示關鍵數字，可以勾兩筆並排比較（例如換了 UPF 版本前後）。</p>
+  </div>
+  <div class="screen">
+    <div class="screen-bar"><div class="dots"><i></i><i></i><i></i></div>fru-lab / throughput / history <span class="sample-tag">示意數字</span></div>
+    <div class="m-main">
+      <div class="m-title"><h4>歷史結果</h4><div class="m-row"><span class="m-btn ghost">比較選取的 2 筆</span><span class="m-btn ghost">匯出 CSV</span></div></div>
+      <div class="m-scroll">
+      <table class="m-tbl">
+        <tr><th></th><th>時間</th><th>設定</th><th>結果</th><th>註冊成功率</th><th>註冊 p95</th><th>PDU 成功率</th><th>DL 收到</th><th>UL 收到</th><th>丟包</th></tr>
+        <tr><td>☑</td><td>10-02 14:32</td><td class="lbl">1000 UE 基準</td><td><span class="pill ok">完成</span></td><td>99.2%</td><td>112 ms</td><td>99.6%</td><td>4.87 G</td><td>0.98 G</td><td>1.2%</td></tr>
+        <tr><td>☑</td><td>10-01 17:05</td><td class="lbl">1000 UE 基準</td><td><span class="pill ok">完成</span></td><td>100%</td><td>87 ms</td><td>100%</td><td>4.93 G</td><td>0.99 G</td><td>0.3%</td></tr>
+        <tr><td>☐</td><td>10-01 16:40</td><td class="lbl">5000 UE 壓力</td><td><span class="pill bad">中止</span></td><td>71.4%</td><td>4.8 s</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 -->
+<section class="sec" id="questions">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">11</span><h2>已確認的決定</h2></div>
+    <p>以下是你在 <code>5g-throughput-tester.md</code> 回覆的答案，以及每個答案在設計上改了什麼。前面各節已經照這些決定更新。</p>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>題號</th><th>決定</th><th>設計上的改變</th></tr>
+      <tr><td class="mono">Q1</td><td>獨立 fru-tester</td><td>fru-lab 用 Docker 以 host network 啟動 fru-tester，透過 REST 控制、WebSocket 收統計</td></tr>
+      <tr><td class="mono">Q2</td><td>任何核網，手動填網卡與 IP</td><td>網路頁全部手填，不從 fru-lab 部署自動帶入</td></tr>
+      <tr><td class="mono">Q3</td><td>不設上限，由使用者輸入</td><td>不寫死上限；設定頁只依網卡速度與 CIDR 大小做檢查與警告</td></tr>
+      <tr><td class="mono">Q4</td><td>先做 PoC，用一般 UDP socket</td><td>資料面只做層級 1；發送器仍保留可替換的介面</td></tr>
+      <tr><td class="mono">Q5</td><td>依序填滿，不提供選擇</td><td>設定頁拿掉分配方式與每 gNB 上限，容量固定為向上取整(UE ÷ gNB)</td></tr>
+      <tr><td class="mono">Q6</td><td>IP 遞增，使用者輸入 CIDR</td><td>網路頁新增 gNB IP 的 CIDR 欄位，即時檢查可用 IP 數量是否足夠；Tester 負責在網卡上加 / 移除 IP</td></tr>
+      <tr><td class="mono">Q7</td><td>訂閱資料由使用者自己建</td><td>拿掉「準備訂閱資料」階段與檢查按鈕；畫面上提示 IMSI 範圍，方便使用者對照</td></tr>
+      <tr><td class="mono">Q8</td><td>總時長 = 第一個開始到最後一個完成</td><td>只保留這一種（顯示為「總時長」），拿掉「累計耗時」；平均與 p95 照樣顯示</td></tr>
+      <tr><td class="mono">Q9</td><td>PDU 建好就開始打，不等全部</td><td>拿掉流量閘門與 ramp-up；UE 進入資料面就立刻加入發送</td></tr>
+      <tr><td class="mono">Q10</td><td>固定速率，一組 UL / DL</td><td>設定頁只有每 UE 的 UL、DL 速率與封包大小</td></tr>
+      <tr><td class="mono">Q11</td><td>需要收包驗證</td><td>維持 N6 收 UL、N3 收 DL、payload 標頭、丟包與延遲</td></tr>
+      <tr><td class="mono">Q12</td><td>Stop 按鈕觸發收尾：流量立即全停，再反向 UE Dereg → gNB SCTP 斷線，同樣統計，全部停完才算結束</td><td>流量持續到按 Stop（或最長執行時間到）；新增兩個收尾階段卡片：UE Dereg、gNB SCTP 斷線</td></tr>
+      <tr><td class="mono">Q13</td><td>資料面以外每個流程都有重試欄位</td><td>速率頁每一列都有「重試次數」，含 N2、註冊、PDU、PDU Release、Dereg、SCTP 斷線</td></tr>
+      <tr><td class="mono">Q14</td><td>一個 PDU session、單一 DNN</td><td>UE 樣板只有一組 DNN / S-NSSAI</td></tr>
+      <tr><td class="mono">Q15</td><td>GTP-U 不帶 QFI</td><td>沿用 free-ran-ue 的 12 bytes 標頭</td></tr>
+      <tr><td class="mono">Q16</td><td>路由由 Tester 處理</td><td>開始時自動加 UE pool 路由，結束時移除；使用者不用動主機設定</td></tr>
+      <tr><td class="mono">Q17</td><td>一次只能一個</td><td>有 run 進行中時，「開始」按鈕停用</td></tr>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>衍生問題的決定</h3>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>題號</th><th>問題</th><th>決定</th><th>設計上的改變</th></tr>
+      <tr><td class="mono">N1</td><td>CIDR 遞增 N2 還是 N3？</td><td>各自遞增</td><td>N2、N3 各一個 CIDR 與起始 IP，每個 gNB 各拿一個 N2 IP 與一個 N3 IP</td></tr>
+      <tr><td class="mono">N2</td><td>CIDR 裡哪些 IP 不能用？</td><td>照建議</td><td>自動跳過網路 / 廣播位址、核網端 IP、網卡上已有的 IP；不夠就擋下並顯示缺幾個</td></tr>
+      <tr><td class="mono">N3</td><td>重試的方式</td><td>重新排隊</td><td>失敗的 UE 放回同一站隊伍最後，重新拿速率 token；重試成功另外計數，耗時從第一次開始算</td></tr>
+      <tr><td class="mono">N4</td><td>Stop 時進行中的 UE</td><td>照建議</td><td>排隊中的標記「已取消」；進行中的等完成或逾時再收尾；只釋放實際建立過的</td></tr>
+      <tr><td class="mono">N5</td><td>Dereg 前先做 PDU Release？</td><td>要 → <b>2026-10-02 改為不要</b></td><td>不做 PDU Release，直接 UE Dereg，核網在 Dereg 時釋放 PDU session（和 free-ran-ue 一樣）。收尾是 UE Dereg → SCTP 斷線兩段</td></tr>
+      <tr><td class="mono">N6</td><td>自動停止條件</td><td>提供最長執行時間，含「無限」</td><td>設定頁新增「最長執行時間」，預設無限；時間到觸發和 Stop 相同的流程</td></tr>
+      <tr><td class="mono">N7</td><td>歷史結果</td><td>照建議</td><td>存在 fru-lab 的 bbolt，保留最近 50 筆，可匯出 CSV（時序）與 JSON（報告）</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- 12 -->
+<section class="sec" id="phases">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">12</span><h2>分期計畫</h2></div>
+    <p>每一期結束時都有一個可以實際操作、可以看到數字的成果。順序和流水線一樣，前一期的統計框架後一期直接沿用。</p>
+  </div>
+  <div class="phases">
+    <div class="phase"><div class="p">第 1 期 <span class="pill ok">已完成</span></div><h4>骨架與 N2</h4>
+      <ul><li>fru-tester 行程與控制 API</li><li>設定模型、遞增展開、CIDR 檢查</li><li>gNB 模組：IP 自動配置 + SCTP + NG Setup</li><li>metrics 框架與 WebSocket 串流</li><li>側邊欄新分頁、設定頁、N2 卡片</li></ul>
+      <div class="done-when">完成標準：設定 10 個 gNB，畫面顯示 10 條 N2 的成功數、總時長與平均</div></div>
+    <div class="phase"><div class="p">第 2 期 <span class="pill ok">已完成</span></div><h4>註冊與 PDU</h4>
+      <ul><li>UE 模組（NAS 狀態機，不開 socket）</li><li>信箱式下行分派</li><li>流水線：速率 + 同時上限 + 逾時 + 重試</li><li>失敗清單與 cause 統計</li></ul>
+      <div class="done-when">完成標準：1000 UE 全部走到 PDU 成功，重試與 p95 數字正確</div></div>
+    <div class="phase"><div class="p">第 3 期 <span class="pill ok">已完成</span></div><h4>資料面（UDP socket PoC）</h4>
+      <ul><li>封包模板與 payload 標頭</li><li>UE 一就緒就加入發送分組</li><li>N3 / N6 收包驗證、丟包、延遲</li><li>UE pool 路由自動加入與移除</li><li>吞吐曲線</li></ul>
+      <div class="done-when">完成標準：設定 1 Gbps DL，收到的量與 UPF 側計數一致</div></div>
+    <div class="phase"><div class="p">第 4 期 <span class="pill ok">已完成</span></div><h4>Stop 與收尾</h4>
+      <ul><li>Stop：流量立即停止</li><li>UE Dereg（核網一併釋放 PDU）、gNB SCTP 斷線，含統計與重試</li><li>最長執行時間（含無限）</li><li>清除 Tester 加的 IP 與路由</li><li>歷史結果：最近 50 筆、CSV / JSON 匯出</li></ul>
+      <div class="done-when">完成標準：同一份設定連跑兩次結果一致，核網與主機都沒有殘留</div></div>
+    <div class="phase"><div class="p">待優化</div><h4>資料面效能</h4>
+      <ul><li>發送速率上限：一個 socket 約 1 Gbps，發送線數改跟 CPU 核心數走，UL 也拆多個 socket；再上去用 sendmmsg / UDP GSO</li><li>CPU 分配：發送／接收線綁核、和 UPF 的 softirq 錯開；或 tester 與核網分機器</li></ul>
+      <div class="done-when">細節見第 13 節第 3 期「留到之後處理」</div></div>
+    <div class="phase"><div class="p">之後</div><h4>依需求</h4>
+      <ul><li>AF_PACKET / AF_XDP 發送器</li><li>多 slice、多 session</li><li>流量 profile（burst、IMIX）</li><li>註冊細分（Auth / SMC 各段耗時）</li></ul>
+      <div class="done-when">PoC 量到 UDP socket 的上限後再排</div></div>
+  </div>
+</section>
+
+<!-- 13 -->
+<section class="sec" id="log">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">13</span><h2>實作紀錄</h2></div>
+    <p>每完成一期，就在這裡補一筆：做了什麼、怎麼驗證、和設計不同的地方，以及還沒做完的事。</p>
+  </div>
+
+  <div class="log-entry">
+    <div class="log-head"><h3>第 1 期 · 骨架與 N2</h3><span class="pill ok">已完成</span></div>
+    <div class="log-meta">
+      <span>2026-10-02</span>
+      <span>分支 feat/throughput-tester-phase1（25 個 commit，尚未合併到 main）</span>
+      <span>計畫：docs/superpowers/plans/2026-10-02-throughput-tester-phase1.md</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/</td><td>獨立的 fru-tester 引擎（Go module）：設定展開與 CIDR 分配、統計、gNB 的 SCTP 與 NG Setup、用 netlink 加減 IP、run 生命週期、REST 與 WebSocket API</td></tr>
+        <tr><td class="mono">web/backend/</td><td>profile 存在 bbolt；其餘 tester API 透過反向代理轉給 fru-tester，並把使用者的 JWT 換成 fru-tester 的 token</td></tr>
+        <tr><td class="mono">web/frontend/</td><td>側邊欄新增「Throughput Tester」區塊，包含 Setup 頁（即時驗證與 gNB 預覽）和 Run 頁（N2 統計卡、gNB 表格、即時更新）</td></tr>
+        <tr><td class="mono">docker/、docs/</td><td>fru-tester image 與 compose 服務（host network、NET_ADMIN）、docs/tester-guide.md</td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>自動測試</td><td>make test 全過（tester 的測試加了 -race）、make lint 0 issues、yarn build 成功、兩個 docker image 都能 build</td></tr>
+        <tr><td>正常建線（fru-lab 部署的 free5GC）</td><td><span class="pill ok">通過</span> 10/10 accepted，總時長約 23 ms，平均約 22 ms</td></tr>
+        <tr><td>被拒絕（MCC 改成 001）</td><td><span class="pill ok">通過</span> 10 個都 rejected，原因 misc(4)，各重試一次；AMF log 為「Cannot find Served TAI」</td></tr>
+        <tr><td>Stop 收尾</td><td><span class="pill ok">通過</span> AMF 逐一移除 RAN Context，docker-cn-ran 上只剩原本的 10.0.1.1</td></tr>
+        <tr><td>連不到 AMF（dummy 網卡）</td><td><span class="pill ok">通過</span> 10 個 gNB 各試 2 次後都算 timed out，Stop 後 IP 全部移除</td></tr>
+        <tr><td>WebSocket 經 fru-lab 轉送</td><td><span class="pill ok">通過</span> 握手成功（101）並持續推送快照；token 錯誤回 401</td></tr>
+        <tr><td>AMF 重啟時顯示 lost</td><td><span class="pill draft">未驗</span> 需要重啟你的 amf container；目前只有單元測試涵蓋</td></tr>
+        <tr><td>瀏覽器畫面</td><td><span class="pill draft">未驗</span> 開發時沒有瀏覽器，只確認 API 和 build；畫面已由使用者實際操作過</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li>fru-tester 是 compose 裡一個常駐的服務，不是每次按開始才由 fru-lab 起一個 container；兩者之間用一組共用的 apiToken 驗證。</li>
+      <li>介面文字用英文，和 fru-lab 現有的頁面一致。</li>
+      <li>N2 的 local port 交給 kernel 選；每個 gNB 已經有自己的 IP，不需要再遞增 port。</li>
+      <li>gNB 多一個狀態 <code>lost</code>：原本已建立的 association 被 AMF 斷掉時顯示。</li>
+      <li>N2 timeout 上限設為 60 秒，避免 Stop 要等太久；同時關閉所有 association，compose 的 stop_grace_period 設為 60 秒。</li>
+      <li>兩個核網端 IP（AMF、UPF）在 N2 和 N3 都不會分給 gNB；N3 也不會用到已經分給 N2 的 IP。</li>
+      <li>目前整個 fru-lab 只有一份 profile，預設名稱是 <code>basic</code>，數值對應 fru-lab 部署的 free5GC 範本（AMF 10.0.1.3、UPF 10.0.1.5、介面 docker-cn-ran）。多份 profile 先不做。</li>
+    </ul>
+
+    <h4>最後 code review 修掉的問題</h4>
+    <ul class="tight">
+      <li>gNB 數量打成很大的數字時，fru-tester 會因為記憶體不足直接當掉。</li>
+      <li>apiToken 不一致時，使用者會被登出 fru-lab；現在改成顯示「token 不一致」的錯誤。</li>
+      <li>存過的 profile 缺欄位或是舊版本時，Setup 頁會整頁空白；現在缺的欄位用預設值補。</li>
+      <li>Stop 時逐條關 SCTP 可能超過 docker stop 的寬限時間，IP 會留在網卡上；現在改成同時關。</li>
+      <li>讀取被系統訊號打斷（EINTR）時，正常的 gNB 會被誤判成 lost。</li>
+    </ul>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>在 N2 進行中按 Stop，「總時長」會一直往上加；按下 Stop 後狀態要等進行中的嘗試結束才會變。</li>
+      <li>即時資料沒有限制推送頻率，WebSocket 寫入也沒有設逾時；gNB 很多時畫面可能變卡。</li>
+      <li>gNB 名稱沒有檢查字元與長度；Start 回傳的欄位錯誤只彈出提示，沒有標在欄位上。</li>
+      <li>token 錯誤時 WebSocket 會一直重連，沒有說明原因；validate 和 start 的請求大小沒有上限。</li>
+      <li>Docker 預設的 apiToken 在 host network 的 9100 port 對外開放，正式使用前要換掉；apiToken 留空時 fru-lab 啟動不會擋。</li>
+      <li>fru-tester 被 SIGKILL 時，加上去的 IP 會留在網卡上，要手動 <code>ip addr del</code>。</li>
+      <li>你存的 profile 裡 N3 的 UPF IP 還是舊的 10.0.2.1，第 3 期開始用 N3 之前要改成 10.0.1.5。</li>
+    </ul>
+  </div>
+
+  <div class="log-entry">
+    <div class="log-head"><h3>第 2 期 · UE 註冊與 PDU session</h3><span class="pill ok">已完成</span></div>
+    <div class="log-meta">
+      <span>2026-10-02</span>
+      <span>分支 feat/throughput-tester-phase2（接在第 1 期之後，19 個 commit，尚未合併）</span>
+      <span>計畫：docs/superpowers/plans/2026-10-02-throughput-tester-phase2.md</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/ue</td><td>單一 UE 的 NAS 層，不做任何 I/O：5G-AKA、Security Mode、註冊、PDU 請求與 Accept。金鑰推導從 free-ran-ue 搬過來</td></tr>
+        <tr><td class="mono">tester/gnb</td><td>Association：一個 gNB 用一條 SCTP 帶它所有的 UE，取代 Uu；Initial Context Setup、PDU Session Resource Setup（配發 DL TEID、帶入 gNB 的 N3 IP）、UE Context Release 都由 gNB 自己回應</td></tr>
+        <tr><td class="mono">tester/procedure</td><td>單一 UE 一次註冊或一次 PDU 的嘗試，判定為 accept、reject、timeout 或 failure</td></tr>
+        <tr><td class="mono">tester/run</td><td>N2 → 註冊 → PDU 的流水線：哪個 gNB 先 up，它的 UE 就先開始註冊；每個階段可設每秒啟動數、同時上限、逾時、重試（失敗排回隊尾）；按 Stop 時還在排隊的 UE 記為已取消，三個階段都會停在「完成」</td></tr>
+        <tr><td class="mono">tester/internal/fakecore</td><td>只給測試用的假核網：NAS 網路端（另外寫一份金鑰推導，和 UE 端互相驗證）、NGAP AMF、有緩衝的訊息管道</td></tr>
+        <tr><td class="mono">web/</td><td>Setup 頁：新增 UE 樣板、註冊與 PDU 的步調設定、每個 gNB 的 SUPI 範圍。Run 頁：三張階段卡片、UE 狀態統計、失敗 UE 清單（前 200 筆）、每個 gNB 已註冊／已建 PDU 的數量</td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>自動測試</td><td>9 個 Go 套件在 -race 下全部通過（包含用假 AMF 跑完整流水線、同一個 gNB 上 50 個 UE 交錯進行）；lint 0 issues；前端 build 成功</td></tr>
+        <tr><td>真實 free5GC，第一次（乾淨狀態）</td><td><span class="pill ok">通過</span> 2 個 gNB 都建線；imsi-…001、…002 註冊成功並建好 PDU session（註冊平均約 171 ms、PDU 約 118 ms）；SMF 正常配發 UE IP</td></tr>
+        <tr><td>不在 gNB slice 上的訂閱</td><td><span class="pill ok">通過</span> imsi-…003、…004 的訂閱在 slice 1/112233，AMF 回 5gmm(62)，tester 記為 rejected 並列在失敗清單</td></tr>
+        <tr><td>訂閱全部改成 1/010203 後，4 個 UE</td><td><span class="pill ok">通過</span> 關掉 CHF 計費（cgf）後連跑兩次，都是 4/4 註冊、4/4 PDU（PDU 平均約 45 ms），SMF 的計費失敗 0 次</td></tr>
+        <tr><td>PDU 一直卡在 in flight（已找到原因）</td><td><span class="pill ok">已解決</span> 是 free5GC CHF 的計費閘道（cgf）用 FTP 把計費檔傳給 webconsole：前一兩個 UE 之後 CHF 就不回計費請求，SMF 每個 PDU 都等 10 秒。網路設定沒錯：DNS、2121 port、FTP 連線都驗證過。fru-lab 的三個 free5GC 範本已改成關閉 cgf</td></tr>
+        <tr><td>Stop 收尾</td><td><span class="pill ok">通過</span> 進行中的嘗試會等它結束；IP 全部移除；AMF 移除 RAN Context</td></tr>
+        <tr><td>瀏覽器畫面</td><td><span class="pill draft">未驗</span> 只確認 API 和 build</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li>UE 註冊完成後，最多等 1 秒 AMF 的 Configuration Update Command 才送 PDU 請求（真的 UE 和 free-ran-ue 都這樣做）；註冊時間仍然算到送出 Registration Complete 為止。</li>
+      <li>統計多了「未開始」（skipped）：gNB 沒起來、前一個階段失敗、或在 Stop 之前沒輪到的 UE。這樣三個階段一定會結束，總時長不會一直往上加，順便修掉第 1 期的 M2。</li>
+      <li>即時資料最多每 200 ms 推一次（第 1 期的 M4），因為現在每個 UE 的每一步都會觸發更新。</li>
+      <li>tester 不幫你建訂閱資料（Q7）。Setup 頁會列出要建的 SUPI 範圍；預設 UE 樣板就是 free-ran-ue 範例的那組金鑰，和你核網裡已有的 4 筆訂閱一樣。</li>
+      <li>第 2 期按 Stop 不會釋放 PDU session，也不會反註冊（排在第 4 期）。同一批 UE 重新註冊時核網會把舊 session 拆掉，實測正常。</li>
+      <li>fru-lab 的 free5GC 範本（basic、ulcl、ulcl-2slice）全部改成 <code>cgf.enable: false</code>，這是 tester 以外的改動。另外修了 Makefile：以前只改範本時 <code>make backend</code> 不會重新 build，現在會。</li>
+    </ul>
+
+    <h4>最後 code review 修掉的問題</h4>
+    <ul class="tight">
+      <li>「association 斷了」的通知可能被丟掉，進行中的嘗試就要等到逾時才結束；現在改成一定收得到的訊號，也補了「UE 已經在等回應時斷線」的測試。</li>
+      <li>使用說明原本寫「Stop 後核網會自己清掉 UE」，不準確，已改正，並補上「PDU 全部逾時時，先查 SMF log 裡的 CHF 逾時（通常是計費 cgf 開著）」的提示。</li>
+      <li>驗收時發現：UE 全部成功、沒有任何失敗時，Run 頁會整頁空白。原因是失敗清單送出的是 null 而不是空清單；已修正並補上測試。</li>
+    </ul>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>下一期照原計畫做第 3 期資料面；PDU 釋放和反註冊維持在第 4 期。</li>
+      <li>註冊卡片的總時長包含最多 1 秒等 Configuration Update 的時間；等這 1 秒時如果收到 UE Context Release 會被忽略。</li>
+      <li>K/OPc 打錯時，錯誤被歸類為連線錯誤，也沒有回 Authentication Failure 給 AMF。</li>
+      <li>N2 進行中按 Stop，該 gNB 的 UE 會顯示「gNB down」而不是「已取消」。</li>
+      <li>註冊延遲用了兩種時鐘；統計數字更新和 UE 狀態更新不是同一時刻，畫面可能短暫對不上。</li>
+      <li>AMF 只帶 AMF ID 的 UE Context Release 不會回應；UPF 用 IPv6 位址時會讀錯。</li>
+    </ul>
+  </div>
+  <div class="log-entry">
+    <div class="log-head"><h3>第 3 期 · 資料面</h3><span class="pill ok">已完成</span></div>
+    <div class="log-meta">
+      <span>2026-10-02</span>
+      <span>分支 feat/throughput-tester-phase3（接在第 2 期之後，尚未合併）</span>
+      <span>計畫：docs/superpowers/plans/2026-10-02-throughput-tester-phase3.md</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/dataplane</td><td>不開 TUN，tester 自己組封包。UL：從 gNB 的 N3 IP 用 GTP-U 打到 UPF，裡面是 UE IP → sink IP:port 的 UDP；在 sink 收。DL：從 sink 用一般 UDP 打到 UE IP:port，經 UE pool 路由送進 UPF，回到 gNB 的 N3 IP 變成 GTP-U 收下。每個封包帶 24 bytes 標頭（run、UE、方向、序號、送出時間），UPF 改了來源位址也認得出是哪個 UE</td></tr>
+        <tr><td class="mono">tester/netcfg</td><td>run 開始時加上 gNB 的 N3 IP、主機沒有的 sink IP、<code>UE pool via UPF N6 IP</code> 路由；結束時只移除自己加的。已存在別的閘道的 UE pool 路由不會覆蓋，直接報錯</td></tr>
+        <tr><td class="mono">tester/run</td><td>每個 UE 的 PDU session 一建好，500 ms 後開始打流量（給 UPF 時間裝好下行隧道）；Stop 立即停流量</td></tr>
+        <tr><td class="mono">tester/metrics</td><td>每秒速率、累計位元組、丟包率、單向延遲 p50/p99、亂序、送出失敗、送錯隧道（misrouted）；Run 頁有最近 5 分鐘曲線與每個 gNB 的收量</td></tr>
+        <tr><td class="mono">web/</td><td>Setup 頁新增 N6（介面、sink IP、UPF N6 IP、UE pool）與流量（每 UE 的 UL/DL Mbps，預設各 1、封包大小、UDP port）；Run 頁新增資料面卡片與曲線</td></tr>
+        <tr><td>free5GC 範本</td><td>SMF 的 <code>urrThreshold</code> 改成 10 GB（tester 以外的改動）</td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>自動測試</td><td>11 個 Go 套件在 -race 下全部通過（包含假 UPF 的 UL/DL 往返、延遲啟動、送錯隧道）；lint 0 issues；前端 build 成功</td></tr>
+        <tr><td>真實 free5GC，4 UE，每 UE 1/1 Mbps，30 秒（加了 500 ms 延遲之後）</td><td><span class="pill ok">通過</span> UL 10447 → 10447、DL 10445 → 10445，兩個方向都 0 掉包；單向延遲 p50 約 0.05 ms、p99 約 0.1 ms；結束後路由和 IP 都清乾淨</td></tr>
+        <tr><td>真實 free5GC，高速（加延遲之前）</td><td><span class="pill ok">通過</span> UL 200 Mbps 0 掉包；DL 約 904 Mbps，0.76% 掉包，全部集中在每個 UE 剛起來的那一刻（這就是後來加 500 ms 延遲的原因）</td></tr>
+        <tr><td>DL 收不到（已找到原因）</td><td><span class="pill ok">已解決</span> SMF 的 urrThreshold 只有幾百 bytes，UPF 每一兩個封包就送一次用量報告，PFCP 塞爆，下行規則一直裝不上。範本已改 10 GB</td></tr>
+        <tr><td>DL 不管設多少都卡在 950～980 Mbps（已找到原因）</td><td><span class="pill ok">已解決</span> 4 條 DL 發送線共用 sink 的同一個 socket，Go 一次只讓一個寫入通過，所以只能輪流送，上限就是單一 socket 的約 8–9 萬 pps。改成每條發送線各用一個 socket 後，4 UE 的 DL 3 Gbps 送 3000 / 收 3000 Mbps（約 26.8 萬 pps），86 萬個封包只掉 5 個</td></tr>
+        <tr><td>完成標準「1 Gbps DL 與 UPF 計數一致」</td><td><span class="pill ok">通過</span> DL 已到 3 Gbps；收發數字由 tester 兩端比對，沒有拿 UPF 自己的計數比</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li>fru-lab 的 free5GC 沒有獨立的 N6 網段，UPF 解封裝後直接從 docker-cn-ran 出去（還會做 MASQUERADE），所以預設 sink 是主機在那張網卡上的 10.0.1.1，UPF N6 IP 是 10.0.1.5。</li>
+      <li>封包標頭讓 tester 即使被 NAT 也能把封包對回 UE；上一個 run 殘留的封包會被忽略。</li>
+      <li>依你的要求：流量在 PDU 建好 500 ms 後才開始；UL/DL 預設改成每 UE 1 Mbps。</li>
+      <li>每個 socket 的接收緩衝加大到 8 MB，減少高速時在本機被丟掉的封包。</li>
+    </ul>
+
+    <h4>最後 code review 修掉的問題</h4>
+    <ul class="tight">
+      <li>DL 原本只看封包標頭認 UE，不檢查是從哪個隧道、哪個 gNB 回來的；UPF 把封包送錯隧道也會算成收到。現在 TEID 或 gNB 不對就記為 misrouted，不算收到（Run 頁只有不為 0 時才顯示）。</li>
+      <li>Stop 和 PDU Accept 同時發生時，可能在停止後又加入 UE；現在停止後不再加入。</li>
+    </ul>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>下一期：第 4 期，Stop 時釋放 PDU session 與反註冊。目前連續跑同一批 UE，free5GC 會出現 Duplicated PDU session ID，PDU 會逾時，要重開核網。</li>
+      <li>延遲是固定 500 ms；裝隧道比較慢的核網，每個 UE 開頭還是可能掉幾個 DL 封包。</li>
+      <li>N6 介面名稱沒有檢查是否存在。</li>
+      <li><b>可改善：發送速率上限。</b>一個 UDP socket 約 1 Gbps（1400 bytes 封包）。目前 UL 每個 gNB 一個 socket、DL 固定 4 個，所以單一 gNB 的 UL、單一 UE 的 DL 上限都約 1 Gbps，DL 總上限約 4 Gbps。改法：發送線數跟 CPU 核心數走，UL 也照樣拆成多個 socket；再往上可以改用 sendmmsg 批次送或 UDP GSO。</li>
+      <li><b>可改善：CPU 分配。</b>目前沒有任何分配：不綁核、不設 GOMAXPROCS，UPF container 也沒有 CPU 限制，全部交給 Go runtime 和 Linux 排程（測試機是 6 vCPU 的 VM）。資料面的 goroutine：UL 發送每個 gNB 一條、DL 發送固定 4 條、DL 接收每個 gNB 一條、UL 接收（sink）1 條、統計 1 條。要注意的是，tester 呼叫 sendto 後，封包經 veth 進 UPF、gtp5g 封裝或解封裝、再經 bridge 回到 tester 的 socket，這段 kernel 處理大多在送出封包的那顆 CPU 上做完（softirq），所以 UPF 的工作有一部分算在 tester 頭上。實測：DL 900 Mbps 時 fru-tester 約 230% CPU，整台約 40% 忙；每次 sendto 約 10 µs。發送線數跟核心數走之後，下一個瓶頸會是 CPU 本身，可以考慮：發送線、接收線分別綁核，和 UPF 的 softirq 錯開；用 sendmmsg / recvmmsg 減少系統呼叫；把 tester 和核網放在不同機器。</li>
+      <li>重開核網時要先重開 NRF，再重開其他 NF，而且 SMF 要在 UPF 之後，不然 PFCP 關聯會斷，PDU 全部逾時。</li>
+    </ul>
+  </div>
+  <div class="log-entry">
+    <div class="log-head"><h3>第 4 期 · Stop、收尾與歷史結果</h3><span class="pill ok">已完成</span></div>
+    <div class="log-meta">
+      <span>2026-10-02</span>
+      <span>分支 feat/throughput-tester-phase4（接在第 3 期之後，尚未合併）</span>
+      <span>計畫：docs/superpowers/plans/2026-10-02-throughput-tester-phase4.md</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/ue、procedure</td><td>UE 發起的 Deregistration（一般，非關機），等 Deregistration Accept，再等 AMF 的 UE Context Release；可被第二次 Stop 中斷</td></tr>
+        <tr><td class="mono">tester/run</td><td>按 Stop 後：流量立即停 → 進行中的註冊／PDU 跑完 → 每個註冊成功的 UE 做 Dereg（和註冊一樣有每秒速率、同時上限、逾時、重試） → 每個 gNB 關 SCTP（計時） → 移除 IP 與路由。兩段收尾都是統計卡片。收尾中再按一次 Stop 會略過還沒送的 Dereg，但 SCTP 一樣會關、IP 一樣會清。最長執行時間到就自動走同一套流程</td></tr>
+        <tr><td class="mono">tester/api</td><td><code>GET /api/run/reports</code>：最近 10 個已結束 run 的設定與最終結果</td></tr>
+        <tr><td class="mono">web/backend</td><td>每 3 秒向 fru-tester 拿已結束的 run，沒存過的寫進 bbolt，只留最新 50 筆；提供列表、JSON 報告、CSV 時序三個 API</td></tr>
+        <tr><td class="mono">web/frontend</td><td>Setup 頁：Dereg 步調、最長執行時間（分鐘，0 = 不限）。Run 頁：兩張收尾卡片、「Skip cleanup」按鈕、達到最長時間的標示、UE 的 Deregistering／Deregistered。新的 History 頁：最近 50 筆、勾兩筆並排比較、每筆可下載 JSON 與 CSV</td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>自動測試</td><td>fru-tester 11 個 Go 套件、fru-lab 後端在 -race 下全部通過（含 Stop 時還在註冊、gNB 中途斷線、Dereg 逾時、第二次 Stop 中斷收尾、最長執行時間、連跑兩次的報告都保留）；兩邊 lint 0 issues；前端 build 成功</td></tr>
+        <tr><td>真實 free5GC，2 gNB、4 UE、1/1 Mbps，連跑兩次</td><td><span class="pill ok">通過</span> 兩次都是註冊 4/4、PDU 4/4、Dereg 4/4（平均約 20 ms）、SCTP 關閉 2/2，UL/DL 0 掉包；第二次沒有再出現 <code>Duplicated PDU session ID</code>（第 3 期留下的問題解決了）。SMF log 有每個 UE 的 PDU session 釋放、UE IP 回收</td></tr>
+        <tr><td>最長執行時間 1 分鐘</td><td><span class="pill ok">通過</span> 開始後約 60 秒自己停止，原因記為 maxDuration，一樣 Dereg 4/4、SCTP 2/2</td></tr>
+        <tr><td>主機殘留</td><td><span class="pill ok">通過</span> 每次結束後 UE pool 路由與 gNB IP 都移除</td></tr>
+        <tr><td>歷史結果</td><td><span class="pill ok">通過</span> History 頁列出所有 run，比較與 JSON／CSV 下載都在瀏覽器實測過</td></tr>
+        <tr><td>驗收時發現的問題（已修）</td><td><span class="pill ok">已解決</span> 原本 fru-tester 只保留最後一個 run，fru-lab 每 3 秒拉一次：如果按完 Stop 立刻開始下一個 run，前一個就不會進到歷史。改成 fru-tester 保留最近 10 個已結束的 run</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li><b>依你的要求取消 PDU Release（N5）</b>：直接 UE Dereg，核網在 Dereg 時一併釋放 PDU session。收尾從三段變成兩段。</li>
+      <li>SCTP 斷線這段只有統計，沒有速率與重試設定：關 SCTP 沒有東西可以重試（Q13 原本也列了這段）。</li>
+      <li>第二次 Stop 不只略過排隊中的 Dereg，也不再等已經送出的（記為「cleanup skipped」，UE 標成已取消），否則要等滿逾時才會結束。</li>
+      <li>核網拒絕 Dereg 時不重試；逾時或連線錯誤才照重試次數重試。</li>
+      <li>fru-tester 關閉（例如 docker stop）時直接略過 Dereg，只關 SCTP、清 IP，避免慢的核網卡住關機。</li>
+      <li>歷史結果的 API 即使沒有設定 fru-tester 也能讀，已存的結果不會因此看不到。</li>
+    </ul>
+
+    <h4>最後 code review 修掉的問題</h4>
+    <ul class="tight">
+      <li>按 Stop 之後 UE 狀態統計會錯：PDU 失敗的 UE 收尾後從「失敗」變成「已 Dereg」，和失敗清單對不上；被第二次 Stop 略過的 UE 停在「已建立」或「Dereg 中」。現在失敗的 UE 保持失敗，被略過的一律記為已取消，並補了測試。</li>
+      <li>使用說明對「第二次 Stop 略過的 Dereg 怎麼計數」寫錯了，已改正。</li>
+    </ul>
+    <p>另有 9 個小問題先記下，之後再處理，例如：fru-tester 保留的 10 個舊 run 佔的記憶體偏多、fru-lab 每 3 秒都把 10 份報告整包拉一次、同一秒開始的兩個 run 會撞 ID、Safari 下載匯出檔可能失敗。</p>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>收尾被略過（第二次 Stop 或 fru-tester 被強制關掉）的 UE 會留在核網裡；再跑同一批 UE 可能又遇到 Duplicated PDU session ID，要重開核網。</li>
+      <li>fru-lab 關著的時候如果結束了超過 10 個 run，較舊的不會進到歷史。</li>
+      <li>資料面效能的兩個待優化項目（見第 12 節「待優化」卡片）。</li>
+    </ul>
+  </div>
+</section>
+
+</div>

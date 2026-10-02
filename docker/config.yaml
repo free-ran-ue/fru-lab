@@ -6,7 +6,7 @@ backend:
 
   jwt:
     secret: "fru-lab"
-    expiresIn: 1h
+    expiresIn: 24h
 
   db:
     type: "bbolt"
@@ -18,6 +18,11 @@ backend:
     workDir: "/var/lib/frulab/deploy"
 
   frontendFilePath: "frontend"
+
+  tester:
+    # fru-tester runs on the host network (see docker-compose.yaml)
+    url: "http://host.docker.internal:9100"
+    apiToken: "frulab-tester"
 
 logger:
   level: "info"

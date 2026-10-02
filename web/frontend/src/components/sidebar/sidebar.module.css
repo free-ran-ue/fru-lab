@@ -40,6 +40,15 @@
   gap: 0.25rem;
 }
 
+.navGroup {
+  margin: 1.5rem 0 0.5rem 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
 .navItem {
   padding: 0.56rem 0.75rem;
   border-radius: 8px;

@@ -693,6 +693,249 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
 
+  /api/tester/profile:
+    get:
+      summary: Get the saved Throughput Tester profile
+      description: Returns the last profile saved from the setup page. 204 when none has been saved yet.
+      operationId: testerProfileGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterProfile'
+        '204':
+          description: No profile saved yet
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    put:
+      summary: Save the Throughput Tester profile
+      description: Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
+      operationId: testerProfilePut
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Body is not a JSON object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/tester/profile/validate:
+    post:
+      summary: Validate a profile and preview the per-gNB plan
+      description: Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
+      operationId: testerProfileValidate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterValidateResponse'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/tester/run:
+    get:
+      summary: Current run snapshot
+      description: Forwarded to fru-tester. State is `idle` before the first run.
+      operationId: testerRunGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Start a run
+      description: Forwarded to fru-tester. Only one run may be active at a time.
+      operationId: testerRunStart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '202':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '400':
+          description: Profile is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run is already active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/tester/run/stop:
+    post:
+      summary: Stop the active run
+      description: Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
+      operationId: testerRunStop
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: Stop requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '409':
+          description: No active run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/tester/history:
+    get:
+      summary: Finished runs, newest first
+      description: fru-lab keeps the last 50 runs fru-tester finished.
+      operationId: testerHistoryList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterHistorySummary'
+  /api/tester/history/{runId}:
+    get:
+      summary: One finished run's full report (JSON export)
+      operationId: testerHistoryGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The profile the run used and its final snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunReport'
+        '404':
+          description: No such run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/tester/history/{runId}/series.csv:
+    get:
+      summary: One finished run's throughput time series (CSV export)
+      operationId: testerHistorySeriesCsv
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 't,ulTxBps,ulRxBps,dlTxBps,dlRxBps, one row per chart point'
+          content:
+            text/csv:
+              schema:
+                type: string
+        '404':
+          description: No such run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -941,3 +1184,623 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageInfo'
+    TesterProfile:
+      type: object
+      required: [name, scale, gnb, ue, traffic, network, rates]
+      properties:
+        name:
+          type: string
+          example: 1000 UE baseline
+        scale:
+          type: object
+          required: [gnbCount, ueCount]
+          properties:
+            gnbCount:
+              type: integer
+              example: 10
+            ueCount:
+              type: integer
+              example: 1000
+        gnb:
+          type: object
+          required: [gnbIdStart, namePattern, mcc, mnc, tac, sst, sd]
+          properties:
+            gnbIdStart:
+              type: string
+              description: 6 or 8 hex digits; incremented per gNB, keeping its width.
+              example: '000314'
+            namePattern:
+              type: string
+              description: Must contain {i}, replaced by the 1-based gNB index.
+              example: gNB-{i}
+            mcc:
+              type: string
+              example: '208'
+            mnc:
+              type: string
+              example: '93'
+            tac:
+              type: string
+              example: '000001'
+            sst:
+              type: integer
+              example: 1
+            sd:
+              type: string
+              description: Empty or 6 hex digits.
+              example: '010203'
+        ue:
+          $ref: '#/components/schemas/TesterUeTemplate'
+        traffic:
+          $ref: '#/components/schemas/TesterTraffic'
+        network:
+          type: object
+          required: [n2, n3, n6]
+          properties:
+            n2:
+              type: object
+              required: [interface, cidr, startIp, amfIp, amfPort]
+              properties:
+                interface:
+                  type: string
+                  example: ens19
+                cidr:
+                  type: string
+                  example: 10.0.1.0/24
+                startIp:
+                  type: string
+                  example: 10.0.1.100
+                amfIp:
+                  type: string
+                  example: 10.0.1.1
+                amfPort:
+                  type: integer
+                  example: 38412
+            n3:
+              type: object
+              required: [interface, cidr, startIp, upfIp, upfPort]
+              properties:
+                interface:
+                  type: string
+                  example: ens20
+                cidr:
+                  type: string
+                  example: 10.0.2.0/24
+                startIp:
+                  type: string
+                  example: 10.0.2.100
+                upfIp:
+                  type: string
+                  example: 10.0.2.1
+                upfPort:
+                  type: integer
+                  example: 2152
+            n6:
+              type: object
+              description: Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
+              required: [interface, sinkIp, upfIp, uePool]
+              properties:
+                interface:
+                  type: string
+                  example: docker-cn-ran
+                sinkIp:
+                  type: string
+                  example: 10.0.1.1
+                upfIp:
+                  type: string
+                  example: 10.0.1.5
+                uePool:
+                  type: string
+                  example: 10.60.0.0/16
+        rates:
+          type: object
+          required: [n2, registration, pdu, deregistration]
+          properties:
+            n2:
+              $ref: '#/components/schemas/TesterStageRate'
+            registration:
+              $ref: '#/components/schemas/TesterProcedureRate'
+            pdu:
+              $ref: '#/components/schemas/TesterProcedureRate'
+            deregistration:
+              $ref: '#/components/schemas/TesterProcedureRate'
+    TesterTraffic:
+      type: object
+      description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
+      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin]
+      properties:
+        ulMbps:
+          type: number
+          description: Per UE; 0 disables uplink.
+          example: 1
+        dlMbps:
+          type: number
+          description: Per UE; 0 disables downlink.
+          example: 5
+        packetSize:
+          type: integer
+          example: 1400
+        port:
+          type: integer
+          description: UDP port at the N6 sink and at the UEs.
+          example: 9200
+        maxDurationMin:
+          type: integer
+          description: Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
+          example: 0
+    TesterUeTemplate:
+      type: object
+      description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
+      required: [msinStart, key, opc, amf, sqn, integrity, ciphering, dnn, sst, sd]
+      properties:
+        msinStart:
+          type: string
+          description: Decimal; incremented per UE, keeping its width.
+          example: '0000000001'
+        key:
+          type: string
+          example: 8baf473f2f8fd09487cccbd7097c6862
+        opc:
+          type: string
+          example: 8e27b6af0e692e750f32667a3b14605d
+        amf:
+          type: string
+          example: '8000'
+        sqn:
+          type: string
+          example: '000000000023'
+        integrity:
+          type: string
+          enum: [nia0, nia1, nia2, nia3]
+        ciphering:
+          type: string
+          enum: [nea0, nea1, nea2, nea3]
+        dnn:
+          type: string
+          example: internet
+        sst:
+          type: integer
+          example: 1
+        sd:
+          type: string
+          example: '010203'
+    TesterProcedureRate:
+      type: object
+      description: At most ratePerSec new attempts per second and at most maxInFlight at once; each attempt bounded by timeoutMs; a failed UE with retries left is requeued at the back.
+      required: [ratePerSec, maxInFlight, timeoutMs, retries]
+      properties:
+        ratePerSec:
+          type: integer
+          example: 50
+        maxInFlight:
+          type: integer
+          example: 200
+        timeoutMs:
+          type: integer
+          example: 10000
+        retries:
+          type: integer
+          example: 1
+    TesterStageRate:
+      type: object
+      required: [timeoutMs, retries]
+      properties:
+        timeoutMs:
+          type: integer
+          example: 5000
+        retries:
+          type: integer
+          example: 1
+    TesterFieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: network.n2.cidr
+        message:
+          type: string
+    TesterGnbSpec:
+      type: object
+      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, ueFirst, ueLast, firstSupi, lastSupi]
+      properties:
+        index:
+          type: integer
+        name:
+          type: string
+        gnbId:
+          type: string
+        n2Ip:
+          type: string
+        n3Ip:
+          type: string
+        ueCount:
+          type: integer
+        ueFirst:
+          type: integer
+          description: 1-based index of the first UE on this gNB; 0 when it has none.
+        ueLast:
+          type: integer
+        firstSupi:
+          type: string
+          description: SUPI of this gNB's first UE; empty when it has none.
+          example: imsi-208930000000001
+        lastSupi:
+          type: string
+    TesterPlan:
+      type: object
+      required: [gnbs, uesPerGnb, n2Prefix, n3Prefix]
+      properties:
+        gnbs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterGnbSpec'
+        uesPerGnb:
+          type: integer
+        n2Prefix:
+          type: integer
+        n3Prefix:
+          type: integer
+    TesterValidateResponse:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterFieldError'
+        plan:
+          allOf:
+            - $ref: '#/components/schemas/TesterPlan'
+          nullable: true
+    TesterStartErrorResponse:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterFieldError'
+    TesterCauseCount:
+      type: object
+      required: [cause, count]
+      properties:
+        cause:
+          type: string
+          example: misc(4)
+        count:
+          type: integer
+          format: int64
+    TesterStageSnapshot:
+      type: object
+      description: One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
+      required: [name, expected, attempted, retries, inFlight, accepted, rejected, timedOut, failed, skipped, done, totalTimeMs, avgMs, p50Ms, p95Ms, p99Ms, maxMs, causes]
+      properties:
+        name:
+          type: string
+        expected:
+          type: integer
+        attempted:
+          type: integer
+          format: int64
+        retries:
+          type: integer
+          format: int64
+        inFlight:
+          type: integer
+          format: int64
+        accepted:
+          type: integer
+          format: int64
+        rejected:
+          type: integer
+          format: int64
+        timedOut:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        skipped:
+          type: integer
+          format: int64
+          description: Never attempted (gNB down, earlier stage failed, or the run was stopped first).
+        done:
+          type: boolean
+        totalTimeMs:
+          type: number
+        avgMs:
+          type: number
+        p50Ms:
+          type: number
+        p95Ms:
+          type: number
+        p99Ms:
+          type: number
+        maxMs:
+          type: number
+        causes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterCauseCount'
+    TesterGnbStatus:
+      allOf:
+        - $ref: '#/components/schemas/TesterGnbSpec'
+        - type: object
+          required: [state, attempts, latencyMs, cause, registered, established]
+          properties:
+            state:
+              type: string
+              enum: [pending, connecting, up, failed, lost, closed]
+              description: lost = was up, then the AMF side dropped the association.
+            attempts:
+              type: integer
+            latencyMs:
+              type: number
+            cause:
+              type: string
+            registered:
+              type: integer
+            established:
+              type: integer
+    TesterRunSnapshot:
+      type: object
+      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane]
+      properties:
+        runId:
+          type: string
+        profileName:
+          type: string
+        state:
+          type: string
+          enum: [idle, configuring, n2, running, stopping, stopped, failed]
+        error:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        stoppedAt:
+          type: string
+          format: date-time
+          nullable: true
+        n2:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        registration:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        pdu:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        deregistration:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        n2Release:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        stopReason:
+          type: string
+          description: Why the run stopped; empty while running.
+          enum: ['', user, maxDuration]
+        gnbs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterGnbStatus'
+        ues:
+          $ref: '#/components/schemas/TesterUeSummary'
+        failedUes:
+          type: array
+          description: The first 200 UEs that failed; ues.failed has the total.
+          items:
+            $ref: '#/components/schemas/TesterUeFailure'
+        dataplane:
+          $ref: '#/components/schemas/TesterDataplaneSnapshot'
+    TesterDataplaneSnapshot:
+      type: object
+      required: [activeUes, ul, dl, gnbs, series]
+      properties:
+        activeUes:
+          type: integer
+        ul:
+          $ref: '#/components/schemas/TesterTrafficDirection'
+        dl:
+          $ref: '#/components/schemas/TesterTrafficDirection'
+        gnbs:
+          type: array
+          description: Per gNB, same order as gnbs in the run snapshot.
+          items:
+            $ref: '#/components/schemas/TesterGnbTraffic'
+        series:
+          type: array
+          description: The whole run from its first second, in at most 600 points. A point covers 1 second until the run outgrows that, then 2, 4, 8 ... seconds (averaged).
+          items:
+            $ref: '#/components/schemas/TesterTrafficPoint'
+    TesterTrafficDirection:
+      type: object
+      description: Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
+      required: [txPackets, txBytes, rxPackets, rxBytes, txBps, rxBps, txPps, rxPps, lossRate, outOfOrder, sendErrors, misrouted, latency]
+      properties:
+        txPackets:
+          type: integer
+          format: int64
+        txBytes:
+          type: integer
+          format: int64
+        rxPackets:
+          type: integer
+          format: int64
+        rxBytes:
+          type: integer
+          format: int64
+        txBps:
+          type: number
+        rxBps:
+          type: number
+        txPps:
+          type: number
+        rxPps:
+          type: number
+        lossRate:
+          type: number
+          description: 1 - rx/tx so far.
+        outOfOrder:
+          type: integer
+          format: int64
+        sendErrors:
+          type: integer
+          format: int64
+        misrouted:
+          type: integer
+          format: int64
+          description: Downlink that arrived in another UE's tunnel or at another gNB. Always 0 for uplink.
+        latency:
+          $ref: '#/components/schemas/TesterLatency'
+    TesterLatency:
+      type: object
+      description: One-way latency in milliseconds (send and receive share the host clock).
+      required: [count, avgMs, p50Ms, p99Ms, maxMs]
+      properties:
+        count:
+          type: integer
+          format: int64
+        avgMs:
+          type: number
+        p50Ms:
+          type: number
+        p99Ms:
+          type: number
+        maxMs:
+          type: number
+    TesterGnbTraffic:
+      type: object
+      required: [ulTxBytes, ulRxBytes, dlTxBytes, dlRxBytes]
+      properties:
+        ulTxBytes:
+          type: integer
+          format: int64
+        ulRxBytes:
+          type: integer
+          format: int64
+        dlTxBytes:
+          type: integer
+          format: int64
+        dlRxBytes:
+          type: integer
+          format: int64
+    TesterTrafficPoint:
+      type: object
+      required: [t, ulTxBps, ulRxBps, dlTxBps, dlRxBps]
+      properties:
+        t:
+          type: number
+          description: Seconds since traffic started.
+        ulTxBps:
+          type: number
+        ulRxBps:
+          type: number
+        dlTxBps:
+          type: number
+        dlRxBps:
+          type: number
+    TesterUeSummary:
+      type: object
+      description: UEs per pipeline state; the fields add up to the UE count.
+      required: [pending, registering, registered, establishing, established, failed, skipped, cancelled, deregistering, deregistered]
+      properties:
+        pending:
+          type: integer
+        registering:
+          type: integer
+        registered:
+          type: integer
+        establishing:
+          type: integer
+        established:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+        cancelled:
+          type: integer
+        deregistering:
+          type: integer
+        deregistered:
+          type: integer
+    TesterRunReport:
+      type: object
+      required: [profile, snapshot]
+      properties:
+        profile:
+          $ref: '#/components/schemas/TesterProfile'
+        snapshot:
+          $ref: '#/components/schemas/TesterRunSnapshot'
+    TesterHistorySummary:
+      type: object
+      required: [runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
+      properties:
+        runId:
+          type: string
+        profileName:
+          type: string
+        state:
+          type: string
+        error:
+          type: string
+        stopReason:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        stoppedAt:
+          type: string
+          format: date-time
+          nullable: true
+        gnbCount:
+          type: integer
+        ueCount:
+          type: integer
+        registered:
+          type: integer
+          format: int64
+        registrationP95Ms:
+          type: number
+        established:
+          type: integer
+          format: int64
+        deregistered:
+          type: integer
+          format: int64
+        ulTxBytes:
+          type: integer
+          format: int64
+        ulRxBytes:
+          type: integer
+          format: int64
+        ulLossRate:
+          type: number
+        dlTxBytes:
+          type: integer
+          format: int64
+        dlRxBytes:
+          type: integer
+          format: int64
+        dlLossRate:
+          type: number
+    TesterUeFailure:
+      type: object
+      required: [supi, gnb, stage, cause, attempts]
+      properties:
+        supi:
+          type: string
+        gnb:
+          type: string
+        stage:
+          type: string
+          enum: [registration, pdu, deregistration]
+        cause:
+          type: string
+          example: 5gmm(62)
+        attempts:
+          type: integer

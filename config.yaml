@@ -6,7 +6,7 @@ backend:
 
   jwt:
     secret: "fru-lab"
-    expiresIn: 1h
+    expiresIn: 24h
 
   db:
     type: "bbolt"
@@ -16,6 +16,11 @@ backend:
     workDir: "/tmp/frulab-deploy"
 
   frontendFilePath: "build/frontend"
+
+  tester:
+    # fru-tester API (see tester.yaml). Leave url empty to disable the pages.
+    url: "http://127.0.0.1:9100"
+    apiToken: "frulab-tester"
 
 logger:
   level: "info"

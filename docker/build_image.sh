@@ -7,12 +7,13 @@
 #   ./build_image.sh <image tag>
 #
 # Description:
-#   This script is used to build the docker image for fru-lab.
+#   This script builds the docker images for fru-lab and fru-tester.
 #   The image tag is the name of the image to be built, default is latest.
 ########################################################
 
 LATEST_TAG="latest"
 IMAGE_NAME="alonza0314/fru-lab"
+TESTER_IMAGE_NAME="alonza0314/fru-tester"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # the Dockerfile COPYs web/backend and web/frontend, so the build context has
@@ -22,6 +23,10 @@ REPO_ROOT="$(dirname "${SCRIPT_DIR}")"
 build_docker_image() {
     if ! docker build -f ${SCRIPT_DIR}/Dockerfile -t $IMAGE_NAME:$image_tag ${REPO_ROOT}; then
         echo "Failed to build the docker image"
+        return 1
+    fi
+    if ! docker build -f ${SCRIPT_DIR}/tester.Dockerfile -t $TESTER_IMAGE_NAME:$image_tag ${REPO_ROOT}; then
+        echo "Failed to build the fru-tester docker image"
         return 1
     fi
 }

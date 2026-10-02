@@ -388,3 +388,24 @@ export function fromSubscription(sub: Subscription): SubscriberFormState {
     sessions: sessions.length > 0 ? sessions : [makeSessionRow()],
   }
 }
+
+// MAX_BULK_SUBSCRIBERS caps how many subscribers one Add creates.
+export const MAX_BULK_SUBSCRIBERS = 10000
+
+// bulkUeIds returns count SUPIs starting at first (imsi-<digits>), each
+// one more than the last and keeping the same number of digits, or an
+// error message. BigInt keeps 15-digit IMSIs exact.
+export function bulkUeIds(first: string, count: number): string[] | string {
+  const match = /^imsi-(\d{5,15})$/.exec(first.trim())
+  if (!match) return 'SUPI must look like imsi-208930000000001'
+  if (!Number.isInteger(count) || count < 1 || count > MAX_BULK_SUBSCRIBERS) {
+    return `Number of UEs must be between 1 and ${MAX_BULK_SUBSCRIBERS}`
+  }
+  const digits = match[1]
+  const start = BigInt(digits)
+  const last = start + BigInt(count - 1)
+  if (last.toString().length > digits.length) {
+    return `${count} UEs from ${first.trim()} would run past ${'9'.repeat(digits.length)}`
+  }
+  return Array.from({ length: count }, (_, i) => `imsi-${(start + BigInt(i)).toString().padStart(digits.length, '0')}`)
+}

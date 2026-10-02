@@ -7,6 +7,12 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import type { Subscriber } from '../../webconsoleApi'
+import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
+import { BULK_CONCURRENCY, runLimited } from './bulk'
+import Pager from '../../components/pager/Pager'
+import { pageOf } from '../../components/pager/paging'
+
+const PAGE_SIZE = 10
 import styles from './webconsole-style.module.css'
 
 export default function SubscribersPage() {
@@ -17,6 +23,22 @@ export default function SubscribersPage() {
   const [search, setSearch] = useState('')
   const [deletingUeId, setDeletingUeId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Subscriber | null>(null)
+  const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [isConfirmingBulk, setIsConfirmingBulk] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<number | null>(null) // deletions done, while running
+  const [isAskingCount, setIsAskingCount] = useState(false)
+  const [ueCount, setUeCount] = useState('1')
+  const parsedCount = Number(ueCount)
+  const isCountValid = Number.isInteger(parsedCount) && parsedCount >= 1 && parsedCount <= MAX_BULK_SUBSCRIBERS
+
+  // Add asks how many UEs first; the form then creates that many,
+  // IMSI +1 each, with every other field the same.
+  function startAdd() {
+    if (!isCountValid) return
+    setIsAskingCount(false)
+    navigate(`/subscribers/new?count=${parsedCount}`)
+  }
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
 
@@ -40,14 +62,59 @@ export default function SubscribersPage() {
     refresh()
   }, [refresh])
 
+  // sorted by IMSI: the webconsole lists them in no fixed order, which
+  // would shuffle the pages
   const filteredSubscribers = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return subscribers
-    return subscribers.filter((subscriber) =>
+    const matching = !query ? subscribers : subscribers.filter((subscriber) =>
       subscriber.ueId.toLowerCase().includes(query) ||
       subscriber.plmnID.toLowerCase().includes(query) ||
       (subscriber.gpsi || '').toLowerCase().includes(query))
+    return [...matching].sort((a, b) => a.ueId.localeCompare(b.ueId) || a.plmnID.localeCompare(b.plmnID))
   }, [subscribers, search])
+
+  const shown = pageOf(filteredSubscribers, page, PAGE_SIZE)
+  const keyOf = (s: Subscriber) => `${s.ueId}|${s.plmnID}`
+  const selectedSubscribers = subscribers.filter((s) => selected.has(keyOf(s)))
+  // the header checkbox selects every subscriber matching the search, on
+  // every page, not just the page shown
+  const allMatchingSelected = filteredSubscribers.length > 0 && filteredSubscribers.every((s) => selected.has(keyOf(s)))
+  const someMatchingSelected = filteredSubscribers.some((s) => selected.has(keyOf(s)))
+  const isBulkDeleting = bulkProgress !== null
+
+  function toggle(subscriber: Subscriber) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(keyOf(subscriber))) next.delete(keyOf(subscriber))
+      else next.add(keyOf(subscriber))
+      return next
+    })
+  }
+
+  function setMany(list: Subscriber[], on: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      list.forEach((s) => (on ? next.add(keyOf(s)) : next.delete(keyOf(s))))
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const targets = selectedSubscribers
+    setIsConfirmingBulk(false)
+    setBulkProgress(0)
+    const failed = await runLimited(targets, BULK_CONCURRENCY,
+      (s) => webconsoleApi.deleteSubscriberByID(s.ueId, s.plmnID), setBulkProgress)
+    // keep the ones that failed selected, so they can be retried
+    setSelected(new Set(failed.map((f) => keyOf(f.item))))
+    setBulkProgress(null)
+    if (targets.length > failed.length) addSuccess(`Deleted ${targets.length - failed.length} subscriber${targets.length - failed.length === 1 ? '' : 's'}`)
+    if (failed.length > 0) {
+      const first = failed[0]
+      addError(`${failed.length} could not be deleted (still selected), e.g. ${first.item.ueId}: ${extractWebconsoleErrorMessage(first.error, 'Failed to delete')}`)
+    }
+    await refresh()
+  }
 
   async function handleConfirmDelete() {
     if (!confirmTarget) return
@@ -90,8 +157,19 @@ export default function SubscribersPage() {
               style={{ marginBottom: '1.25rem' }}
               placeholder={`Search Subscriber (${filteredSubscribers.length} / ${subscribers.length})`}
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => { setSearch(event.target.value); setPage(1) }}
             />
+
+            {selectedSubscribers.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
+                  {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
+                </Button>
+                <button type="button" className={styles.btnAdd} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
+                  Clear selection
+                </button>
+              </div>
+            )}
 
             {isLoading ? (
               <p className={styles.emptyState}>Loading subscribers…</p>
@@ -103,6 +181,17 @@ export default function SubscribersPage() {
               <table className={styles.table} style={{ marginBottom: '1.25rem' }}>
                 <thead>
                   <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label={search.trim() ? 'Select all matching subscribers' : 'Select all subscribers'}
+                        title={`Select all ${filteredSubscribers.length}${search.trim() ? ' matching' : ''}, on every page`}
+                        checked={allMatchingSelected}
+                        ref={(el) => { if (el) el.indeterminate = someMatchingSelected && !allMatchingSelected }}
+                        onChange={() => setMany(filteredSubscribers, !allMatchingSelected)}
+                        disabled={isBulkDeleting}
+                      />
+                    </th>
                     <th>PLMN</th>
                     <th>UE ID</th>
                     <th>GPSI</th>
@@ -112,8 +201,17 @@ export default function SubscribersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSubscribers.map((subscriber) => (
+                  {shown.items.map((subscriber) => (
                     <tr key={`${subscriber.ueId}-${subscriber.plmnID}`}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${subscriber.ueId}`}
+                          checked={selected.has(keyOf(subscriber))}
+                          onChange={() => toggle(subscriber)}
+                          disabled={isBulkDeleting}
+                        />
+                      </td>
                       <td>{subscriber.plmnID}</td>
                       <td>{subscriber.ueId}</td>
                       <td>{subscriber.gpsi || '—'}</td>
@@ -148,7 +246,11 @@ export default function SubscribersPage() {
               </table>
             )}
 
-            <Button onClick={() => navigate('/subscribers/new')}>+ Add Subscriber</Button>
+            {!isLoading && !loadError && (
+              <Pager page={shown} total={filteredSubscribers.length} onChange={setPage} />
+            )}
+
+            <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add Subscriber</Button>
           </section>
         </div>
       </main>
@@ -160,6 +262,47 @@ export default function SubscribersPage() {
         onSubmit={handleConfirmDelete}
       >
         <p>Delete subscriber <strong>{confirmTarget?.ueId}</strong>? This cannot be undone.</p>
+      </Modal>
+
+      <Modal
+        isOpen={isConfirmingBulk}
+        onClose={() => setIsConfirmingBulk(false)}
+        title="Delete subscribers"
+        onSubmit={handleBulkDelete}
+      >
+        <p>
+          Delete <strong>{selectedSubscribers.length}</strong> subscriber{selectedSubscribers.length === 1 ? '' : 's'}
+          {selectedSubscribers.length > 0 && <> ({selectedSubscribers[0].ueId}{selectedSubscribers.length > 1 && <> … {selectedSubscribers[selectedSubscribers.length - 1].ueId}</>})</>}?
+          This cannot be undone.
+        </p>
+      </Modal>
+
+      <Modal
+        isOpen={isAskingCount}
+        onClose={() => setIsAskingCount(false)}
+        title="Add subscribers"
+        onSubmit={startAdd}
+      >
+        <form onSubmit={(event) => { event.preventDefault(); startAdd() }}>
+          <div className={styles.field}>
+            <label htmlFor="ue-count">How many UEs?</label>
+            <input
+              id="ue-count"
+              className={styles.input}
+              type="number"
+              min={1}
+              max={MAX_BULK_SUBSCRIBERS}
+              value={ueCount}
+              onChange={(event) => setUeCount(event.target.value)}
+              autoFocus
+            />
+          </div>
+          <p style={{ margin: '0.75rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+            {isCountValid
+              ? 'You fill in the first subscriber; the rest get the next IMSIs (+1 each) with every other field the same.'
+              : `Enter a whole number from 1 to ${MAX_BULK_SUBSCRIBERS}.`}
+          </p>
+        </form>
       </Modal>
     </div>
   )

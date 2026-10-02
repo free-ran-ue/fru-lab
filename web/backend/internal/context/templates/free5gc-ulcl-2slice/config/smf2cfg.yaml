@@ -102,7 +102,11 @@ configuration:
   nrfUri: http://nrf.free5gc.org:8000 # a valid URI of NRF
   nrfCertPem: cert/nrf.pem # NRF Certificate
   urrPeriod: 10 # default usage report period in seconds
-  urrThreshold: 300 # default usage report threshold in bytes
+  # A threshold of a few hundred bytes made the UPF send a usage report
+  # per packet or two: at a few hundred Mbps the PFCP control plane
+  # starves, session modifications time out and downlink never reaches
+  # the gNB. 10 GB keeps reports rare.
+  urrThreshold: 10000000000 # default usage report threshold in bytes
   requestedUnit: 1000
   ulcl: true
 logger: # log output setting

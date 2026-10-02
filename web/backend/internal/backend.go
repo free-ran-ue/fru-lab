@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,6 +36,12 @@ type backend struct {
 	jwt
 
 	frontendFilePath string
+
+	// testerProxy is nil when backend.tester.url is not configured.
+	testerProxy *httputil.ReverseProxy
+	// testerHistory copies finished runs into the DB; nil like testerProxy.
+	testerHistory     *testerHistoryWatcher
+	stopTesterHistory context.CancelFunc
 
 	processor.Processor
 
@@ -86,6 +93,21 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 		BackendLogger: logger,
 	}
 
+	if config.Backend.Tester.URL != "" {
+		proxy, err := newTesterProxy(config.Backend.Tester.URL, config.Backend.Tester.ApiToken)
+		if err != nil {
+			logger.BckLog.Errorf("Invalid tester config: %v", err)
+			return nil
+		}
+		b.testerProxy = proxy
+		b.testerHistory = &testerHistoryWatcher{
+			url: config.Backend.Tester.URL, token: config.Backend.Tester.ApiToken,
+			client: &http.Client{Timeout: 10 * time.Second}, store: flCtx, log: logger.TesterLog,
+		}
+	} else {
+		logger.BckLog.Warnln("backend.tester.url is empty; Throughput Tester routes will answer 503")
+	}
+
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
 
 	b.router = util.NewGinRouter("", nil)
@@ -132,12 +154,22 @@ func (b *backend) Start() {
 	}()
 	time.Sleep(500 * time.Millisecond)
 
+	if b.testerHistory != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		b.stopTesterHistory = cancel
+		go b.testerHistory.run(ctx)
+	}
+
 	b.BckLog.Infof("Backend server started on port: %d", b.port)
 }
 
 func (b *backend) Stop() {
 	fmt.Println()
 	b.BckLog.Infoln("Stopping backend server...")
+
+	if b.stopTesterHistory != nil {
+		b.stopTesterHistory()
+	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
@@ -166,6 +198,9 @@ func addServices(router *gin.Engine, b *backend) {
 	// a browser can't set an Authorization header on a WS handshake), so it
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
+	addRoutes(authGroup, b.getTesterRoutes())
+	addTesterHistoryRoutes(authGroup, b.Processor.FlContext)
+	addRoutes(apiGroup, b.getTesterStreamRoutes())
 }
 
 func addRoutes(group *gin.RouterGroup, routes util.Routes) {

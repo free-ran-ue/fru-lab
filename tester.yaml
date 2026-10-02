@@ -1,0 +1,7 @@
+# fru-tester dev config. fru-lab's config.yaml backend.tester must point at
+# this listen address with the same apiToken.
+listen: "127.0.0.1:9100"
+apiToken: "frulab-tester"
+
+logger:
+  level: "info" # error, warn, info, debug, trace
