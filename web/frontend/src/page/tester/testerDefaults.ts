@@ -4,7 +4,7 @@ import type { TesterProfile } from '../../api'
 // free5GC template fru-lab deploys (AMF 10.0.1.3, UPF 10.0.1.5 on the
 // frulab-cn-ran bridge, host side docker-cn-ran) so it runs as-is there.
 export const DEFAULT_TESTER_PROFILE: TesterProfile = {
-  name: 'N2 baseline',
+  name: 'basic',
   scale: { gnbCount: 10, ueCount: 1000 },
   gnb: {
     gnbIdStart: '000314',
