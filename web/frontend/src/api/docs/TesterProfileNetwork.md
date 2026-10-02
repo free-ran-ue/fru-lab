@@ -7,6 +7,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **n2** | [**TesterProfileNetworkN2**](TesterProfileNetworkN2.md) |  | [default to undefined]
 **n3** | [**TesterProfileNetworkN3**](TesterProfileNetworkN3.md) |  | [default to undefined]
+**n6** | [**TesterProfileNetworkN6**](TesterProfileNetworkN6.md) |  | [default to undefined]
 
 ## Example
 
@@ -16,6 +17,7 @@ import { TesterProfileNetwork } from './api';
 const instance: TesterProfileNetwork = {
     n2,
     n3,
+    n6,
 };
 ```
 

@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **scale** | [**TesterProfileScale**](TesterProfileScale.md) |  | [default to undefined]
 **gnb** | [**TesterProfileGnb**](TesterProfileGnb.md) |  | [default to undefined]
 **ue** | [**TesterUeTemplate**](TesterUeTemplate.md) |  | [default to undefined]
+**traffic** | [**TesterTraffic**](TesterTraffic.md) |  | [default to undefined]
 **network** | [**TesterProfileNetwork**](TesterProfileNetwork.md) |  | [default to undefined]
 **rates** | [**TesterProfileRates**](TesterProfileRates.md) |  | [default to undefined]
 
@@ -22,6 +23,7 @@ const instance: TesterProfile = {
     scale,
     gnb,
     ue,
+    traffic,
     network,
     rates,
 };

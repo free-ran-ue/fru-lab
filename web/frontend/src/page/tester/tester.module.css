@@ -48,6 +48,17 @@
 .stageRow { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
 .ueChips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .subTitle { margin: 1.25rem 0 0.5rem; font-size: 0.85rem; color: #475569; }
+.dirRow { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-top: 0.5rem; }
+.chart { width: 100%; height: auto; display: block; margin-top: 0.5rem; }
+.chartGrid { stroke: #e2e8f0; stroke-width: 1; }
+.chartAxis { fill: #64748b; font-size: 10px; }
+.lineDl, .lineUl { fill: none; stroke-width: 2; }
+.lineDl { stroke: #0f766e; }
+.lineUl { stroke: #4338ca; }
+.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.78rem; color: #475569; align-items: center; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 0.4rem; vertical-align: middle; }
+.swatchDl { background: #0f766e; }
+.swatchUl { background: #4338ca; }
 .runError { margin: 0; padding: 0.75rem 1rem; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 0.85rem; white-space: pre-wrap; }
 
 @media (max-width: 900px) {

@@ -113,6 +113,19 @@ export interface TesterCauseCount {
     'cause': string;
     'count': number;
 }
+export interface TesterDataplaneSnapshot {
+    'activeUes': number;
+    'ul': TesterTrafficDirection;
+    'dl': TesterTrafficDirection;
+    /**
+     * Per gNB, same order as gnbs in the run snapshot.
+     */
+    'gnbs': Array<TesterGnbTraffic>;
+    /**
+     * One point per second, the last 300 seconds.
+     */
+    'series': Array<TesterTrafficPoint>;
+}
 export interface TesterFieldError {
     'field': string;
     'message': string;
@@ -174,6 +187,22 @@ export const TesterGnbStatusStateEnum = {
 
 export type TesterGnbStatusStateEnum = typeof TesterGnbStatusStateEnum[keyof typeof TesterGnbStatusStateEnum];
 
+export interface TesterGnbTraffic {
+    'ulTxBytes': number;
+    'ulRxBytes': number;
+    'dlTxBytes': number;
+    'dlRxBytes': number;
+}
+/**
+ * One-way latency in milliseconds (send and receive share the host clock).
+ */
+export interface TesterLatency {
+    'count': number;
+    'avgMs': number;
+    'p50Ms': number;
+    'p99Ms': number;
+    'maxMs': number;
+}
 export interface TesterPlan {
     'gnbs': Array<TesterGnbSpec>;
     'uesPerGnb': number;
@@ -194,6 +223,7 @@ export interface TesterProfile {
     'scale': TesterProfileScale;
     'gnb': TesterProfileGnb;
     'ue': TesterUeTemplate;
+    'traffic': TesterTraffic;
     'network': TesterProfileNetwork;
     'rates': TesterProfileRates;
 }
@@ -218,6 +248,7 @@ export interface TesterProfileGnb {
 export interface TesterProfileNetwork {
     'n2': TesterProfileNetworkN2;
     'n3': TesterProfileNetworkN3;
+    'n6': TesterProfileNetworkN6;
 }
 export interface TesterProfileNetworkN2 {
     'interface': string;
@@ -232,6 +263,15 @@ export interface TesterProfileNetworkN3 {
     'startIp': string;
     'upfIp': string;
     'upfPort': number;
+}
+/**
+ * Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
+ */
+export interface TesterProfileNetworkN6 {
+    'interface': string;
+    'sinkIp': string;
+    'upfIp': string;
+    'uePool': string;
 }
 export interface TesterProfileRates {
     'n2': TesterStageRate;
@@ -258,6 +298,7 @@ export interface TesterRunSnapshot {
      * The first 200 UEs that failed; ues.failed has the total.
      */
     'failedUes': Array<TesterUeFailure>;
+    'dataplane': TesterDataplaneSnapshot;
 }
 
 export const TesterRunSnapshotStateEnum = {
@@ -305,6 +346,54 @@ export interface TesterStageSnapshot {
 export interface TesterStartErrorResponse {
     'message': string;
     'errors': Array<TesterFieldError>;
+}
+/**
+ * Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
+ */
+export interface TesterTraffic {
+    /**
+     * Per UE; 0 disables uplink.
+     */
+    'ulMbps': number;
+    /**
+     * Per UE; 0 disables downlink.
+     */
+    'dlMbps': number;
+    'packetSize': number;
+    /**
+     * UDP port at the N6 sink and at the UEs.
+     */
+    'port': number;
+}
+/**
+ * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
+ */
+export interface TesterTrafficDirection {
+    'txPackets': number;
+    'txBytes': number;
+    'rxPackets': number;
+    'rxBytes': number;
+    'txBps': number;
+    'rxBps': number;
+    'txPps': number;
+    'rxPps': number;
+    /**
+     * 1 - rx/tx so far.
+     */
+    'lossRate': number;
+    'outOfOrder': number;
+    'sendErrors': number;
+    'latency': TesterLatency;
+}
+export interface TesterTrafficPoint {
+    /**
+     * Seconds since traffic started.
+     */
+    't': number;
+    'ulTxBps': number;
+    'ulRxBps': number;
+    'dlTxBps': number;
+    'dlRxBps': number;
 }
 export interface TesterUeFailure {
     'supi': string;

@@ -5,8 +5,11 @@ import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterRunSnapshot, TesterStageSnapshot, TesterUeSummary } from '../../api'
-import { buildTesterStreamUrl, formatMs } from './testerFormat'
+import type {
+  TesterDataplaneSnapshot, TesterGnbTraffic, TesterRunSnapshot, TesterStageSnapshot, TesterTrafficDirection,
+  TesterTrafficPoint, TesterUeSummary,
+} from '../../api'
+import { buildTesterStreamUrl, formatBps, formatBytes, formatLoss, formatMs } from './testerFormat'
 import styles from './tester.module.css'
 
 const RECONNECT_MS = 2000
@@ -32,6 +35,86 @@ const UE_STATES: [keyof TesterUeSummary, string, 'pillOk' | 'pillBad' | 'pillAct
   ['skipped', 'gNB down', 'pillMuted'],
   ['cancelled', 'Cancelled', 'pillMuted'],
 ]
+
+// gnbTraffic renders one gNB's received bytes and loss for a direction.
+function gnbTraffic(t: TesterGnbTraffic | undefined, dir: 'ul' | 'dl'): string {
+  if (!t) return '—'
+  const tx = dir === 'ul' ? t.ulTxBytes : t.dlTxBytes
+  const rx = dir === 'ul' ? t.ulRxBytes : t.dlRxBytes
+  if (!tx) return '—'
+  return `${formatBytes(rx)} (${formatLoss(rx < tx ? 1 - rx / tx : 0)} lost)`
+}
+
+function DirectionStats({ title, d }: { title: string, d: TesterTrafficDirection }) {
+  return (
+    <div>
+      <h4 className={styles.subTitle}>{title}</h4>
+      <dl className={styles.kv}>
+        <dt>Sent / received</dt><dd>{formatBps(d.txBps)} / {formatBps(d.rxBps)}</dd>
+        <dt>Packets per second</dt><dd>{Math.round(d.txPps).toLocaleString()} / {Math.round(d.rxPps).toLocaleString()}</dd>
+        <dt>Total sent / received</dt><dd>{formatBytes(d.txBytes)} / {formatBytes(d.rxBytes)}</dd>
+        <dt>Loss</dt><dd>{formatLoss(d.lossRate)}</dd>
+        <dt>Latency p50 / p99</dt><dd>{formatMs(d.latency.p50Ms)} / {formatMs(d.latency.p99Ms)}</dd>
+        <dt>Out of order</dt><dd>{d.outOfOrder}</dd>
+        <dt>Send errors</dt><dd>{d.sendErrors}</dd>
+      </dl>
+    </div>
+  )
+}
+
+// TrafficChart plots the last seconds of received (solid) and sent
+// (dashed) throughput per direction.
+function TrafficChart({ series }: { series: TesterTrafficPoint[] }) {
+  const W = 600
+  const H = 180
+  const pad = { l: 64, r: 12, t: 10, b: 22 }
+  if (series.length < 2) return <p className={styles.hint}>The chart starts after two seconds of traffic.</p>
+  const t0 = series[0].t
+  const t1 = series[series.length - 1].t
+  const peak = Math.max(1, ...series.flatMap((p) => [p.ulTxBps, p.ulRxBps, p.dlTxBps, p.dlRxBps]))
+  const x = (t: number) => pad.l + ((t - t0) / Math.max(1, t1 - t0)) * (W - pad.l - pad.r)
+  const y = (v: number) => H - pad.b - (v / peak) * (H - pad.t - pad.b)
+  const line = (k: keyof TesterTrafficPoint) => series.map((p) => `${x(p.t).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ')
+  return (
+    <div>
+      <div className={styles.legend}>
+        <span><i className={styles.swatchDl} />Downlink received</span>
+        <span><i className={styles.swatchUl} />Uplink received</span>
+        <span className={styles.hint}>dashed = sent</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className={styles.chart} role="img" aria-label="Throughput over time">
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line x1={pad.l} x2={W - pad.r} y1={y(peak * f)} y2={y(peak * f)} className={styles.chartGrid} />
+            <text x={pad.l - 6} y={y(peak * f) + 4} textAnchor="end" className={styles.chartAxis}>{formatBps(peak * f)}</text>
+          </g>
+        ))}
+        <text x={pad.l} y={H - 4} className={styles.chartAxis}>{Math.round(t0)} s</text>
+        <text x={W - pad.r} y={H - 4} textAnchor="end" className={styles.chartAxis}>{Math.round(t1)} s</text>
+        <polyline points={line('dlTxBps')} className={styles.lineDl} strokeDasharray="4 3" />
+        <polyline points={line('ulTxBps')} className={styles.lineUl} strokeDasharray="4 3" />
+        <polyline points={line('dlRxBps')} className={styles.lineDl} />
+        <polyline points={line('ulRxBps')} className={styles.lineUl} />
+      </svg>
+    </div>
+  )
+}
+
+function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
+  return (
+    <section className={styles.card}>
+      <div className={styles.stageTop}>
+        <h3 className={styles.cardTitle}>Data plane</h3>
+        <span className={`${styles.pill} ${dp.activeUes ? styles.pillActive : styles.pillMuted}`}>{dp.activeUes} UEs sending</span>
+      </div>
+      <TrafficChart series={dp.series} />
+      <div className={styles.dirRow}>
+        <DirectionStats title="Uplink · UE → N3 → UPF → N6" d={dp.ul} />
+        <DirectionStats title="Downlink · N6 → UPF → N3 → UE" d={dp.dl} />
+      </div>
+    </section>
+  )
+}
 
 const ACTIVE_STATES: TesterRunSnapshot['state'][] = ['configuring', 'n2', 'running']
 
@@ -160,6 +243,8 @@ export default function TesterRunPage() {
               <StageCard title="PDU session" stage={snapshot.pdu} />
             </div>
 
+            <DataplaneCard dp={snapshot.dataplane} />
+
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>UEs</h3>
               <div className={styles.ueChips}>
@@ -197,7 +282,7 @@ export default function TesterRunPage() {
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
-                    <tr><th>#</th><th>Name</th><th>N2 IP</th><th>State</th><th>Attempts</th><th>Setup time</th><th>Registered</th><th>PDU sessions</th><th>Last error</th></tr>
+                    <tr><th>#</th><th>Name</th><th>N2 IP</th><th>State</th><th>Attempts</th><th>Setup time</th><th>Registered</th><th>PDU sessions</th><th>UL received</th><th>DL received</th><th>Last error</th></tr>
                   </thead>
                   <tbody>
                     {snapshot.gnbs.map((g) => (
@@ -210,6 +295,8 @@ export default function TesterRunPage() {
                         <td>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
                         <td>{g.registered} / {g.ueCount}</td>
                         <td>{g.established} / {g.ueCount}</td>
+                        <td>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'ul')}</td>
+                        <td>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'dl')}</td>
                         <td className={styles.causeCell}>{g.cause || '—'}</td>
                       </tr>
                     ))}

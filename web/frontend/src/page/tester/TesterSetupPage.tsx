@@ -7,9 +7,17 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterFieldError, TesterPlan, TesterProfile, TesterValidateResponse } from '../../api'
 import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
+import { formatBps } from './testerFormat'
 import styles from './tester.module.css'
 
 const PREVIEW_ROWS = 10
+
+// totalRate is the whole run's offered load for one direction.
+function totalRate(mbps: number, ues: number, packetSize: number): string {
+  if (!mbps || !ues || !packetSize) return 'off'
+  const bps = mbps * 1e6 * ues
+  return `${formatBps(bps)} · ${Math.round(bps / (packetSize * 8)).toLocaleString()} pps`
+}
 
 // lastSupi is the SUPI of the plan's last UE (the last gNB may own none).
 function lastSupi(plan: TesterPlan): string {
@@ -243,7 +251,34 @@ export default function TesterSetupPage() {
                 <Field label="UPF IP" path="network.n3.upfIp" {...fieldProps} />
                 <Field label="UPF port" path="network.n3.upfPort" numeric {...fieldProps} />
               </div>
-              <p className={styles.hint}>Checked and planned now; N3 IPs are not configured until the data-plane phase.</p>
+              <p className={styles.hint}>Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it.</p>
+            </section>
+
+            <section className={styles.card}>
+              <h3 className={styles.cardTitle}>N6 · data network side</h3>
+              <div className={styles.fieldGrid}>
+                <Field label="Local interface" path="network.n6.interface" {...fieldProps} />
+                <Field label="Sink IP" path="network.n6.sinkIp" {...fieldProps} />
+                <Field label="UPF N6 IP" path="network.n6.upfIp" {...fieldProps} />
+                <Field label="UE IP pool" path="network.n6.uePool" {...fieldProps} />
+              </div>
+              <p className={styles.hint}>Uplink leaves the UPF addressed to the sink IP (added to the interface if missing). Downlink is sent from it to each UE's IP; the tester routes the UE pool via the UPF N6 IP for the run and removes the route afterwards.</p>
+            </section>
+
+            <section className={styles.card}>
+              <h3 className={styles.cardTitle}>Traffic per UE</h3>
+              <div className={styles.fieldGrid}>
+                <Field label="Uplink (Mbps)" path="traffic.ulMbps" numeric {...fieldProps} />
+                <Field label="Downlink (Mbps)" path="traffic.dlMbps" numeric {...fieldProps} />
+                <Field label="Packet size (bytes, inner IP)" path="traffic.packetSize" numeric {...fieldProps} />
+                <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
+              </div>
+              <p className={styles.hint}>
+                Every UE starts sending as soon as its PDU session is up. At full scale: uplink
+                {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>,
+                downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>.
+                0 turns a direction off.
+              </p>
             </section>
 
             <section className={styles.card}>

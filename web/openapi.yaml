@@ -1120,7 +1120,7 @@ components:
             $ref: '#/components/schemas/ImageInfo'
     TesterProfile:
       type: object
-      required: [name, scale, gnb, ue, network, rates]
+      required: [name, scale, gnb, ue, traffic, network, rates]
       properties:
         name:
           type: string
@@ -1165,9 +1165,11 @@ components:
               example: '010203'
         ue:
           $ref: '#/components/schemas/TesterUeTemplate'
+        traffic:
+          $ref: '#/components/schemas/TesterTraffic'
         network:
           type: object
-          required: [n2, n3]
+          required: [n2, n3, n6]
           properties:
             n2:
               type: object
@@ -1207,6 +1209,23 @@ components:
                 upfPort:
                   type: integer
                   example: 2152
+            n6:
+              type: object
+              description: Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
+              required: [interface, sinkIp, upfIp, uePool]
+              properties:
+                interface:
+                  type: string
+                  example: docker-cn-ran
+                sinkIp:
+                  type: string
+                  example: 10.0.1.1
+                upfIp:
+                  type: string
+                  example: 10.0.1.5
+                uePool:
+                  type: string
+                  example: 10.60.0.0/16
         rates:
           type: object
           required: [n2, registration, pdu]
@@ -1217,6 +1236,26 @@ components:
               $ref: '#/components/schemas/TesterProcedureRate'
             pdu:
               $ref: '#/components/schemas/TesterProcedureRate'
+    TesterTraffic:
+      type: object
+      description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
+      required: [ulMbps, dlMbps, packetSize, port]
+      properties:
+        ulMbps:
+          type: number
+          description: Per UE; 0 disables uplink.
+          example: 1
+        dlMbps:
+          type: number
+          description: Per UE; 0 disables downlink.
+          example: 5
+        packetSize:
+          type: integer
+          example: 1400
+        port:
+          type: integer
+          description: UDP port at the N6 sink and at the UEs.
+          example: 9200
     TesterUeTemplate:
       type: object
       description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
@@ -1438,7 +1477,7 @@ components:
               type: integer
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, gnbs, ues, failedUes]
+      required: [runId, profileName, state, error, n2, registration, pdu, gnbs, ues, failedUes, dataplane]
       properties:
         runId:
           type: string
@@ -1474,6 +1513,111 @@ components:
           description: The first 200 UEs that failed; ues.failed has the total.
           items:
             $ref: '#/components/schemas/TesterUeFailure'
+        dataplane:
+          $ref: '#/components/schemas/TesterDataplaneSnapshot'
+    TesterDataplaneSnapshot:
+      type: object
+      required: [activeUes, ul, dl, gnbs, series]
+      properties:
+        activeUes:
+          type: integer
+        ul:
+          $ref: '#/components/schemas/TesterTrafficDirection'
+        dl:
+          $ref: '#/components/schemas/TesterTrafficDirection'
+        gnbs:
+          type: array
+          description: Per gNB, same order as gnbs in the run snapshot.
+          items:
+            $ref: '#/components/schemas/TesterGnbTraffic'
+        series:
+          type: array
+          description: One point per second, the last 300 seconds.
+          items:
+            $ref: '#/components/schemas/TesterTrafficPoint'
+    TesterTrafficDirection:
+      type: object
+      description: Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
+      required: [txPackets, txBytes, rxPackets, rxBytes, txBps, rxBps, txPps, rxPps, lossRate, outOfOrder, sendErrors, latency]
+      properties:
+        txPackets:
+          type: integer
+          format: int64
+        txBytes:
+          type: integer
+          format: int64
+        rxPackets:
+          type: integer
+          format: int64
+        rxBytes:
+          type: integer
+          format: int64
+        txBps:
+          type: number
+        rxBps:
+          type: number
+        txPps:
+          type: number
+        rxPps:
+          type: number
+        lossRate:
+          type: number
+          description: 1 - rx/tx so far.
+        outOfOrder:
+          type: integer
+          format: int64
+        sendErrors:
+          type: integer
+          format: int64
+        latency:
+          $ref: '#/components/schemas/TesterLatency'
+    TesterLatency:
+      type: object
+      description: One-way latency in milliseconds (send and receive share the host clock).
+      required: [count, avgMs, p50Ms, p99Ms, maxMs]
+      properties:
+        count:
+          type: integer
+          format: int64
+        avgMs:
+          type: number
+        p50Ms:
+          type: number
+        p99Ms:
+          type: number
+        maxMs:
+          type: number
+    TesterGnbTraffic:
+      type: object
+      required: [ulTxBytes, ulRxBytes, dlTxBytes, dlRxBytes]
+      properties:
+        ulTxBytes:
+          type: integer
+          format: int64
+        ulRxBytes:
+          type: integer
+          format: int64
+        dlTxBytes:
+          type: integer
+          format: int64
+        dlRxBytes:
+          type: integer
+          format: int64
+    TesterTrafficPoint:
+      type: object
+      required: [t, ulTxBps, ulRxBps, dlTxBps, dlRxBps]
+      properties:
+        t:
+          type: number
+          description: Seconds since traffic started.
+        ulTxBps:
+          type: number
+        ulRxBps:
+          type: number
+        dlTxBps:
+          type: number
+        dlRxBps:
+          type: number
     TesterUeSummary:
       type: object
       description: UEs per pipeline state; the fields add up to the UE count.
