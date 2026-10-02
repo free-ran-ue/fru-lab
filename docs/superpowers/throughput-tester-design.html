@@ -256,6 +256,24 @@ ul.tight li { margin: 3px 0; }
 .log-head h3 { margin: 0; }
 .log-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--f-mono); font-size: .78rem; color: var(--ink-3); margin-top: 6px; }
 .log-entry h4 { margin-top: 18px; margin-bottom: 4px; }
+/* FAQ */
+.faq { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 16px; }
+.faq > h3 { margin-top: 0; }
+.faq h4 { margin-top: 20px; margin-bottom: 6px; }
+.faq .short { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin: 10px 0 4px; }
+.faq .short b { color: var(--accent); }
+.pkt { display: flex; flex-wrap: wrap; gap: 3px; margin: 10px 0 4px; font-family: var(--f-sans); }
+.pkt .seg { border-radius: 6px; padding: 6px 8px; font-size: .78rem; line-height: 1.35; min-width: 0; border: 1px solid var(--line); }
+.pkt .seg small { display: block; font-family: var(--f-mono); font-size: .7rem; color: var(--ink-3); }
+.pkt .seg.k { background: var(--chip); }
+.pkt .seg.t { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.pkt .seg.h { background: var(--dl-soft); border-color: color-mix(in srgb, var(--dl) 45%, var(--line)); }
+.pkt .seg.p { background: var(--screen-bg); border-style: dashed; flex: 1 1 120px; }
+.pkt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .78rem; color: var(--ink-3); margin-bottom: 8px; }
+.pkt-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--line); }
+.qa { margin: 10px 0 0; }
+.qa dt { font-weight: 600; margin-top: 12px; }
+.qa dd { margin: 4px 0 0; color: var(--ink-2); }
 @media (max-width: 720px) {
   .screen-body { grid-template-columns: minmax(0, 1fr); }
   .m-side { display: none; }
@@ -291,6 +309,7 @@ ul.tight li { margin: 3px 0; }
     <a href="#questions"><span class="n">11</span>已確認的決定</a>
     <a href="#phases"><span class="n">12</span>分期計畫</a>
     <a href="#log"><span class="n">13</span>實作紀錄</a>
+    <a href="#faq"><span class="n">14</span>常見問題</a>
   </nav>
 </header>
 
@@ -1566,6 +1585,122 @@ ul.tight li { margin: 3px 0; }
       <li>fru-lab 關著的時候如果結束了超過 10 個 run，較舊的不會進到歷史。</li>
       <li>資料面效能的兩個待優化項目（見第 12 節「待優化」卡片）。</li>
     </ul>
+  </div>
+</section>
+
+
+<!-- 14 -->
+<section class="sec" id="faq">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">14</span><h2>常見問題</h2></div>
+    <p>上線前常被問到的問題與可以直接回答的答案。內容依目前程式（第 4 期）整理，數字是實測值或從程式算出來的。</p>
+  </div>
+
+  <div class="faq">
+    <h3>Q1 · 資料面的封包是怎麼產生的？</h3>
+    <div class="short"><b>簡答：</b>不開 TUN、不跑 UE 的協定堆疊。每個 UE 的 PDU session 建好後，tester 依核網給的參數（UE IP、UL TEID、UPF 位址）在記憶體裡組好一份封包模板；之後每送一個封包只改 24 bytes 的標頭（序號與送出時間），用一般的 UDP socket 依設定速率送出。UL 送成 GTP-U 給 UPF 的 N3，DL 送成一般 UDP 給 UE IP、由路由交給 UPF；另一端收回來後用標頭比對，算出吞吐、丟包與單向延遲。</div>
+
+    <h4>1. 組封包需要的資訊從哪裡來</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>資訊</th><th>來源</th><th>用在哪裡</th></tr>
+        <tr><td>UE IP（例如 10.60.0.7）</td><td>SMF 在 PDU Session Establishment Accept 裡配發</td><td>UL 內層來源 IP、DL 目的 IP</td></tr>
+        <tr><td>UL TEID、UPF N3 IP</td><td>AMF 送來的 PDU Session Resource Setup Request（UPF 那一端的隧道）</td><td>UL 的 GTP-U 標頭與目的位址（UPF:2152）</td></tr>
+        <tr><td>DL TEID</td><td>由 tester 的 gNB 自己配發，放在 PDU Session Resource Setup Response 回給核網</td><td>驗證 DL 是從正確的隧道回來</td></tr>
+        <tr><td>gNB N3 IP</td><td>Setup 頁的 N3 CIDR 依序分配，run 開始時加到主機網卡上</td><td>UL 從這裡送出、DL 在這裡收</td></tr>
+        <tr><td>Sink IP、UDP port</td><td>Setup 頁的 N6 設定（預設 10.0.1.1、9200）</td><td>UL 的目的地、DL 的來源；UE 端的 port 也是 9200</td></tr>
+      </table>
+    </div>
+
+    <h4>2. 上行（UL）封包長什麼樣子</h4>
+    <div class="pkt-legend">
+      <span><i style="background:var(--chip)"></i>Linux kernel 加（一般 UDP socket）</span>
+      <span><i style="background:var(--accent-soft)"></i>tester 的模板（每個 UE 組一次）</span>
+      <span><i style="background:var(--dl-soft)"></i>每個封包改寫</span>
+    </div>
+    <div class="pkt" aria-label="上行封包的欄位">
+      <div class="seg k">外層 IPv4<small>20 B · gNB N3 IP → UPF N3 IP</small></div>
+      <div class="seg k">外層 UDP<small>8 B · port 2152 → 2152</small></div>
+      <div class="seg t">GTP-U<small>8 B · 0x30 0xFF 長度 TEID</small></div>
+      <div class="seg t">內層 IPv4<small>20 B · UE IP → sink IP</small></div>
+      <div class="seg t">內層 UDP<small>8 B · 9200 → 9200</small></div>
+      <div class="seg h">tester 標頭<small>24 B</small></div>
+      <div class="seg p">填充（全 0）<small>補到設定的封包大小</small></div>
+    </div>
+    <ul class="tight">
+      <li><b>GTP-U 標頭 8 bytes</b>：版本 1、類型 G-PDU（0xFF）、長度、UL TEID。不帶序號，也不帶 QFI 擴充標頭（PDU Session Container），和 free-ran-ue 一樣（設計決定 Q15）。</li>
+      <li><b>內層 IPv4</b>：來源是 UE IP，目的是 sink IP，TTL 64、設 DF（不分片），IP checksum 在組模板時算好一次。</li>
+      <li><b>內層 UDP</b>：checksum 填 0，IPv4 允許這樣做，所以模板可以重複使用，不必每個封包重算。</li>
+      <li><b>封包大小</b>：設定值是「內層 IP 封包」的長度（預設 1400，可設 64–1400）。在 N3 線路上每個封包再多 36 bytes（GTP-U 8 + UDP 8 + IP 20），乙太網路再加 14。</li>
+      <li><b>外層 IP/UDP 由 kernel 加</b>：tester 用綁在 gNB N3 IP:2152 的一般 UDP socket 送出，所以不需要 raw socket。</li>
+    </ul>
+
+    <h4>3. tester 標頭（24 bytes，每個封包都有）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>欄位</th><th>長度</th><th>內容</th><th>用途</th></tr>
+        <tr><td class="mono">magic</td><td>4 B</td><td><code>FRUT</code></td><td>確認是 tester 的封包</td></tr>
+        <tr><td class="mono">runID</td><td>4 B</td><td>run ID 的雜湊</td><td>丟掉上一次 run 殘留、晚到的封包</td></tr>
+        <tr><td class="mono">ue | dir</td><td>4 B</td><td>UE 編號，最高位元標記 DL</td><td>UPF 做了 NAT、來源 IP 被改掉也認得出是哪個 UE、哪個方向</td></tr>
+        <tr><td class="mono">seq</td><td>4 B</td><td>每個 UE、每個方向各自遞增</td><td>算亂序</td></tr>
+        <tr><td class="mono">txNanos</td><td>8 B</td><td>送出當下的時間（奈秒）</td><td>算單向延遲</td></tr>
+      </table>
+    </div>
+
+    <h4>4. 下行（DL）封包怎麼來</h4>
+    <ol class="tight">
+      <li>tester 從 sink IP 送出一般 UDP 給 <code>UE IP:9200</code>，內容一樣是 24 bytes 標頭加填充；IP/UDP 標頭由 kernel 加。</li>
+      <li>run 開始時 tester 在主機上加了一條路由「UE pool（10.60.0.0/16）經由 UPF N6 IP（10.0.1.5）」，所以這個封包會被送進 UPF。</li>
+      <li>UPF 依 UE IP 找到這個 UE 的 PDU session，包成 GTP-U（TEID 是 gNB 配發的 DL TEID），送到 gNB 的 N3 IP:2152。free5GC 的 UPF（gtp5g）還會加上帶 QFI 的擴充標頭，tester 收的時候會略過。</li>
+      <li>tester 在 gNB 的 N3 socket 收到後拆掉 GTP-U，讀標頭。</li>
+    </ol>
+    <p>所以 DL 的「封包產生」在 tester，「GTP-U 封裝」在 UPF，這正好是要量的 UPF 下行轉發路徑。</p>
+
+    <h4>5. 速率怎麼控制</h4>
+    <ul class="tight">
+      <li>設定是「每個 UE 的 Mbps」。每秒封包數 = Mbps × 10⁶ ÷ (封包大小 × 8)。例：1 Mbps、1400 bytes → 每個 UE 每秒約 89.3 個封包。</li>
+      <li>每條發送線用 token bucket：每 1 ms 補一次額度，最多累積 10 ms 的量，避免落後後一次爆量；有額度就輪流替它負責的 UE 送封包。</li>
+      <li>發送線分配：UL 每個 gNB 一條（各自一個 socket，從該 gNB 的 N3 IP 送出）；DL 固定 4 條，各自一個 socket，UE 依編號分配。一個 socket 實測約 8–9 萬 pps（1400 bytes 約 1 Gbps）。</li>
+      <li>UE 的 PDU session 建好後等 500 ms 才開始送，讓 UPF 先裝好下行隧道；按 Stop 立即停送，再等 200 ms 收完路上的封包才結算。</li>
+    </ul>
+
+    <h4>6. 收的一端怎麼算數字</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>數字</th><th>怎麼算</th></tr>
+        <tr><td>送出（Tx）</td><td><code>sendto</code> 成功才算；被本機拒絕的另記為 Send errors</td></tr>
+        <tr><td>收到（Rx）</td><td>UL 在 sink socket 收，DL 在各 gNB 的 N3 socket 收；標頭的 magic、runID、方向都對才算</td></tr>
+        <tr><td>吞吐</td><td>每秒的內層 IP bytes × 8（和設定的 Mbps 同一個基準，不含 GTP-U 與外層標頭）</td></tr>
+        <tr><td>丟包率</td><td>1 − 收到封包數 ÷ 送出封包數（整個 run 累計）</td></tr>
+        <tr><td>單向延遲 p50 / p99</td><td>收到時間 − 標頭裡的送出時間；收送在同一台主機、同一個程式，用同一個時鐘，不需要校時</td></tr>
+        <tr><td>亂序</td><td>同一個 UE、同方向收到的序號比上一個小</td></tr>
+        <tr><td>Misrouted</td><td>DL 從別的 TEID 或別的 gNB 回來：表示 UPF 轉錯隧道，不算收到</td></tr>
+      </table>
+    </div>
+
+    <h4>7. 主管可能追問的問題</h4>
+    <dl class="qa">
+      <dt>為什麼不用 TUN 介面或真的 UE 協定堆疊？</dt>
+      <dd>要模擬幾千個 UE，每個 UE 一個 TUN、每個封包進出 kernel 一次，成本太高，也管不動那麼多介面。要量的是 UPF 的使用者面轉發，只需要「對的封包格式、對的 TEID、對的 UE IP」，用模板直接組就夠了，也能精準控制速率。</dd>
+      <dt>為什麼不用 raw socket、DPDK 或 AF_XDP？</dt>
+      <dd>目前是 PoC 階段，一般 UDP socket 已經能到單 socket 約 1 Gbps、實測 DL 3 Gbps 無丟包，部署也最簡單（不用綁網卡、不用大頁記憶體）。更高速率的方向是先加多 socket、sendmmsg／UDP GSO，再考慮 AF_XDP（列在第 12 節「之後」與「待優化」）。</dd>
+      <dt>怎麼確定封包真的經過 UPF，不是在本機繞回來？</dt>
+      <dd>UL 送出去的是 GTP-U，只有 UPF 拆掉外層後 sink 才會收到內層的 UDP；DL 回來時是 GTP-U，而且 TEID 必須是 gNB 配發的那一個，否則記為 misrouted。DL 的路由也是明確指向 UPF 的 N6 IP。</dd>
+      <dt>UPF 做了 NAT，怎麼知道封包是哪個 UE 的？</dt>
+      <dd>不靠 IP 判斷，靠每個封包裡的 tester 標頭（UE 編號、方向、run ID）。</dd>
+      <dt>畫面上的 Mbps 是哪一層的？</dt>
+      <dd>UE 看到的 IP 層（內層 IP 封包）。N3 線路上每個封包多 36 bytes，1400 bytes 封包時線路上的量約多 2.6%。</dd>
+      <dt>延遲準不準？包含什麼？</dt>
+      <dd>收送用同一個時鐘，不會有兩台機器時間不同步的誤差。量到的是單向延遲，包含本機 kernel、Docker bridge、UPF 處理的時間。實測 1 Mbps 時 p50 約 0.05 ms、p99 約 0.1 ms。</dd>
+      <dt>丟包會不會其實是測試機自己丟的？</dt>
+      <dd>有幾個防護：每個接收 socket 開 8 MB 緩衝；送不出去的另外計數不算進 Tx；PDU 建好後延遲 500 ms 才送；Stop 後多等 200 ms 收尾。實測 1 Mbps × 4 UE 與 DL 3 Gbps 都是 0 或近乎 0 丟包。</dd>
+      <dt>和 iperf 有什麼不同？</dt>
+      <dd>iperf 需要一個真的 UE 網路介面，一次一條連線；tester 不用 UE 協定堆疊，就能讓每個 UE 都走自己的 PDU session、同時送收上下行，數字可以拆到每個 gNB，也會檢查封包有沒有走對隧道。</dd>
+      <dt>封包內容是什麼？支援 TCP、IPv6 嗎？</dt>
+      <dd>內容是 24 bytes 標頭加全 0 填充，沒有真的應用資料。目前只有 IPv4、UDP、固定速率；IPv6、TCP、突發／IMIX 流量都還沒做（列在第 12 節「之後」）。</dd>
+      <dt>目前的速率上限？</dt>
+      <dd>一個 socket 約 1 Gbps（1400 bytes）。UL 每個 gNB 約 1 Gbps；DL 總共約 4 Gbps、單一 UE 約 1 Gbps。改善方式見第 12 節「待優化」。</dd>
+    </dl>
   </div>
 </section>
 

@@ -1,7 +1,12 @@
 import axios from 'axios'
 import { Configuration, DefaultApi } from './api'
 
-const apiBasePath = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8888`
+// apiBaseUrl is where fru-lab's API lives. fru-lab's backend serves this
+// page too, so by default it is the page's own origin (any port, http or
+// https, behind a reverse proxy or not). VITE_API_BASE_URL overrides it;
+// `npm run dev` instead proxies /api to the backend (vite.config.ts).
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
+const apiBasePath = apiBaseUrl
 
 const axiosInstance = axios.create()
 
