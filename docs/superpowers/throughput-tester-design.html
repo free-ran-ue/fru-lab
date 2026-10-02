@@ -1702,6 +1702,102 @@ ul.tight li { margin: 3px 0; }
       <dd>上限取決於機器的 CPU：發送線與接收 socket 都跟 CPU 核心數走。6 vCPU 測試機實測 UL 4.3 Gbps、DL 2.2 Gbps 同時跑（CPU 全滿，一半花在 kernel 的封包處理，包含 UPF）。單一 UE 只走一條發送線，約 1 Gbps。再往上要靠 UDP GSO 或 AF_XDP（第 12 節「待優化」）。</dd>
     </dl>
   </div>
+
+  <div class="faq">
+    <h3>Q2 · 不考慮硬體，資料面能到多少吞吐？</h3>
+    <div class="short"><b>簡答：</b>沒有固定上限，跟 CPU 核心數成正比：每多一顆核心，發送端大約多 17 萬 pps，1400 bytes 封包約 1.9 Gbps（測試機的核心速度，只算 tester 送出）。限制的是「每秒封包數」而不是 bytes，所以封包越大越划算。</div>
+    <h4>實測：只量 tester 發送端（不經過 UPF）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>發送線（≈ CPU 核心）</th><th>每秒封包</th><th>吞吐（內層 IP）</th></tr>
+        <tr><td>1</td><td>170 k</td><td>1.9 Gbps</td></tr>
+        <tr><td>2</td><td>337 k</td><td>3.8 Gbps</td></tr>
+        <tr><td>4</td><td>649 k</td><td>7.3 Gbps</td></tr>
+        <tr><td>6</td><td>925 k</td><td>10.4 Gbps</td></tr>
+        <tr><td>6（60 個 UE）</td><td>922 k</td><td>10.3 Gbps</td></tr>
+        <tr><td>6（500 bytes 封包）</td><td>920 k</td><td>3.7 Gbps</td></tr>
+      </table>
+    </div>
+    <ul class="tight">
+      <li>跟核心數線性成長；批次送出（sendmmsg）後，單線速度是原本的兩倍。</li>
+      <li>500 與 1400 bytes 的 pps 幾乎一樣：成本是「每個封包」的固定開銷。</li>
+      <li>UE 數量不影響（6 個與 60 個相同）。</li>
+    </ul>
+    <h4>不隨核心數變大的上限</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>限制</th><th>上限</th></tr>
+        <tr><td>單一 UE、單一方向</td><td>只走一條發送線，約 1.9 Gbps</td></tr>
+        <tr><td>單一 gNB 的 DL 接收</td><td>每個 gNB 一條讀取線（同一個 gNB 的 DL 來源與目的都相同，kernel 無法分散）</td></tr>
+        <tr><td>UL 接收</td><td>sink 最多 16 個 socket</td></tr>
+        <tr><td>封包大小</td><td>最大 1400 bytes</td></tr>
+      </table>
+    </div>
+    <p>以雙向各 10 Gbps 推算：每個方向要送約 89 萬 pps、也要收約 89 萬 pps，光 tester 就需要約 20 顆以上核心（接收成本假設與發送相當）。</p>
+  </div>
+
+  <div class="faq">
+    <h3>Q3 · tester 跟 5GC 跑在同一台，gtp5g UPF 會吃很多 CPU 嗎？</h3>
+    <div class="short"><b>簡答：</b>會。UPF 本身（gtp5g 加上轉送、NAT）約佔忙碌 CPU 的 22%，加上封包進出 UPF container 的 veth／bridge 約 4 成。而且這些都算在 tester 的 CPU 上，<code>top</code> 看不出來。</div>
+    <h4>實測：10 gNB × 40 UE × 每 UE 上下行各 50 Mbps（各 2 Gbps，約 36 萬 pps），perf 錄整台機器的呼叫堆疊</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>誰在用 CPU</th><th>佔忙碌 CPU</th></tr>
+        <tr><td>UPF：gtp5g 封裝／解封裝（含 URR 用量計算）</td><td>10.6%</td></tr>
+        <tr><td>UPF：轉送、NAT（MASQUERADE）、conntrack</td><td>11.3%</td></tr>
+        <tr><td>封包進出 UPF container（veth、Docker bridge）</td><td>17.5%</td></tr>
+        <tr><td>tester 送封包（系統呼叫 + 本機 UDP/IP）</td><td>28.4%</td></tr>
+        <tr><td>tester 收封包（系統呼叫 + 本機 UDP/IP）</td><td>13.4%</td></tr>
+        <tr><td>tester 自己的程式（組封包、統計）</td><td>14.9%</td></tr>
+        <tr><td>其他</td><td>3.9%</td></tr>
+      </table>
+    </div>
+    <ul class="tight">
+      <li><b>UPF 約每顆核心轉 30 萬 pps</b>（1400 bytes 約 3.6 Gbps）：這次整台約用 5 顆核心，UPF 約佔 1.1 顆。</li>
+      <li><b>算在 tester 頭上</b>：錄到的 CPU 有 96.9% 屬於 fru-tester 行程，UPF 程式只有 0.01%。gtp5g 在 kernel 裡，tester 每送一個封包，kernel 在同一顆 CPU 上接著做完 UPF 的處理，兩者直接搶同一批 CPU，也無法用綁核分開。</li>
+      <li><b>gtp5g 的低效率</b>：每個封包查 URR 時都先用 <code>snprintf</code> 把 ID 組成十六進位字串再比對（<code>find_urr_by_id</code> → <code>seid_and_u32id_to_hex_str</code>），光 URR 就佔約 4%。這是 gtp5g 的實作，調高 <code>urrThreshold</code> 只減少用量報告，不會減少這個查詢。</li>
+    </ul>
+    <h4>建議</h4>
+    <ul class="tight">
+      <li>要打高流量時，tester 與 5GC 分兩台機器、用實體網卡連，UPF 的數字才不會被 tester 拖累。</li>
+      <li>一定要同一台時：測試不需要 NAT 就關掉 UPF 的 MASQUERADE，可省下 conntrack／NAT 的成本；數字用「每顆核心能轉多少」解讀，不要直接當成 UPF 的能力。</li>
+    </ul>
+  </div>
+
+  <div class="faq">
+    <h3>Q4 · 想要到 40 Gbps 有可能嗎？（硬體不是問題，看架構）</h3>
+    <div class="short"><b>簡答：</b>有可能，但目前的架構還差 3–7 倍。瓶頸都已經找到，做完下面兩個改進後，在核心數足夠、tester 與 5GC 分開的機器上，上下行合計 40G 是合理的目標。</div>
+    <h4>需求換算（1400 bytes 封包）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>目標</th><th>tester 每秒要送</th><th>tester 每秒要收</th></tr>
+        <tr><td>上下行合計 40G</td><td>357 萬 pps</td><td>357 萬 pps</td></tr>
+        <tr><td>上下行各 40G</td><td>714 萬 pps</td><td>714 萬 pps</td></tr>
+      </table>
+    </div>
+    <h4>目前架構卡在哪</h4>
+    <ol class="tight">
+      <li><b>一般 UDP socket 的每封包成本</b>（實測）：每核心約 17 萬 pps，合計 40G 光發送就要約 21 顆核心、收也差不多；單機核心很多時 kernel 鎖競爭會讓擴展不線性。</li>
+      <li><b>同一台時與 UPF 搶 CPU</b>（實測）：UPF 加容器進出約 4 成，見 Q3。</li>
+      <li><b>所有發送／讀取線共用同一組統計</b>（程式確認）：每個封包都更新共用的計數器，延遲直方圖還有一把全域的鎖。每秒幾百萬封包、幾十顆核心時會變成排隊點。</li>
+      <li><b>每個 gNB 的 DL 只有一條讀取線</b>（程式確認）：同一個 gNB 的 DL 封包來源與目的都相同，kernel 與網卡多佇列分流（RSS）都分不開，除非網卡支援依 GTP TEID 分流（例如 Intel E810）。DL 越高 gNB 要越多，40G DL 約需 20 個以上 gNB。</li>
+      <li><b>UL 接收最多 16 個 socket</b>（程式確認）：寫死的上限。</li>
+    </ol>
+    <h4>改進方式</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>步驟</th><th>內容</th><th>預期效果</th><th>工作量</th></tr>
+        <tr><td>1</td><td>統計改成每條發送／讀取線各自記錄，由統計線每秒彙總；拿掉接收 socket 數的上限</td><td>消除多核心時的排隊，讓核心數換得到吞吐</td><td>小</td></tr>
+        <tr><td>2</td><td>UDP GSO／GRO：一次把一大塊資料交給 kernel，由 kernel 切成多個封包（收的時候合併）；同一個 UE 的封包目的地相同，符合 GSO 的條件</td><td>每核心 pps 一般可提升 3–5 倍</td><td>中</td></tr>
+      </table>
+    </div>
+    <h4>要先說清楚的前提</h4>
+    <ul class="tight">
+      <li><b>被測的 UPF 本身未必轉得了 40G</b>：gtp5g 每核心約 30 萬 pps，40G 需要它用上十幾到二十幾顆核心，再加上 URR 字串查詢的低效率。tester 的目標是不要成為瓶頸，數字上不去時很可能就是 UPF 的上限，而這正是要測的東西。</li>
+      <li><b>不建議用巨型封包（MTU 9000）當捷徑</b>：pps 會降到約六分之一、現有架構可能就夠，但真實網路是 1500 MTU，數字不具代表性。</li>
+      <li>建議做完步驟 1、2 後，先在高效能機器上量「每核心能送收多少、加核心是否線性成長」，再評估 40G。</li>
+    </ul>
+  </div>
 </section>
 
 </div>
