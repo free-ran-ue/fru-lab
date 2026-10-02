@@ -210,7 +210,7 @@ func TestDeregisterAfterPdu(t *testing.T) {
 	require.Equal(t, metrics.Accepted, out.Result)
 	require.Equal(t, metrics.Accepted, EstablishPdu(assoc, link, u, time.Second).Result)
 
-	out = Deregister(assoc, link, u, time.Second)
+	out = Deregister(assoc, link, u, time.Second, nil)
 	require.Equal(t, metrics.Accepted, out.Result, out.Cause)
 	require.False(t, out.DoneAt.IsZero())
 	require.Equal(t, 1, amf.Deregistrations())
@@ -224,7 +224,7 @@ func TestDeregisterTimeout(t *testing.T) {
 	link, out := Register(assoc, u, time.Second)
 	require.Equal(t, metrics.Accepted, out.Result)
 
-	out = Deregister(assoc, link, u, 100*time.Millisecond)
+	out = Deregister(assoc, link, u, 100*time.Millisecond, nil)
 	require.Equal(t, metrics.TimedOut, out.Result)
 }
 
@@ -235,6 +235,21 @@ func TestDeregisterWhenTheAssociationIsLost(t *testing.T) {
 	require.Equal(t, metrics.Accepted, out.Result)
 	_ = amfEnd.Close()
 
-	out = Deregister(assoc, link, u, time.Second)
+	out = Deregister(assoc, link, u, time.Second, nil)
 	require.Equal(t, metrics.Failed, out.Result)
+}
+
+func TestDeregisterStopsWaitingWhenAborted(t *testing.T) {
+	assoc, _, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{IgnoreDeregistration: true} })
+	u := newUE(t, "0000000001")
+	link, out := Register(assoc, u, time.Second)
+	require.Equal(t, metrics.Accepted, out.Result)
+	abort := make(chan struct{})
+	time.AfterFunc(20*time.Millisecond, func() { close(abort) })
+
+	start := time.Now()
+	out = Deregister(assoc, link, u, time.Minute, abort)
+	require.Equal(t, metrics.Failed, out.Result)
+	require.Equal(t, ErrAborted.Error(), out.Cause)
+	require.Less(t, time.Since(start), time.Second)
 }

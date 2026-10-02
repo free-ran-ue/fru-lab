@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 type amfDialer struct {
 	amf    *fakecore.AMF
 	refuse map[string]bool
+	ends   *sync.Map // local IP -> AMF side *fakecore.PipeEnd, if set
 }
 
 func (d amfDialer) Dial(localIP, _ string, _ int, _ time.Duration) (gnb.Conn, error) {
@@ -29,6 +31,9 @@ func (d amfDialer) Dial(localIP, _ string, _ int, _ time.Duration) (gnb.Conn, er
 		return nil, errors.New("connection refused")
 	}
 	g, a := fakecore.Pipe()
+	if d.ends != nil {
+		d.ends.Store(localIP, a)
+	}
 	go func() { _ = d.amf.Serve(a) }()
 	return g, nil
 }
@@ -47,6 +52,7 @@ func e2eProfile() profile.Profile {
 	p := testProfile()
 	p.Rates.Registration = profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 2000, Retries: 1}
 	p.Rates.Pdu = profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 2000, Retries: 1}
+	p.Rates.Deregistration = profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 2000, Retries: 1}
 	return p
 }
 
@@ -93,7 +99,7 @@ func TestRunRegistersAndEstablishesEveryUe(t *testing.T) {
 	require.Eventually(t, func() bool { return len(amf.SetupResponses()) == 10 }, time.Second, 5*time.Millisecond)
 
 	snap = stopAndWait(t, c)
-	require.Equal(t, UeSummary{Established: 10}, snap.Ues)
+	require.Equal(t, UeSummary{Deregistered: 10}, snap.Ues)
 	present, _ := addrs.snapshot()
 	require.Empty(t, present)
 }
@@ -164,7 +170,8 @@ func TestStopDuringRegistrationCancelsQueuedUes(t *testing.T) {
 	require.True(t, snap.Pdu.Done)
 	require.Positive(t, snap.Ues.Cancelled)
 	require.Equal(t, int64(snap.Ues.Cancelled), snap.Registration.Skipped)
-	require.Equal(t, 10, snap.Ues.Established+snap.Ues.Cancelled)
+	require.Equal(t, 10, snap.Ues.Deregistered+snap.Ues.Cancelled, "UEs that got through deregister")
+	require.True(t, snap.Deregistration.Done)
 	frozen := snap.Registration.TotalTimeMs
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, frozen, c.Snapshot().Registration.TotalTimeMs, "total time stops at the last finish")
@@ -217,4 +224,130 @@ func TestDataplaneStartFailureFailsTheRunAndRollsBack(t *testing.T) {
 	present, _ := addrs.snapshot()
 	require.Empty(t, present)
 	require.Equal(t, int64(0), snap.N2.Attempted)
+}
+
+func TestStopDeregistersEveryUeThenClosesN2(t *testing.T) {
+	amf := newFakeAMF(nil)
+	c, addrs := newE2EController(amfDialer{amf: amf})
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+
+	snap := stopAndWait(t, c)
+	require.Equal(t, int64(10), snap.Deregistration.Accepted)
+	require.True(t, snap.Deregistration.Done)
+	require.Greater(t, snap.Deregistration.AvgMs, 0.0)
+	require.Equal(t, UeSummary{Deregistered: 10}, snap.Ues)
+	require.Equal(t, 10, amf.Deregistrations())
+	require.Equal(t, int64(3), snap.N2Release.Accepted)
+	require.True(t, snap.N2Release.Done)
+	require.Equal(t, "user", snap.StopReason)
+	for _, g := range snap.Gnbs {
+		require.Equal(t, GnbClosed, g.State)
+	}
+	present, _ := addrs.snapshot()
+	require.Empty(t, present)
+}
+
+func TestStopDeregistersRegisteredButNotEstablishedUes(t *testing.T) {
+	amf := newFakeAMF(func(string) fakecore.Behavior { return fakecore.Behavior{RejectPdu: 27} })
+	c, _ := newE2EController(amfDialer{amf: amf})
+	p := e2eProfile()
+	p.Rates.Pdu.Retries = 0
+	_, err := c.Start(p)
+	require.NoError(t, err)
+	waitFor(t, c, "every PDU rejected", func(s Snapshot) bool { return s.Pdu.Done })
+
+	snap := stopAndWait(t, c)
+	require.Equal(t, int64(10), snap.Deregistration.Accepted, "registered UEs deregister even without a PDU session")
+	require.Equal(t, 10, amf.Deregistrations())
+}
+
+func TestUesThatNeverRegisteredAreSkippedAtCleanup(t *testing.T) {
+	amf := newFakeAMF(func(supi string) fakecore.Behavior {
+		if supi == "imsi-208930000000003" {
+			return fakecore.Behavior{RejectRegistration: 7}
+		}
+		return fakecore.Behavior{}
+	})
+	c, _ := newE2EController(amfDialer{amf: amf})
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	waitFor(t, c, "pdu stage done", func(s Snapshot) bool { return s.Pdu.Done })
+
+	snap := stopAndWait(t, c)
+	require.Equal(t, int64(9), snap.Deregistration.Accepted)
+	require.Equal(t, int64(1), snap.Deregistration.Skipped)
+	require.True(t, snap.Deregistration.Done)
+	require.Equal(t, UeSummary{Deregistered: 9, Failed: 1}, snap.Ues)
+}
+
+func TestDeregistrationTimeoutIsCountedAndListed(t *testing.T) {
+	amf := newFakeAMF(func(string) fakecore.Behavior { return fakecore.Behavior{IgnoreDeregistration: true} })
+	c, _ := newE2EController(amfDialer{amf: amf})
+	p := e2eProfile()
+	p.Rates.Deregistration = profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0}
+	_, err := c.Start(p)
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+
+	snap := stopAndWait(t, c)
+	require.Equal(t, int64(10), snap.Deregistration.TimedOut)
+	require.Equal(t, 10, snap.Ues.Failed)
+	require.Len(t, snap.FailedUes, 10)
+	require.Equal(t, "deregistration", snap.FailedUes[0].Stage)
+}
+
+func TestUesOfALostGnbAreSkippedAtCleanup(t *testing.T) {
+	ends := &sync.Map{}
+	c, _ := newE2EController(amfDialer{amf: newFakeAMF(nil), ends: ends})
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	end, ok := ends.Load("10.0.1.10") // gNB-1's N2 IP
+	require.True(t, ok)
+	_ = end.(*fakecore.PipeEnd).Close()
+	waitFor(t, c, "gNB-1 lost", func(s Snapshot) bool { return s.Gnbs[0].State == GnbLost })
+
+	snap := stopAndWait(t, c)
+	require.Equal(t, int64(4), snap.Deregistration.Skipped)
+	require.Equal(t, int64(6), snap.Deregistration.Accepted)
+	require.Equal(t, int64(2), snap.N2Release.Accepted)
+	require.Equal(t, int64(1), snap.N2Release.Skipped)
+}
+
+func TestSecondStopAbortsCleanup(t *testing.T) {
+	amf := newFakeAMF(func(string) fakecore.Behavior { return fakecore.Behavior{IgnoreDeregistration: true} })
+	c, addrs := newE2EController(amfDialer{amf: amf})
+	p := e2eProfile()
+	p.Rates.Deregistration = profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 5, TimeoutMs: 60000, Retries: 0}
+	_, err := c.Start(p)
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	_, err = c.Stop()
+	require.NoError(t, err)
+	waitFor(t, c, "deregistering", func(s Snapshot) bool { return s.Deregistration.InFlight == 5 })
+
+	_, err = c.Stop() // skip the rest of cleanup
+	require.NoError(t, err)
+	snap := waitState(t, c, StateStopped)
+	require.True(t, snap.Deregistration.Done)
+	require.Equal(t, int64(5), snap.Deregistration.Skipped, "the queued half was never sent")
+	require.True(t, snap.N2Release.Done)
+	present, _ := addrs.snapshot()
+	require.Empty(t, present)
+	_, err = c.Stop()
+	require.ErrorIs(t, err, ErrNotRunning)
+}
+
+func TestMaxDurationStopsTheRun(t *testing.T) {
+	c, _ := newE2EController(amfDialer{amf: newFakeAMF(nil)})
+	c.deps.MaxDurationUnit = time.Millisecond
+	p := e2eProfile()
+	p.Traffic.MaxDurationMin = 300 // 300 ms with the test unit
+	_, err := c.Start(p)
+	require.NoError(t, err)
+	snap := waitState(t, c, StateStopped)
+	require.Equal(t, "maxDuration", snap.StopReason)
+	require.Equal(t, int64(10), snap.Deregistration.Accepted)
 }

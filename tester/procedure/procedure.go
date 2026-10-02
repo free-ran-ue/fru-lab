@@ -32,6 +32,10 @@ var configUpdateWait = time.Second
 
 var errTimeout = errors.New("timeout")
 
+// ErrAborted is the Outcome cause when the caller gave up waiting
+// (Deregister's abort channel); the core may still answer later.
+var ErrAborted = errors.New("aborted")
+
 // Register runs one initial registration attempt. On success the returned
 // link stays attached for the PDU session; on failure it is detached.
 // Timing: from sending Initial UE Message to sending Registration Complete
@@ -59,7 +63,7 @@ func register(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.
 		return failed(err)
 	}
 	for {
-		d, err := next(assoc, link, deadline)
+		d, err := next(assoc, link, deadline, nil)
 		if err != nil {
 			return failed(err)
 		}
@@ -103,7 +107,7 @@ func EstablishPdu(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout ti
 	}
 	var setup *gnb.PduSetup
 	for {
-		d, err := next(assoc, link, deadline)
+		d, err := next(assoc, link, deadline, nil)
 		if err != nil {
 			return failed(err)
 		}
@@ -140,8 +144,10 @@ var releaseWait = time.Second
 // Deregister runs one UE-originating deregistration attempt; the core
 // releases the PDU session with it. Timing: from sending the request to
 // receiving Deregistration Accept (DoneAt). The link stays attached so a
-// retry can reuse its AMF UE NGAP ID; the caller detaches it.
-func Deregister(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time.Duration) Outcome {
+// retry can reuse its AMF UE NGAP ID; the caller detaches it. Closing
+// abort (nil = never) stops waiting at once: Result Failed, Cause
+// ErrAborted's text.
+func Deregister(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time.Duration, abort <-chan struct{}) Outcome {
 	deadline := time.Now().Add(timeout)
 	req, err := u.DeregistrationRequest()
 	if err != nil {
@@ -151,7 +157,7 @@ func Deregister(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time
 		return failed(err)
 	}
 	for {
-		d, err := next(assoc, link, deadline)
+		d, err := next(assoc, link, deadline, abort)
 		if err != nil {
 			return failed(err)
 		}
@@ -180,7 +186,7 @@ func Deregister(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time
 // (DownlinkReleased) or the deadline.
 func awaitRelease(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) {
 	for {
-		d, err := next(assoc, link, deadline)
+		d, err := next(assoc, link, deadline, nil)
 		if err != nil || d.Kind != gnb.DownlinkNas {
 			return
 		}
@@ -192,7 +198,7 @@ func awaitRelease(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) 
 // that window (there should be nothing) is dropped.
 func awaitConfigUpdate(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.Time) {
 	for {
-		d, err := next(assoc, link, deadline)
+		d, err := next(assoc, link, deadline, nil)
 		if err != nil || d.Kind != gnb.DownlinkNas {
 			return
 		}
@@ -209,7 +215,9 @@ func minTime(a, b time.Time) time.Time {
 	return b
 }
 
-func next(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) (gnb.Downlink, error) {
+// next waits for the UE's next downlink. abort (nil = never) ends the
+// wait early with ErrAborted.
+func next(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time, abort <-chan struct{}) (gnb.Downlink, error) {
 	t := time.NewTimer(time.Until(deadline))
 	defer t.Stop()
 	select {
@@ -219,6 +227,8 @@ func next(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) (gnb.Dow
 		return gnb.Downlink{}, assoc.Err()
 	case <-t.C:
 		return gnb.Downlink{}, errTimeout
+	case <-abort:
+		return gnb.Downlink{}, ErrAborted
 	}
 }
 

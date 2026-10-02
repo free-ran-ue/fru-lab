@@ -237,7 +237,7 @@ func (s *NasSession) onPduRequest(m message.Message) ([]Downlink, error) {
 	if s.behavior.IgnorePduRequest {
 		return nil, nil
 	}
-	s.state = "done"
+	// a rejected PDU request leaves the UE registered, as in a real core
 	var gsm []byte
 	var err error
 	pduSetup := false

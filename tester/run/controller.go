@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	loggergoModel "github.com/Alonza0314/logger-go/v2/model"
@@ -36,6 +37,9 @@ type Deps struct {
 	NewID  func() string
 	// NewDataplane builds the traffic engine; nil = dataplane.New.
 	NewDataplane func(dataplane.Config) Dataplane
+	// MaxDurationUnit is what one unit of Traffic.MaxDurationMin lasts;
+	// zero = time.Minute (tests shorten it).
+	MaxDurationUnit time.Duration
 }
 
 // Dataplane is the slice of *dataplane.Engine a run uses.
@@ -73,6 +77,9 @@ func NewController(deps Deps) *Controller {
 	}
 	if deps.NewDataplane == nil {
 		deps.NewDataplane = func(c dataplane.Config) Dataplane { return dataplane.New(c) }
+	}
+	if deps.MaxDurationUnit == 0 {
+		deps.MaxDurationUnit = time.Minute
 	}
 	return &Controller{deps: deps, changed: make(chan struct{})}
 }
@@ -164,15 +171,20 @@ func (c *Controller) Start(p profile.Profile) (Snapshot, error) {
 }
 
 // Stop asks the active run to tear down. It returns immediately; watch
-// the snapshot for StateStopped.
+// the snapshot for StateStopped. Stop during cleanup skips the remaining
+// deregistrations; SCTP is still closed and the IPs removed.
 func (c *Controller) Stop() (Snapshot, error) {
 	c.mu.Lock()
 	r := c.current
 	c.mu.Unlock()
-	if r == nil || r.state().Finished() || r.state() == StateStopping {
+	if r == nil || r.state().Finished() {
 		return Snapshot{}, ErrNotRunning
 	}
-	r.requestStop()
+	if r.state() == StateStopping {
+		r.abortCleanup()
+	} else {
+		r.requestStop("user")
+	}
 	return r.snapshot(), nil
 }
 
@@ -183,12 +195,14 @@ func (c *Controller) Snapshot() Snapshot {
 	if r == nil {
 		empty := metrics.NewStage("", 0).Snapshot()
 		return Snapshot{State: StateIdle, Gnbs: []GnbStatus{}, FailedUes: []UeFailure{},
-			N2: empty, Registration: empty, Pdu: empty, Dataplane: emptyDataplane()}
+			N2: empty, Registration: empty, Pdu: empty, Deregistration: empty, N2Release: empty,
+			Dataplane: emptyDataplane()}
 	}
 	return r.snapshot()
 }
 
 // Shutdown stops any active run and waits for teardown, for process exit.
+// It skips the deregistrations: a slow core must not hold up exit.
 func (c *Controller) Shutdown() {
 	c.mu.Lock()
 	r := c.current
@@ -197,7 +211,8 @@ func (c *Controller) Shutdown() {
 		return
 	}
 	if !r.state().Finished() {
-		r.requestStop()
+		r.requestStop("user")
+		r.abortCleanup()
 	}
 	<-r.done
 }
@@ -209,29 +224,35 @@ type run struct {
 	deps    Deps
 	notify  func()
 
-	n2, reg, pdu *metrics.Stage
-	regStage     *procStage
-	pduStage     *procStage
-	teids        gnb.TeidAllocator
+	n2, reg, pdu     *metrics.Stage
+	dereg, n2Release *metrics.Stage // cleanup after Stop
+	regStage         *procStage
+	pduStage         *procStage
+	teids            gnb.TeidAllocator
 
 	stop context.CancelFunc
 	ctx  context.Context
 	done chan struct{}
+	// cleanupCtx is cancelled by a second Stop (or Shutdown) to skip the
+	// deregistrations still queued.
+	cleanupCtx   context.Context
+	abortCleanup context.CancelFunc
 
-	mu        sync.Mutex
-	st        State
-	errMsg    string
-	startedAt time.Time
-	stoppedAt time.Time
-	gnbs      []GnbStatus
-	conns     []gnb.Conn
-	assocs    []*gnb.Association
-	ues       []ueRun
-	summary   UeSummary
-	failures  []UeFailure
-	added     []addedAddr  // in the order they were added
-	routes    []addedRoute // routes this run added
-	dp        Dataplane    // nil until the IPs are configured
+	mu         sync.Mutex
+	st         State
+	stopReason string
+	errMsg     string
+	startedAt  time.Time
+	stoppedAt  time.Time
+	gnbs       []GnbStatus
+	conns      []gnb.Conn
+	assocs     []*gnb.Association
+	ues        []ueRun
+	summary    UeSummary
+	failures   []UeFailure
+	added      []addedAddr  // in the order they were added
+	routes     []addedRoute // routes this run added
+	dp         Dataplane    // nil until the IPs are configured
 }
 
 type addedRoute struct {
@@ -243,16 +264,18 @@ type addedRoute struct {
 // ueRun is one UE's progress; guarded by run.mu except nas and link,
 // which only the UE's current attempt touches.
 type ueRun struct {
-	spec        profile.UeSpec
-	state       UeState
-	regAttempts int
-	pduAttempts int
-	regStart    time.Time
-	pduStart    time.Time
-	regDone     bool // has a final registration outcome (or was skipped)
-	pduDone     bool
-	ueIP        string
-	pduSetup    *gnb.PduSetup
+	spec          profile.UeSpec
+	state         UeState
+	regAttempts   int
+	pduAttempts   int
+	deregAttempts int
+	regStart      time.Time
+	pduStart      time.Time
+	deregStart    time.Time
+	regDone       bool // has a final registration outcome (or was skipped)
+	pduDone       bool
+	ueIP          string
+	pduSetup      *gnb.PduSetup
 
 	nas  *ue.UE
 	link *gnb.UeLink
@@ -265,8 +288,12 @@ type addedAddr struct {
 
 func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify func()) *run {
 	ctx, cancel := context.WithCancel(context.Background())
+	cleanupCtx, abortCleanup := context.WithCancel(context.Background())
 	r := &run{
-		id: id, profile: p, plan: plan, deps: deps, notify: notify,
+		cleanupCtx: cleanupCtx, abortCleanup: abortCleanup,
+		dereg:     metrics.NewStage("deregistration", len(plan.Ues)),
+		n2Release: metrics.NewStage("n2Release", len(plan.Gnbs)),
+		id:        id, profile: p, plan: plan, deps: deps, notify: notify,
 		n2:        metrics.NewStage("n2", len(plan.Gnbs)),
 		reg:       metrics.NewStage("registration", len(plan.Ues)),
 		pdu:       metrics.NewStage("pdu", len(plan.Ues)),
@@ -324,7 +351,15 @@ func (r *run) setUeState(i int, st UeState) {
 	r.ues[i].state = st
 }
 
-func (r *run) requestStop() { r.stop() }
+// requestStop starts the teardown; the first reason given is kept.
+func (r *run) requestStop(reason string) {
+	r.mu.Lock()
+	if r.stopReason == "" {
+		r.stopReason = reason
+	}
+	r.mu.Unlock()
+	r.stop()
+}
 
 func (r *run) snapshot() Snapshot {
 	r.mu.Lock()
@@ -332,6 +367,7 @@ func (r *run) snapshot() Snapshot {
 	snap := Snapshot{
 		RunID: r.id, ProfileName: r.profile.Name, State: r.st, Error: r.errMsg,
 		N2: r.n2.Snapshot(), Registration: r.reg.Snapshot(), Pdu: r.pdu.Snapshot(),
+		Deregistration: r.dereg.Snapshot(), N2Release: r.n2Release.Snapshot(), StopReason: r.stopReason,
 		Gnbs: append([]GnbStatus(nil), r.gnbs...),
 		Ues:  r.summary,
 		// copy into a non-nil slice: an empty list must encode as [] (the
@@ -353,6 +389,11 @@ func (r *run) snapshot() Snapshot {
 
 func (r *run) execute() {
 	defer close(r.done)
+	defer r.abortCleanup() // releases the context
+	if m := r.profile.Traffic.MaxDurationMin; m > 0 {
+		t := time.AfterFunc(time.Duration(m)*r.deps.MaxDurationUnit, func() { r.requestStop("maxDuration") })
+		defer t.Stop()
+	}
 
 	err := r.configureIPs()
 	if err == nil && r.ctx.Err() == nil {
@@ -386,6 +427,7 @@ func (r *run) execute() {
 	}
 	pipelines.Wait() // in-flight procedures finish or time out (design N4)
 	r.skipUnfinished()
+	r.deregisterAll()
 	r.closeConns()
 	r.removeIPs()
 	r.setState(StateStopped)
@@ -545,6 +587,9 @@ func (r *run) removeIPs() {
 // would outlast `docker stop`'s grace period and leak gNB IPs.
 const maxConcurrentCloses = 256
 
+// closeConns is the last cleanup stage: it closes every gNB's SCTP
+// association, timed per gNB. gNBs that never came up or were lost have
+// nothing to close and are counted skipped.
 func (r *run) closeConns() {
 	sem := make(chan struct{}, maxConcurrentCloses)
 	var wg sync.WaitGroup
@@ -554,17 +599,136 @@ func (r *run) closeConns() {
 		r.conns[i] = nil
 		r.mu.Unlock()
 		if conn == nil {
+			r.n2Release.Skip()
 			continue
 		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer func() { <-sem; wg.Done() }()
-			_ = conn.Close()
+			r.n2Release.Begin(false)
+			start := r.deps.Now()
+			if err := conn.Close(); err != nil {
+				r.n2Release.Finish(metrics.Failed, r.deps.Now().Sub(start), err.Error())
+			} else {
+				r.n2Release.Finish(metrics.Accepted, r.deps.Now().Sub(start), "")
+			}
 			r.updateGnb(i, func(g *GnbStatus) { g.State = GnbClosed })
 		}()
 	}
 	wg.Wait()
+}
+
+// deregisterAll is the first cleanup stage (design Q12, N4): every UE
+// that registered deregisters, paced like registration; the core releases
+// its PDU session with it. UEs that never registered, or whose gNB
+// association is gone, are skipped, and so is whatever is still queued
+// when a second Stop aborts the cleanup.
+func (r *run) deregisterAll() {
+	var todo []int
+	r.mu.Lock()
+	for i := range r.ues {
+		u := &r.ues[i]
+		assoc := r.assocs[u.spec.Gnb]
+		if u.link == nil || assoc == nil || assoc.Err() != nil || r.cleanupCtx.Err() != nil {
+			r.dereg.Skip()
+			continue
+		}
+		todo = append(todo, i)
+	}
+	r.mu.Unlock()
+	r.notify()
+	if len(todo) == 0 {
+		return
+	}
+	ctx, finished := context.WithCancel(r.cleanupCtx)
+	defer finished()
+	var left atomic.Int64
+	left.Store(int64(len(todo)))
+	stage := newProcStage(r.profile.Rates.Deregistration, len(r.ues), func(i int) bool {
+		retry := r.attemptDeregistration(i)
+		if !retry && left.Add(-1) == 0 {
+			finished()
+		}
+		return retry
+	})
+	for _, i := range todo {
+		stage.enqueue(i)
+	}
+	stage.run(ctx)
+	for _, i := range stage.drain() { // aborted before they were sent
+		r.dereg.Skip()
+		r.mu.Lock()
+		r.detach(i)
+		r.mu.Unlock()
+	}
+	r.notify()
+}
+
+// detach drops a UE's link from its association; r.mu must be held.
+func (r *run) detach(i int) {
+	u := &r.ues[i]
+	if a := r.assocs[u.spec.Gnb]; a != nil && u.link != nil {
+		a.Detach(u.link)
+	}
+	u.link = nil
+}
+
+// attemptDeregistration is the deregistration stage's callback.
+func (r *run) attemptDeregistration(i int) bool {
+	rates := r.profile.Rates.Deregistration
+	r.mu.Lock()
+	u := &r.ues[i]
+	u.deregAttempts++
+	attempt := u.deregAttempts
+	if attempt == 1 {
+		u.deregStart = r.deps.Now()
+	}
+	assoc, link := r.assocs[u.spec.Gnb], u.link
+	r.setUeState(i, UeDeregistering)
+	r.mu.Unlock()
+	r.dereg.Begin(attempt > 1)
+	r.notify()
+
+	out := procedure.Deregister(assoc, link, u.nas, time.Duration(rates.TimeoutMs)*time.Millisecond, r.cleanupCtx.Done())
+	end := r.deps.Now()
+	if !out.DoneAt.IsZero() {
+		end = out.DoneAt
+	}
+	latency := end.Sub(u.deregStart)
+
+	if r.cleanupCtx.Err() != nil && out.Result != metrics.Accepted {
+		// a second Stop skipped the rest of cleanup while this one waited
+		r.dereg.Finish(metrics.Failed, latency, "cleanup skipped")
+		r.mu.Lock()
+		r.detach(i)
+		r.setUeState(i, UeCancelled)
+		r.mu.Unlock()
+		r.notify()
+		return false
+	}
+	if out.Result == metrics.Accepted {
+		r.dereg.Finish(metrics.Accepted, latency, "")
+		r.mu.Lock()
+		r.detach(i)
+		r.setUeState(i, UeDeregistered)
+		r.mu.Unlock()
+		r.notify()
+		return false
+	}
+	if attempt <= rates.Retries && r.cleanupCtx.Err() == nil && out.Result != metrics.Rejected {
+		r.dereg.Retrying() // same link: it still carries the AMF UE NGAP ID
+		r.notify()
+		return true
+	}
+	r.dereg.Finish(out.Result, latency, out.Cause)
+	r.mu.Lock()
+	r.detach(i)
+	r.setUeState(i, UeFailed)
+	r.recordFailure(i, "deregistration", out.Cause, attempt)
+	r.mu.Unlock()
+	r.notify()
+	return false
 }
 
 // runN2 brings every gNB up concurrently. A failed attempt with retries

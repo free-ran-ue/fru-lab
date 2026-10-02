@@ -18,7 +18,7 @@ const (
 	StateConfiguring State = "configuring" // adding gNB IPs to host interfaces
 	StateN2          State = "n2"          // SCTP + NG Setup in progress
 	StateRunning     State = "running"     // N2 finished; UEs register / establish PDU sessions, then hold
-	StateStopping    State = "stopping"    // closing associations, removing IPs
+	StateStopping    State = "stopping"    // traffic stopped; deregistering UEs, closing associations, removing IPs
 	StateStopped     State = "stopped"
 	StateFailed      State = "failed" // could not configure the host; nothing was attempted
 )
@@ -54,26 +54,30 @@ type GnbStatus struct {
 type UeState string
 
 const (
-	UePending      UeState = "pending" // waiting for its gNB or a registration slot
-	UeRegistering  UeState = "registering"
-	UeRegistered   UeState = "registered" // waiting for a PDU slot
-	UeEstablishing UeState = "establishing"
-	UeEstablished  UeState = "established"
-	UeFailed       UeState = "failed"    // registration or PDU failed for good
-	UeSkipped      UeState = "skipped"   // its gNB never came up
-	UeCancelled    UeState = "cancelled" // the run was stopped before it finished
+	UePending       UeState = "pending" // waiting for its gNB or a registration slot
+	UeRegistering   UeState = "registering"
+	UeRegistered    UeState = "registered" // waiting for a PDU slot
+	UeEstablishing  UeState = "establishing"
+	UeEstablished   UeState = "established"
+	UeFailed        UeState = "failed"    // registration or PDU failed for good
+	UeSkipped       UeState = "skipped"   // its gNB never came up
+	UeCancelled     UeState = "cancelled" // the run was stopped before it finished
+	UeDeregistering UeState = "deregistering"
+	UeDeregistered  UeState = "deregistered" // cleanup after Stop deregistered it
 )
 
 // UeSummary counts UEs per state; the fields add up to the UE count.
 type UeSummary struct {
-	Pending      int `json:"pending"`
-	Registering  int `json:"registering"`
-	Registered   int `json:"registered"`
-	Establishing int `json:"establishing"`
-	Established  int `json:"established"`
-	Failed       int `json:"failed"`
-	Skipped      int `json:"skipped"`
-	Cancelled    int `json:"cancelled"`
+	Pending       int `json:"pending"`
+	Registering   int `json:"registering"`
+	Registered    int `json:"registered"`
+	Establishing  int `json:"establishing"`
+	Established   int `json:"established"`
+	Failed        int `json:"failed"`
+	Skipped       int `json:"skipped"`
+	Cancelled     int `json:"cancelled"`
+	Deregistering int `json:"deregistering"`
+	Deregistered  int `json:"deregistered"`
 }
 
 func (s *UeSummary) add(st UeState, d int) {
@@ -94,6 +98,10 @@ func (s *UeSummary) add(st UeState, d int) {
 		s.Skipped += d
 	case UeCancelled:
 		s.Cancelled += d
+	case UeDeregistering:
+		s.Deregistering += d
+	case UeDeregistered:
+		s.Deregistered += d
 	}
 }
 
@@ -101,7 +109,7 @@ func (s *UeSummary) add(st UeState, d int) {
 type UeFailure struct {
 	Supi     string `json:"supi"`
 	Gnb      string `json:"gnb"`
-	Stage    string `json:"stage"` // "registration" or "pdu"
+	Stage    string `json:"stage"` // "registration", "pdu" or "deregistration"
 	Cause    string `json:"cause"`
 	Attempts int    `json:"attempts"`
 }
@@ -121,8 +129,15 @@ type Snapshot struct {
 	N2           metrics.StageSnapshot `json:"n2"`
 	Registration metrics.StageSnapshot `json:"registration"`
 	Pdu          metrics.StageSnapshot `json:"pdu"`
-	Gnbs         []GnbStatus           `json:"gnbs"`
-	Ues          UeSummary             `json:"ues"`
-	FailedUes    []UeFailure           `json:"failedUes"` // first maxFailuresListed failures
-	Dataplane    dataplane.Snapshot    `json:"dataplane"`
+	// Cleanup after Stop: every registered UE deregisters, then every
+	// gNB's SCTP association is closed (design Q12; no PDU Session
+	// Release, the core releases the session with the deregistration).
+	Deregistration metrics.StageSnapshot `json:"deregistration"`
+	N2Release      metrics.StageSnapshot `json:"n2Release"`
+	// StopReason is "user" (Stop pressed) or "maxDuration"; empty while running.
+	StopReason string             `json:"stopReason"`
+	Gnbs       []GnbStatus        `json:"gnbs"`
+	Ues        UeSummary          `json:"ues"`
+	FailedUes  []UeFailure        `json:"failedUes"` // first maxFailuresListed failures
+	Dataplane  dataplane.Snapshot `json:"dataplane"`
 }
