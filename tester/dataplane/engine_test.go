@@ -24,6 +24,7 @@ type fakeUPF struct {
 	ues       map[uint32]ueRoute // by UE index (from the tester header)
 	dropEvery uint64
 	dlSeen    atomic.Uint64
+	wrongTeid bool // put downlink in a tunnel the gNB did not allocate
 }
 
 type ueRoute struct {
@@ -88,6 +89,7 @@ func (u *fakeUPF) downlink() {
 		}
 		u.mu.Lock()
 		r, ok := u.ues[h.ue]
+		wrong := u.wrongTeid
 		u.mu.Unlock()
 		if !ok {
 			continue
@@ -97,7 +99,11 @@ func (u *fakeUPF) downlink() {
 		copy(inner[ipv4HeaderLen+udpHeaderLen:], buf[:n])
 		gtp := []byte{0x34, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x85, 1, 0x00, 0x09, 0x00}
 		binary.BigEndian.PutUint16(gtp[2:4], uint16(len(inner)+8))
-		binary.BigEndian.PutUint32(gtp[4:8], r.dlTeid)
+		teid := r.dlTeid
+		if wrong {
+			teid += 1000
+		}
+		binary.BigEndian.PutUint32(gtp[4:8], teid)
 		_, _ = u.n3.WriteToUDPAddrPort(append(gtp, inner...), r.gnb)
 	}
 }
@@ -180,4 +186,57 @@ func TestStartFailsWhenAnAddressIsNotLocal(t *testing.T) {
 	err := e.Start()
 	require.ErrorContains(t, err, "bind gNB-1 N3 192.0.2.1:2152")
 	e.Stop(0) // safe on a never-started engine
+}
+
+// A UE's traffic starts only StartDelay after AddUE: right after the PDU
+// session is up, the UPF may not know the gNB's downlink tunnel yet, and
+// packets sent in that window are lost.
+func TestTrafficStartsAfterTheStartDelay(t *testing.T) {
+	sink := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), freePort(t, "127.0.0.1"))
+	upf := newFakeUPF(t, sink, 0)
+	gnbs := []netip.Addr{netip.MustParseAddr("127.0.0.11")}
+	e := New(Config{
+		RunID: 1, UeCount: 1, GnbN3IPs: gnbs, SinkIP: sink.Addr(), Port: sink.Port(),
+		PacketSize: 500, UlBps: 1e6, DlBps: 1e6, StartDelay: 300 * time.Millisecond,
+		DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() },
+	})
+	require.NoError(t, e.Start())
+	ueIP := netip.MustParseAddr("10.60.0.1")
+	upf.route(0, ueRoute{dlTeid: 100, gnb: netip.AddrPortFrom(gnbs[0], GtpPort), ueIP: ueIP})
+	e.AddUE(0, 0, ueIP, 0x1000, 100, upf.n3Addr())
+
+	time.Sleep(150 * time.Millisecond)
+	s := e.Snapshot()
+	require.Zero(t, s.Ul.TxPackets+s.Dl.TxPackets, "nothing is sent during the delay")
+	require.Zero(t, s.ActiveUes)
+
+	time.Sleep(400 * time.Millisecond)
+	e.Stop(50 * time.Millisecond)
+	s = e.Snapshot()
+	require.Equal(t, 1, s.ActiveUes)
+	require.Positive(t, s.Dl.TxPackets)
+	require.Equal(t, s.Dl.TxPackets, s.Dl.RxPackets)
+}
+
+// Q11 asks for receive verification: downlink that comes back in a tunnel
+// the gNB did not allocate for that UE is a UPF fault, not a delivery.
+func TestDownlinkInTheWrongTunnelIsMisroutedNotReceived(t *testing.T) {
+	sink := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), freePort(t, "127.0.0.1"))
+	upf := newFakeUPF(t, sink, 0)
+	upf.mu.Lock()
+	upf.wrongTeid = true
+	upf.mu.Unlock()
+	gnbs := []netip.Addr{netip.MustParseAddr("127.0.0.11")}
+	e := New(Config{RunID: 3, UeCount: 1, GnbN3IPs: gnbs, SinkIP: sink.Addr(), Port: sink.Port(),
+		PacketSize: 500, DlBps: 1e6, DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() }})
+	require.NoError(t, e.Start())
+	ueIP := netip.MustParseAddr("10.60.0.1")
+	upf.route(0, ueRoute{dlTeid: 100, gnb: netip.AddrPortFrom(gnbs[0], GtpPort), ueIP: ueIP})
+	e.AddUE(0, 0, ueIP, 0x1000, 100, upf.n3Addr())
+	time.Sleep(300 * time.Millisecond)
+	e.Stop(50 * time.Millisecond)
+	s := e.Snapshot()
+	require.Positive(t, s.Dl.TxPackets)
+	require.Zero(t, s.Dl.RxPackets)
+	require.Equal(t, s.Dl.TxPackets, s.Dl.Misrouted)
 }

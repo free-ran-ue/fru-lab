@@ -50,6 +50,12 @@ type Dataplane interface {
 // closing the sockets, so the final loss figure is not inflated.
 const dataplaneDrain = 200 * time.Millisecond
 
+// trafficStartDelay holds each UE's traffic back after its PDU session is
+// up: the UPF learns the gNB's downlink tunnel only after the SMF has
+// processed the PDU Session Resource Setup Response, and downlink sent
+// before that is dropped (seen as start-up loss against free5GC).
+const trafficStartDelay = 500 * time.Millisecond
+
 type Controller struct {
 	deps Deps
 
@@ -476,7 +482,7 @@ func (r *run) startDataplane() error {
 	dp := r.deps.NewDataplane(dataplane.Config{
 		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3,
 		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
-		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6,
+		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 	})
 	if err := dp.Start(); err != nil {
 		return fmt.Errorf("start data plane: %w", err)

@@ -383,6 +383,10 @@ export interface TesterTrafficDirection {
     'lossRate': number;
     'outOfOrder': number;
     'sendErrors': number;
+    /**
+     * Downlink that arrived in another UE\'s tunnel or at another gNB. Always 0 for uplink.
+     */
+    'misrouted': number;
     'latency': TesterLatency;
 }
 export interface TesterTrafficPoint {

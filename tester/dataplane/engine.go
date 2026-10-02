@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"tester/metrics"
@@ -27,8 +28,17 @@ type Config struct {
 	// IP:Port, which the host routes to the UPF's N6; tests point it at
 	// a fake UPF.
 	DlTarget func(ueIP netip.Addr) netip.AddrPort
-	Now      func() time.Time
+	// StartDelay holds a UE's traffic back after AddUE. Right after the PDU
+	// session is up the UPF may not have the gNB's downlink tunnel yet;
+	// packets sent in that window are lost.
+	StartDelay time.Duration
+	Now        func() time.Time
 }
+
+// rcvBuf is the receive buffer asked for on every socket: at ~1 Gbps the
+// default (~208 KB) holds under 2 ms, and a reader stall longer than that
+// would drop packets in this host's kernel and look like UPF loss.
+const rcvBuf = 8 << 20
 
 // dlSenders shards downlink flows over this many goroutines.
 const dlSenders = 4
@@ -39,6 +49,7 @@ const historyLen = 300
 type flow struct {
 	ue             uint32
 	gnb            int
+	dlTeid         uint32 // the tunnel downlink must arrive in
 	upf            netip.AddrPort
 	dlTo           netip.AddrPort
 	ul             []byte // G-PDU template, written only by its UL sender
@@ -68,7 +79,7 @@ func (s *shard) load() []*flow {
 
 type dirCounters struct {
 	txPackets, txBytes, rxPackets, rxBytes atomic.Uint64
-	outOfOrder, sendErrors                 atomic.Uint64
+	outOfOrder, sendErrors, misrouted      atomic.Uint64
 	latency                                metrics.Latency
 }
 
@@ -88,6 +99,7 @@ type Engine struct {
 	ul, dl   dirCounters
 	gnbs     []gnbCounters
 	active   atomic.Int64
+	stopped  atomic.Bool
 
 	cancel  context.CancelFunc
 	senders sync.WaitGroup
@@ -125,6 +137,7 @@ func (e *Engine) Start() error {
 			e.closeSockets()
 			return fmt.Errorf("bind gNB-%d N3 %s:%d: %w", i+1, ip, GtpPort, err)
 		}
+		growReadBuffer(c)
 		e.n3 = append(e.n3, c)
 	}
 	c, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(e.cfg.SinkIP, e.cfg.Port)))
@@ -132,6 +145,7 @@ func (e *Engine) Start() error {
 		e.closeSockets()
 		return fmt.Errorf("bind N6 sink %s:%d: %w", e.cfg.SinkIP, e.cfg.Port, err)
 	}
+	growReadBuffer(c)
 	e.n6 = c
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -164,18 +178,48 @@ func (e *Engine) Start() error {
 // AddUE starts traffic for an established UE (design Q9: as soon as its
 // PDU session is up, without waiting for the others).
 func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort) {
-	_ = dlTeid // downlink is attributed by the payload header, which survives NAT
-	f := &flow{ue: uint32(ue), gnb: gnb, upf: upfN3, ulLast: -1, dlLast: -1}
+	if e.stopped.Load() {
+		return // a PDU accept that lands while the run is stopping
+	}
+	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3, ulLast: -1, dlLast: -1}
 	f.ul = ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)
 	f.dl = make([]byte, e.cfg.PacketSize-ipv4HeaderLen-udpHeaderLen)
 	f.dlTo = netip.AddrPortFrom(ueIP, e.cfg.Port)
 	if e.cfg.DlTarget != nil {
 		f.dlTo = e.cfg.DlTarget(ueIP)
 	}
-	e.flows[ue].Store(f)
-	e.ulShards[gnb].add(f)
-	e.dlShards[ue%dlSenders].add(f)
+	if e.cfg.StartDelay <= 0 {
+		e.activate(f)
+		return
+	}
+	time.AfterFunc(e.cfg.StartDelay, func() { e.activate(f) })
+}
+
+// activate puts a flow into its senders' shards; a no-op once stopped.
+func (e *Engine) activate(f *flow) {
+	if e.stopped.Load() {
+		return
+	}
+	e.flows[f.ue].Store(f)
+	e.ulShards[f.gnb].add(f)
+	e.dlShards[int(f.ue)%dlSenders].add(f)
 	e.active.Add(1)
+}
+
+// growReadBuffer asks for rcvBuf, forcing past net.core.rmem_max when the
+// process may (fru-tester runs with CAP_NET_ADMIN), else as much as allowed.
+func growReadBuffer(c *net.UDPConn) {
+	raw, err := c.SyscallConn()
+	if err == nil {
+		var serr error
+		_ = raw.Control(func(fd uintptr) {
+			serr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUFFORCE, rcvBuf)
+		})
+		if serr == nil {
+			return
+		}
+	}
+	_ = c.SetReadBuffer(rcvBuf)
 }
 
 // pace sends round-robin over a shard's flows at bps per flow, using a
@@ -248,7 +292,7 @@ func (e *Engine) readN6() {
 			}
 			continue
 		}
-		e.receive(&e.ul, buf[:n], false, ipv4HeaderLen+udpHeaderLen+n)
+		e.receive(&e.ul, buf[:n], false, ipv4HeaderLen+udpHeaderLen+n, -1, 0)
 	}
 }
 
@@ -264,23 +308,31 @@ func (e *Engine) readN3(g int, conn *net.UDPConn) {
 			}
 			continue
 		}
-		_, inner, err := parseGpdu(buf[:n])
+		teid, inner, err := parseGpdu(buf[:n])
 		if err != nil {
 			continue
 		}
 		if payload, ok := udpPayload(inner); ok {
-			e.receive(&e.dl, payload, true, len(inner))
+			e.receive(&e.dl, payload, true, len(inner), g, teid)
 		}
 	}
 }
 
-func (e *Engine) receive(c *dirCounters, payload []byte, dl bool, ipLen int) {
+// receive counts one packet that came back. For downlink, gnb and teid
+// are where it arrived; a UE's downlink in another tunnel or at another
+// gNB is a forwarding fault, counted as misrouted rather than received
+// (this also keeps each flow's dlLast owned by its own gNB's reader).
+func (e *Engine) receive(c *dirCounters, payload []byte, dl bool, ipLen, gnb int, teid uint32) {
 	h, ok := parseHeader(payload)
 	if !ok || h.runID != e.cfg.RunID || h.dl != dl || int(h.ue) >= len(e.flows) {
 		return // not ours, or left over from an earlier run
 	}
 	f := e.flows[h.ue].Load()
 	if f == nil {
+		return
+	}
+	if dl && (teid != f.dlTeid || gnb != f.gnb) {
+		c.misrouted.Add(1)
 		return
 	}
 	c.rxPackets.Add(1)
@@ -303,8 +355,8 @@ func (e *Engine) receive(c *dirCounters, payload []byte, dl bool, ipLen int) {
 // Stop halts the senders at once (design Q12), lets in-flight packets
 // arrive for drain, then closes the sockets.
 func (e *Engine) Stop(drain time.Duration) {
-	if e.cancel == nil {
-		return
+	if !e.stopped.CompareAndSwap(false, true) || e.cancel == nil {
+		return // never started, or already stopped
 	}
 	e.cancel()
 	e.senders.Wait()

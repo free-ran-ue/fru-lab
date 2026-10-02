@@ -30,6 +30,7 @@ type DirSnapshot struct {
 	RxPps      float64                 `json:"rxPps"`
 	LossRate   float64                 `json:"lossRate"` // 1 - rx/tx so far
 	OutOfOrder uint64                  `json:"outOfOrder"`
+	Misrouted  uint64                  `json:"misrouted"` // arrived in another UE's tunnel or at another gNB
 	SendErrors uint64                  `json:"sendErrors"`
 	Latency    metrics.LatencySnapshot `json:"latency"` // one-way, same host clock
 }
@@ -131,7 +132,7 @@ func dirSnapshot(c *dirCounters, txBps, rxBps, txPps, rxPps float64) DirSnapshot
 		TxPackets: c.txPackets.Load(), TxBytes: c.txBytes.Load(),
 		RxPackets: c.rxPackets.Load(), RxBytes: c.rxBytes.Load(),
 		TxBps: txBps, RxBps: rxBps, TxPps: txPps, RxPps: rxPps,
-		OutOfOrder: c.outOfOrder.Load(), SendErrors: c.sendErrors.Load(),
+		OutOfOrder: c.outOfOrder.Load(), SendErrors: c.sendErrors.Load(), Misrouted: c.misrouted.Load(),
 		Latency: c.latency.Snapshot(),
 	}
 	if d.TxPackets > 0 && d.RxPackets < d.TxPackets {

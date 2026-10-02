@@ -17,6 +17,7 @@ Name | Type | Description | Notes
 **lossRate** | **number** | 1 - rx/tx so far. | [default to undefined]
 **outOfOrder** | **number** |  | [default to undefined]
 **sendErrors** | **number** |  | [default to undefined]
+**misrouted** | **number** | Downlink that arrived in another UE\&#39;s tunnel or at another gNB. Always 0 for uplink. | [default to undefined]
 **latency** | [**TesterLatency**](TesterLatency.md) |  | [default to undefined]
 
 ## Example
@@ -36,6 +37,7 @@ const instance: TesterTrafficDirection = {
     lossRate,
     outOfOrder,
     sendErrors,
+    misrouted,
     latency,
 };
 ```

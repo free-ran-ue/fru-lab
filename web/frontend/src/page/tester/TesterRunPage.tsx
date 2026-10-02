@@ -57,6 +57,7 @@ function DirectionStats({ title, d }: { title: string, d: TesterTrafficDirection
         <dt>Latency p50 / p99</dt><dd>{formatMs(d.latency.p50Ms)} / {formatMs(d.latency.p99Ms)}</dd>
         <dt>Out of order</dt><dd>{d.outOfOrder}</dd>
         <dt>Send errors</dt><dd>{d.sendErrors}</dd>
+        {d.misrouted > 0 && <><dt>Misrouted</dt><dd>{d.misrouted}</dd></>}
       </dl>
     </div>
   )

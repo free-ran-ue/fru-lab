@@ -190,6 +190,7 @@ func TestEstablishedUesStartTrafficWithTheirTunnel(t *testing.T) {
 	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
 
 	require.Equal(t, uint16(9200), dp.cfg.Port)
+	require.Equal(t, trafficStartDelay, dp.cfg.StartDelay, "traffic waits for the UPF to learn the DL tunnel")
 	require.Equal(t, 1400, dp.cfg.PacketSize)
 	require.Equal(t, 5e6, dp.cfg.DlBps)
 	require.Equal(t, []netip.Addr{netip.MustParseAddr("10.0.2.10"), netip.MustParseAddr("10.0.2.11"), netip.MustParseAddr("10.0.2.12")}, dp.cfg.GnbN3IPs)

@@ -1538,7 +1538,7 @@ components:
     TesterTrafficDirection:
       type: object
       description: Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
-      required: [txPackets, txBytes, rxPackets, rxBytes, txBps, rxBps, txPps, rxPps, lossRate, outOfOrder, sendErrors, latency]
+      required: [txPackets, txBytes, rxPackets, rxBytes, txBps, rxBps, txPps, rxPps, lossRate, outOfOrder, sendErrors, misrouted, latency]
       properties:
         txPackets:
           type: integer
@@ -1569,6 +1569,10 @@ components:
         sendErrors:
           type: integer
           format: int64
+        misrouted:
+          type: integer
+          format: int64
+          description: Downlink that arrived in another UE's tunnel or at another gNB. Always 0 for uplink.
         latency:
           $ref: '#/components/schemas/TesterLatency'
     TesterLatency:
