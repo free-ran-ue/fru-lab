@@ -5,7 +5,7 @@ import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterRunSnapshot, TesterStageSnapshot } from '../../api'
+import type { TesterRunSnapshot, TesterStageSnapshot, TesterUeSummary } from '../../api'
 import { buildTesterStreamUrl, formatMs } from './testerFormat'
 import styles from './tester.module.css'
 
@@ -15,11 +15,23 @@ const STATE_LABELS: Record<TesterRunSnapshot['state'], string> = {
   idle: 'No run yet',
   configuring: 'Configuring gNB IPs',
   n2: 'N2 setup in progress',
-  running: 'Holding N2',
+  running: 'Running',
   stopping: 'Stopping',
   stopped: 'Stopped',
   failed: 'Failed',
 }
+
+// UE_STATES orders the UE summary chips: key, label, pill style.
+const UE_STATES: [keyof TesterUeSummary, string, 'pillOk' | 'pillBad' | 'pillActive' | 'pillMuted'][] = [
+  ['established', 'Established', 'pillOk'],
+  ['establishing', 'Establishing', 'pillActive'],
+  ['registered', 'Registered', 'pillActive'],
+  ['registering', 'Registering', 'pillActive'],
+  ['pending', 'Pending', 'pillMuted'],
+  ['failed', 'Failed', 'pillBad'],
+  ['skipped', 'gNB down', 'pillMuted'],
+  ['cancelled', 'Cancelled', 'pillMuted'],
+]
 
 const ACTIVE_STATES: TesterRunSnapshot['state'][] = ['configuring', 'n2', 'running']
 
@@ -30,7 +42,7 @@ function StageCard({ title, stage }: { title: string, stage: TesterStageSnapshot
       <div className={styles.stageTop}>
         <h3 className={styles.cardTitle}>{title}</h3>
         <span className={`${styles.pill} ${stage.done ? styles.pillOk : styles.pillActive}`}>
-          {stage.done ? 'Done' : `${stage.inFlight} in flight`}
+          {stage.done ? 'Done' : stage.attempted === 0 ? 'Waiting' : `${stage.inFlight} in flight`}
         </span>
       </div>
       <div className={styles.bigNumber}>
@@ -46,6 +58,7 @@ function StageCard({ title, stage }: { title: string, stage: TesterStageSnapshot
         <dt>Timed out</dt><dd>{stage.timedOut}</dd>
         <dt>Connection errors</dt><dd>{stage.failed}</dd>
         <dt>Retries</dt><dd>{stage.retries}</dd>
+        <dt>Not started</dt><dd>{stage.skipped}</dd>
         <dt>Total time</dt><dd>{formatMs(stage.totalTimeMs)}</dd>
         <dt>Average</dt><dd>{formatMs(stage.avgMs)}</dd>
         <dt>p50 / p95 / p99</dt><dd>{formatMs(stage.p50Ms)} / {formatMs(stage.p95Ms)} / {formatMs(stage.p99Ms)}</dd>
@@ -141,14 +154,50 @@ export default function TesterRunPage() {
 
         {snapshot && snapshot.state !== 'idle' && (
           <>
-            <StageCard title="N2 setup" stage={snapshot.n2} />
+            <div className={styles.stageRow}>
+              <StageCard title="N2 setup" stage={snapshot.n2} />
+              <StageCard title="Registration" stage={snapshot.registration} />
+              <StageCard title="PDU session" stage={snapshot.pdu} />
+            </div>
+
+            <section className={styles.card}>
+              <h3 className={styles.cardTitle}>UEs</h3>
+              <div className={styles.ueChips}>
+                {UE_STATES.map(([key, label, tone]) => (
+                  <span key={key} className={`${styles.pill} ${styles[tone]}`}>{label} {snapshot.ues[key]}</span>
+                ))}
+              </div>
+              {snapshot.failedUes.length > 0 && (
+                <div className={styles.tableWrap}>
+                  <h4 className={styles.subTitle}>
+                    Failed UEs{snapshot.ues.failed > snapshot.failedUes.length && ` (first ${snapshot.failedUes.length} of ${snapshot.ues.failed})`}
+                  </h4>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr><th>SUPI</th><th>gNB</th><th>Stage</th><th>Cause</th><th>Attempts</th></tr>
+                    </thead>
+                    <tbody>
+                      {snapshot.failedUes.map((f) => (
+                        <tr key={f.supi}>
+                          <td className={styles.mono}>{f.supi}</td>
+                          <td>{f.gnb}</td>
+                          <td>{f.stage === 'pdu' ? 'PDU session' : 'Registration'}</td>
+                          <td className={styles.mono}>{f.cause}</td>
+                          <td>{f.attempts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
 
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>gNBs</h3>
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
-                    <tr><th>#</th><th>Name</th><th>N2 IP</th><th>State</th><th>Attempts</th><th>Setup time</th><th>Last error</th></tr>
+                    <tr><th>#</th><th>Name</th><th>N2 IP</th><th>State</th><th>Attempts</th><th>Setup time</th><th>Registered</th><th>PDU sessions</th><th>Last error</th></tr>
                   </thead>
                   <tbody>
                     {snapshot.gnbs.map((g) => (
@@ -159,6 +208,8 @@ export default function TesterRunPage() {
                         <td><span className={`${styles.pill} ${g.state === 'up' ? styles.pillOk : g.state === 'failed' || g.state === 'lost' ? styles.pillBad : g.state === 'connecting' ? styles.pillActive : styles.pillMuted}`}>{g.state}</span></td>
                         <td>{g.attempts}</td>
                         <td>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
+                        <td>{g.registered} / {g.ueCount}</td>
+                        <td>{g.established} / {g.ueCount}</td>
                         <td className={styles.causeCell}>{g.cause || '—'}</td>
                       </tr>
                     ))}

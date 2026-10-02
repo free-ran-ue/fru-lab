@@ -45,6 +45,9 @@
 .kv dd { margin: 0; font-variant-numeric: tabular-nums; color: #0f172a; }
 .causes h4 { margin: 1.25rem 0 0.4rem; font-size: 0.85rem; color: #475569; }
 .causes ul { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; color: #0f172a; }
+.stageRow { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+.ueChips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.subTitle { margin: 1.25rem 0 0.5rem; font-size: 0.85rem; color: #475569; }
 .runError { margin: 0; padding: 0.75rem 1rem; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 0.85rem; white-space: pre-wrap; }
 
 @media (max-width: 900px) {
