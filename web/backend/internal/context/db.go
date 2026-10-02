@@ -13,6 +13,9 @@ var (
 )
 
 type DbIf interface {
+	// Get returns nil, nil when bucket or key does not exist yet.
+	Get(bucket, key string) ([]byte, error)
+	Put(bucket, key string, value []byte) error
 	Release() error
 }
 
