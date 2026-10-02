@@ -1328,7 +1328,7 @@ ul.tight li { margin: 3px 0; }
       <ul><li>Stop：流量立即停止</li><li>UE Dereg（核網一併釋放 PDU）、gNB SCTP 斷線，含統計與重試</li><li>最長執行時間（含無限）</li><li>清除 Tester 加的 IP 與路由</li><li>歷史結果：最近 50 筆、CSV / JSON 匯出</li></ul>
       <div class="done-when">完成標準：同一份設定連跑兩次結果一致，核網與主機都沒有殘留</div></div>
     <div class="phase"><div class="p">待優化</div><h4>資料面效能</h4>
-      <ul><li>發送速率上限：一個 socket 約 1 Gbps，發送線數改跟 CPU 核心數走，UL 也拆多個 socket；再上去用 sendmmsg / UDP GSO</li><li>CPU 分配：發送／接收線綁核、和 UPF 的 softirq 錯開；或 tester 與核網分機器</li></ul>
+      <ul><li><s>發送速率上限</s> <span class="pill ok">已完成</span>：發送線跟 CPU 核心數走、UL 每個 gNB 多個 socket、sink 多個接收 socket、sendmmsg / recvmmsg 批次送收（2026-10-02）。剩 UDP GSO / AF_XDP</li><li>CPU 分配：發送／接收線綁核、和 UPF 的 softirq 錯開；或 tester 與核網分機器</li></ul>
       <div class="done-when">細節見第 13 節第 3 期「留到之後處理」</div></div>
     <div class="phase"><div class="p">之後</div><h4>依需求</h4>
       <ul><li>AF_PACKET / AF_XDP 發送器</li><li>多 slice、多 session</li><li>流量 profile（burst、IMIX）</li><li>註冊細分（Auth / SMC 各段耗時）</li></ul>
@@ -1524,7 +1524,7 @@ ul.tight li { margin: 3px 0; }
       <li>下一期：第 4 期，Stop 時釋放 PDU session 與反註冊。目前連續跑同一批 UE，free5GC 會出現 Duplicated PDU session ID，PDU 會逾時，要重開核網。</li>
       <li>延遲是固定 500 ms；裝隧道比較慢的核網，每個 UE 開頭還是可能掉幾個 DL 封包。</li>
       <li>N6 介面名稱沒有檢查是否存在。</li>
-      <li><b>可改善：發送速率上限。</b>一個 UDP socket 約 1 Gbps（1400 bytes 封包）。目前 UL 每個 gNB 一個 socket、DL 固定 4 個，所以單一 gNB 的 UL、單一 UE 的 DL 上限都約 1 Gbps，DL 總上限約 4 Gbps。改法：發送線數跟 CPU 核心數走，UL 也照樣拆成多個 socket；再往上可以改用 sendmmsg 批次送或 UDP GSO。</li>
+      <li><b>可改善：發送速率上限</b> <span class="pill ok">已完成（2026-10-02）</span>：在高效能機器上 10 gNB、1000 UE、每 UE 10 Mbps 時，UL 只送出 6.4G、收到 4.6G，DL 2.5G。原因是 UL 只有一個 sink socket、一條讀取線（kernel 把收不完的丟掉，被算成掉包），DL 固定 4 條發送線，UL 每個 gNB 一條。改成：sink 用 SO_REUSEPORT 開多個 socket 各一條讀取線；DL 發送線跟 CPU 核心數走、UL 依 gNB 分配同樣多條（都從該 gNB 的 N3 IP 送出）；每次系統呼叫送收 32 個封包（sendmmsg / recvmmsg）。6 vCPU 測試機上同樣 10 gNB × 40 UE × 250 Mbps：收到總量 3.7 → 6.5 Gbps，UL 掉包 57% → 0.1%，kernel 接收丟棄 5 秒 107 萬 → 240；瓶頸變成機器的 CPU。</li>
       <li><b>可改善：CPU 分配。</b>目前沒有任何分配：不綁核、不設 GOMAXPROCS，UPF container 也沒有 CPU 限制，全部交給 Go runtime 和 Linux 排程（測試機是 6 vCPU 的 VM）。資料面的 goroutine：UL 發送每個 gNB 一條、DL 發送固定 4 條、DL 接收每個 gNB 一條、UL 接收（sink）1 條、統計 1 條。要注意的是，tester 呼叫 sendto 後，封包經 veth 進 UPF、gtp5g 封裝或解封裝、再經 bridge 回到 tester 的 socket，這段 kernel 處理大多在送出封包的那顆 CPU 上做完（softirq），所以 UPF 的工作有一部分算在 tester 頭上。實測：DL 900 Mbps 時 fru-tester 約 230% CPU，整台約 40% 忙；每次 sendto 約 10 µs。發送線數跟核心數走之後，下一個瓶頸會是 CPU 本身，可以考慮：發送線、接收線分別綁核，和 UPF 的 softirq 錯開；用 sendmmsg / recvmmsg 減少系統呼叫；把 tester 和核網放在不同機器。</li>
       <li>重開核網時要先重開 NRF，再重開其他 NF，而且 SMF 要在 UPF 之後，不然 PFCP 關聯會斷，PDU 全部逾時。</li>
     </ul>
@@ -1632,7 +1632,7 @@ ul.tight li { margin: 3px 0; }
       <li><b>內層 IPv4</b>：來源是 UE IP，目的是 sink IP，TTL 64、設 DF（不分片），IP checksum 在組模板時算好一次。</li>
       <li><b>內層 UDP</b>：checksum 填 0，IPv4 允許這樣做，所以模板可以重複使用，不必每個封包重算。</li>
       <li><b>封包大小</b>：設定值是「內層 IP 封包」的長度（預設 1400，可設 64–1400）。在 N3 線路上每個封包再多 36 bytes（GTP-U 8 + UDP 8 + IP 20），乙太網路再加 14。</li>
-      <li><b>外層 IP/UDP 由 kernel 加</b>：tester 用綁在 gNB N3 IP:2152 的一般 UDP socket 送出，所以不需要 raw socket。</li>
+      <li><b>外層 IP/UDP 由 kernel 加</b>：tester 用綁在 gNB N3 IP 的一般 UDP socket 送出（來源 port 由系統分配；gNB 的 :2152 只用來收 DL），所以不需要 raw socket。</li>
     </ul>
 
     <h4>3. tester 標頭（24 bytes，每個封包都有）</h4>
@@ -1660,7 +1660,7 @@ ul.tight li { margin: 3px 0; }
     <ul class="tight">
       <li>設定是「每個 UE 的 Mbps」。每秒封包數 = Mbps × 10⁶ ÷ (封包大小 × 8)。例：1 Mbps、1400 bytes → 每個 UE 每秒約 89.3 個封包。</li>
       <li>每條發送線用 token bucket：每 1 ms 補一次額度，最多累積 10 ms 的量，避免落後後一次爆量；有額度就輪流替它負責的 UE 送封包。</li>
-      <li>發送線分配：UL 每個 gNB 一條（各自一個 socket，從該 gNB 的 N3 IP 送出）；DL 固定 4 條，各自一個 socket，UE 依編號分配。一個 socket 實測約 8–9 萬 pps（1400 bytes 約 1 Gbps）。</li>
+      <li>發送線分配：DL 的發送線數 = CPU 核心數，UL 把同樣多條平均分給各 gNB（每個 gNB 至少一條，都從該 gNB 的 N3 IP 送出）；每條發送線有自己的 socket，UE 依編號分配到其中一條。每次系統呼叫送出最多 32 個封包（sendmmsg），減少每個封包的系統呼叫成本。</li>
       <li>UE 的 PDU session 建好後等 500 ms 才開始送，讓 UPF 先裝好下行隧道；按 Stop 立即停送，再等 200 ms 收完路上的封包才結算。</li>
     </ul>
 
@@ -1669,7 +1669,7 @@ ul.tight li { margin: 3px 0; }
       <table>
         <tr><th>數字</th><th>怎麼算</th></tr>
         <tr><td>送出（Tx）</td><td><code>sendto</code> 成功才算；被本機拒絕的另記為 Send errors</td></tr>
-        <tr><td>收到（Rx）</td><td>UL 在 sink socket 收，DL 在各 gNB 的 N3 socket 收；標頭的 magic、runID、方向都對才算</td></tr>
+        <tr><td>收到（Rx）</td><td>UL 在 sink 收：同一個 IP:port 開多個 socket（SO_REUSEPORT，數量 = CPU 核心數、最多 16），kernel 依連線把 UE 分散到各 socket，各有一條讀取線；DL 在各 gNB 的 N3 socket 收。都是一次最多讀 32 個封包（recvmmsg）。標頭的 magic、runID、方向都對才算</td></tr>
         <tr><td>吞吐</td><td>每秒的內層 IP bytes × 8（和設定的 Mbps 同一個基準，不含 GTP-U 與外層標頭）</td></tr>
         <tr><td>丟包率</td><td>1 − 收到封包數 ÷ 送出封包數（整個 run 累計）</td></tr>
         <tr><td>單向延遲 p50 / p99</td><td>收到時間 − 標頭裡的送出時間；收送在同一台主機、同一個程式，用同一個時鐘，不需要校時</td></tr>
@@ -1683,7 +1683,7 @@ ul.tight li { margin: 3px 0; }
       <dt>為什麼不用 TUN 介面或真的 UE 協定堆疊？</dt>
       <dd>要模擬幾千個 UE，每個 UE 一個 TUN、每個封包進出 kernel 一次，成本太高，也管不動那麼多介面。要量的是 UPF 的使用者面轉發，只需要「對的封包格式、對的 TEID、對的 UE IP」，用模板直接組就夠了，也能精準控制速率。</dd>
       <dt>為什麼不用 raw socket、DPDK 或 AF_XDP？</dt>
-      <dd>目前是 PoC 階段，一般 UDP socket 已經能到單 socket 約 1 Gbps、實測 DL 3 Gbps 無丟包，部署也最簡單（不用綁網卡、不用大頁記憶體）。更高速率的方向是先加多 socket、sendmmsg／UDP GSO，再考慮 AF_XDP（列在第 12 節「之後」與「待優化」）。</dd>
+      <dd>目前是 PoC 階段，一般 UDP socket 加上多 socket、批次送收，在 6 vCPU 測試機上就能收送 6.5 Gbps（掉包 0.3% 以下），瓶頸已經是 CPU，部署也最簡單（不用綁網卡、不用大頁記憶體）。更高速率的方向是先加多 socket、sendmmsg／UDP GSO，再考慮 AF_XDP（列在第 12 節「之後」與「待優化」）。</dd>
       <dt>怎麼確定封包真的經過 UPF，不是在本機繞回來？</dt>
       <dd>UL 送出去的是 GTP-U，只有 UPF 拆掉外層後 sink 才會收到內層的 UDP；DL 回來時是 GTP-U，而且 TEID 必須是 gNB 配發的那一個，否則記為 misrouted。DL 的路由也是明確指向 UPF 的 N6 IP。</dd>
       <dt>UPF 做了 NAT，怎麼知道封包是哪個 UE 的？</dt>
@@ -1699,7 +1699,7 @@ ul.tight li { margin: 3px 0; }
       <dt>封包內容是什麼？支援 TCP、IPv6 嗎？</dt>
       <dd>內容是 24 bytes 標頭加全 0 填充，沒有真的應用資料。目前只有 IPv4、UDP、固定速率；IPv6、TCP、突發／IMIX 流量都還沒做（列在第 12 節「之後」）。</dd>
       <dt>目前的速率上限？</dt>
-      <dd>一個 socket 約 1 Gbps（1400 bytes）。UL 每個 gNB 約 1 Gbps；DL 總共約 4 Gbps、單一 UE 約 1 Gbps。改善方式見第 12 節「待優化」。</dd>
+      <dd>上限取決於機器的 CPU：發送線與接收 socket 都跟 CPU 核心數走。6 vCPU 測試機實測 UL 4.3 Gbps、DL 2.2 Gbps 同時跑（CPU 全滿，一半花在 kernel 的封包處理，包含 UPF）。單一 UE 只走一條發送線，約 1 Gbps。再往上要靠 UDP GSO 或 AF_XDP（第 12 節「待優化」）。</dd>
     </dl>
   </div>
 </section>

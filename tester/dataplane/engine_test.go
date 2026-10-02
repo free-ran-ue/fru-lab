@@ -26,6 +26,7 @@ type fakeUPF struct {
 	dlSeen    atomic.Uint64
 	wrongTeid bool                    // put downlink in a tunnel the gNB did not allocate
 	dlFrom    map[netip.AddrPort]bool // source of every downlink packet, under mu
+	ulFrom    map[netip.AddrPort]bool // source of every uplink G-PDU, under mu
 }
 
 type ueRoute struct {
@@ -40,7 +41,7 @@ func newFakeUPF(t *testing.T, sink netip.AddrPort, dropEvery uint64) *fakeUPF {
 	require.NoError(t, err)
 	n6, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100"), Port: 0})
 	require.NoError(t, err)
-	u := &fakeUPF{n3: n3, n6: n6, sink: sink, ues: map[uint32]ueRoute{}, dropEvery: dropEvery, dlFrom: map[netip.AddrPort]bool{}}
+	u := &fakeUPF{n3: n3, n6: n6, sink: sink, ues: map[uint32]ueRoute{}, dropEvery: dropEvery, dlFrom: map[netip.AddrPort]bool{}, ulFrom: map[netip.AddrPort]bool{}}
 	go u.uplink()
 	go u.downlink()
 	t.Cleanup(func() { _ = n3.Close(); _ = n6.Close() })
@@ -59,10 +60,13 @@ func (u *fakeUPF) route(ue int, r ueRoute) {
 func (u *fakeUPF) uplink() {
 	buf := make([]byte, 65536)
 	for {
-		n, _, err := u.n3.ReadFromUDPAddrPort(buf)
+		n, from, err := u.n3.ReadFromUDPAddrPort(buf)
 		if err != nil {
 			return
 		}
+		u.mu.Lock()
+		u.ulFrom[from] = true
+		u.mu.Unlock()
 		_, inner, err := parseGpdu(buf[:n])
 		if err != nil {
 			continue
@@ -124,14 +128,22 @@ func freePort(t *testing.T, addr string) uint16 {
 // startEngine runs 2 gNBs (127.0.0.11/.12) with 4 UEs through a fake UPF.
 func startEngine(t *testing.T, mbps float64, dropEvery uint64) (*Engine, *fakeUPF) {
 	t.Helper()
+	return startEngineWith(t, mbps, dropEvery, func(*Config) {})
+}
+
+// startEngineWith is startEngine with the config adjusted by tune.
+func startEngineWith(t *testing.T, mbps float64, dropEvery uint64, tune func(*Config)) (*Engine, *fakeUPF) {
+	t.Helper()
 	sink := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), freePort(t, "127.0.0.1"))
 	upf := newFakeUPF(t, sink, dropEvery)
 	gnbs := []netip.Addr{netip.MustParseAddr("127.0.0.11"), netip.MustParseAddr("127.0.0.12")}
-	e := New(Config{
+	cfg := Config{
 		RunID: 42, UeCount: 4, GnbN3IPs: gnbs, SinkIP: sink.Addr(), Port: sink.Port(),
 		PacketSize: 500, UlBps: mbps * 1e6, DlBps: mbps * 1e6,
 		DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() },
-	})
+	}
+	tune(&cfg)
+	e := New(cfg)
 	require.NoError(t, e.Start())
 	for ue := range 4 {
 		g := ue / 2
@@ -246,16 +258,79 @@ func TestDownlinkInTheWrongTunnelIsMisroutedNotReceived(t *testing.T) {
 }
 
 // One socket carries one writer at a time (Go locks writes per socket),
-// which capped downlink at ~80 k packets/s; each sender needs its own.
-func TestDownlinkSendersEachUseTheirOwnSocketOnTheSinkIP(t *testing.T) {
-	e, upf := startEngine(t, 1, 0) // 4 UEs, one per downlink sender
+// which capped downlink at ~80 k packets/s; each sender needs its own,
+// and how many there are follows Config.Senders.
+func TestDownlinkSendersFollowTheSendersSetting(t *testing.T) {
+	e, upf := startEngineWith(t, 1, 0, func(c *Config) { c.Senders = 3 })
 	time.Sleep(500 * time.Millisecond)
 	e.Stop(50 * time.Millisecond)
 
 	upf.mu.Lock()
 	defer upf.mu.Unlock()
-	require.Len(t, upf.dlFrom, dlSenders)
+	require.Len(t, upf.dlFrom, 3, "4 UEs over 3 downlink senders, each with its own socket")
 	for from := range upf.dlFrom {
 		require.Equal(t, netip.MustParseAddr("127.0.0.1"), from.Addr(), "downlink leaves from the sink IP")
+	}
+}
+
+// One sender per gNB capped a gNB's uplink at one socket's rate; each gNB
+// now gets several, all sending from its N3 IP (its :2152 socket only
+// receives downlink).
+func TestUplinkUsesSeveralSendersPerGnbFromItsN3IP(t *testing.T) {
+	e, upf := startEngineWith(t, 1, 0, func(c *Config) { c.Senders = 4 }) // 2 per gNB
+	time.Sleep(500 * time.Millisecond)
+	e.Stop(50 * time.Millisecond)
+
+	upf.mu.Lock()
+	defer upf.mu.Unlock()
+	perGnb := map[netip.Addr]int{}
+	for from := range upf.ulFrom {
+		require.NotEqual(t, uint16(GtpPort), from.Port())
+		perGnb[from.Addr()]++
+	}
+	require.Equal(t, map[netip.Addr]int{netip.MustParseAddr("127.0.0.11"): 2, netip.MustParseAddr("127.0.0.12"): 2}, perGnb)
+}
+
+// One sink socket with one reader could not keep up with the UPF and the
+// kernel dropped uplink that the UPF had forwarded (counted as loss). The
+// sink is now several SO_REUSEPORT sockets, one reader each.
+func TestUplinkIsReadOnSeveralSinkSockets(t *testing.T) {
+	e, _ := startEngineWith(t, 0, 0, func(c *Config) { c.Receivers = 4 })
+	defer e.Stop(0)
+	require.Len(t, e.sinks, 4)
+	for _, c := range e.sinks {
+		require.Equal(t, netip.AddrPortFrom(e.cfg.SinkIP, e.cfg.Port), c.LocalAddr().(*net.UDPAddr).AddrPort())
+	}
+
+	// uplink from many sources (the UPF's NAT gives each UE its own port)
+	sent := 0
+	for ue := range 4 {
+		c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100")})
+		require.NoError(t, err)
+		for seq := range 50 {
+			b := make([]byte, 100)
+			putHeader(b, header{runID: 42, ue: uint32(ue), seq: uint32(seq), txNanos: time.Now().UnixNano()})
+			_, err := c.WriteToUDPAddrPort(b, netip.AddrPortFrom(e.cfg.SinkIP, e.cfg.Port))
+			require.NoError(t, err)
+			sent++
+		}
+		_ = c.Close()
+	}
+	require.Eventually(t, func() bool { return e.ul.rxPackets.Load() == uint64(sent) }, 2*time.Second, 10*time.Millisecond)
+	require.Zero(t, e.ul.outOfOrder.Load())
+}
+
+// Batched sends (sendmmsg) must still carry every packet, each with its
+// own sequence number, at a rate well above the 1 ms tick.
+func TestBatchedSendingLosesNothingAtAHighRate(t *testing.T) {
+	e, _ := startEngineWith(t, 40, 0, func(c *Config) { c.Senders = 2; c.Receivers = 2 }) // 4 UEs x 40 Mbps each way
+	time.Sleep(time.Second)
+	e.Stop(200 * time.Millisecond)
+	s := e.Snapshot()
+	for name, d := range map[string]DirSnapshot{"ul": s.Ul, "dl": s.Dl} {
+		require.Greater(t, d.TxPackets, uint64(30000), name)
+		require.Equal(t, d.TxPackets, d.RxPackets, name)
+		require.Zero(t, d.OutOfOrder, name)
+		require.Zero(t, d.SendErrors, name)
 	}
 }
