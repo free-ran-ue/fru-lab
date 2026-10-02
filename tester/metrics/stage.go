@@ -25,6 +25,7 @@ type Stage struct {
 	attempted int64
 	retries   int64
 	inFlight  int64
+	skipped   int64
 	outcomes  [4]int64
 	causes    map[string]int64
 	hist      histogram
@@ -80,6 +81,15 @@ func (s *Stage) Finish(o Outcome, latency time.Duration, cause string) {
 	s.causes[cause]++
 }
 
+// Skip records an item that will never be attempted (its gNB never came
+// up, an earlier stage failed it, or the run was stopped first). Skipped
+// items count toward Done but not toward any outcome or the total time.
+func (s *Stage) Skip() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.skipped++
+}
+
 type CauseCount struct {
 	Cause string `json:"cause"`
 	Count int64  `json:"count"`
@@ -97,6 +107,7 @@ type StageSnapshot struct {
 	Rejected    int64        `json:"rejected"`
 	TimedOut    int64        `json:"timedOut"`
 	Failed      int64        `json:"failed"`
+	Skipped     int64        `json:"skipped"`
 	Done        bool         `json:"done"`
 	TotalTimeMs float64      `json:"totalTimeMs"`
 	AvgMs       float64      `json:"avgMs"`
@@ -123,7 +134,8 @@ func (s *Stage) Snapshot() StageSnapshot {
 		Rejected:  s.outcomes[Rejected],
 		TimedOut:  s.outcomes[TimedOut],
 		Failed:    s.outcomes[Failed],
-		Done:      int(finished) == s.expected,
+		Skipped:   s.skipped,
+		Done:      int(finished+s.skipped) == s.expected,
 		AvgMs:     ms(s.hist.mean()),
 		P50Ms:     ms(s.hist.quantile(0.50)),
 		P95Ms:     ms(s.hist.quantile(0.95)),
@@ -135,6 +147,9 @@ func (s *Stage) Snapshot() StageSnapshot {
 		end := s.now()
 		if snap.Done {
 			end = s.lastAt
+			if end.IsZero() { // every started item was later skipped
+				end = s.firstAt
+			}
 		}
 		snap.TotalTimeMs = ms(end.Sub(s.firstAt))
 	}

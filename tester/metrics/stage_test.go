@@ -73,3 +73,33 @@ func TestStageConcurrentUse(t *testing.T) {
 	require.Equal(t, int64(1000), snap.Accepted)
 	require.True(t, snap.Done)
 }
+
+func TestStageSkippedItemsCompleteTheStage(t *testing.T) {
+	clk := &fakeClock{t: time.Unix(1000, 0)}
+	s := NewStage("registration", 3)
+	s.now = clk.now
+	s.Begin(false)
+	clk.advance(5 * time.Millisecond)
+	s.Finish(Accepted, 5*time.Millisecond, "")
+	s.Skip()
+	require.False(t, s.Snapshot().Done)
+	s.Skip()
+	clk.advance(time.Hour) // a stopped run's stage must not keep counting
+	snap := s.Snapshot()
+	require.True(t, snap.Done)
+	require.Equal(t, int64(2), snap.Skipped)
+	require.InDelta(t, 5.0, snap.TotalTimeMs, 0.001)
+}
+
+func TestStageAllStartedItemsSkippedAfterRetry(t *testing.T) {
+	clk := &fakeClock{t: time.Unix(1000, 0)}
+	s := NewStage("pdu", 1)
+	s.now = clk.now
+	s.Begin(false)
+	s.Retrying()
+	s.Skip() // stopped while waiting for its retry
+	clk.advance(time.Hour)
+	snap := s.Snapshot()
+	require.True(t, snap.Done)
+	require.Equal(t, 0.0, snap.TotalTimeMs)
+}
