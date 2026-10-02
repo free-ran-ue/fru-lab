@@ -6,6 +6,7 @@ require (
 	github.com/free-ran-ue/util v0.2.0
 	github.com/free5gc/ngap v1.2.0
 	github.com/free5gc/openapi v1.3.0
+	github.com/free5gc/sctp v1.2.0
 	github.com/stretchr/testify v1.12.1
 	gopkg.in/yaml.v3 v3.0.1
 )
