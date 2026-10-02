@@ -218,9 +218,10 @@ func testProfile() profile.Profile {
 		// N2-only tests use fakeConn, which never answers NAS: keep the UE
 		// stages short so Stop does not wait long for their timeouts.
 		Rates: profile.Rates{
-			N2:           profile.StageRate{TimeoutMs: 1000, Retries: 1},
-			Registration: profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
-			Pdu:          profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
+			N2:             profile.StageRate{TimeoutMs: 1000, Retries: 1},
+			Registration:   profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
+			Pdu:            profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
+			Deregistration: profile.ProcedureRate{RatePerSec: 1000, MaxInFlight: 100, TimeoutMs: 100, Retries: 0},
 		},
 	}
 }

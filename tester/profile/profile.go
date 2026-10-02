@@ -22,6 +22,9 @@ type Traffic struct {
 	DlMbps     float64 `json:"dlMbps"` // per UE; 0 = no downlink
 	PacketSize int     `json:"packetSize"`
 	Port       int     `json:"port"`
+	// MaxDurationMin stops the run this many minutes after it started,
+	// exactly like pressing Stop; 0 = run until Stop (design N6).
+	MaxDurationMin int `json:"maxDurationMin"`
 }
 
 type Scale struct {
@@ -98,6 +101,9 @@ type Rates struct {
 	N2           StageRate     `json:"n2"`
 	Registration ProcedureRate `json:"registration"`
 	Pdu          ProcedureRate `json:"pdu"`
+	// Deregistration paces the UE deregistrations that Stop runs; the core
+	// releases each UE's PDU session with it.
+	Deregistration ProcedureRate `json:"deregistration"`
 }
 
 // ProcedureRate paces a per-UE stage: at most RatePerSec new attempts per

@@ -180,6 +180,7 @@ func validateFields(p Profile, verr *ValidationError) {
 	}
 	validateProcedureRate(verr, "rates.registration", p.Rates.Registration)
 	validateProcedureRate(verr, "rates.pdu", p.Rates.Pdu)
+	validateProcedureRate(verr, "rates.deregistration", p.Rates.Deregistration)
 }
 
 func validateUe(p Profile, verr *ValidationError) {
@@ -230,6 +231,9 @@ func validateTraffic(p Profile, verr *ValidationError) {
 	}
 	if t.Port < 1 || t.Port > 65535 {
 		verr.add("traffic.port", "must be between 1 and 65535")
+	}
+	if t.MaxDurationMin < 0 || t.MaxDurationMin > 7*24*60 {
+		verr.add("traffic.maxDurationMin", "must be between 0 (no limit) and 10080 (7 days)")
 	}
 	if strings.TrimSpace(n6.Interface) == "" {
 		verr.add("network.n6.interface", "must not be empty")

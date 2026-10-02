@@ -27,9 +27,10 @@ func sampleProfile() Profile {
 		},
 		Traffic: Traffic{UlMbps: 1, DlMbps: 5, PacketSize: 1400, Port: 9200},
 		Rates: Rates{
-			N2:           StageRate{TimeoutMs: 5000, Retries: 1},
-			Registration: ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
-			Pdu:          ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
+			N2:             StageRate{TimeoutMs: 5000, Retries: 1},
+			Registration:   ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
+			Pdu:            ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
+			Deregistration: ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 5000, Retries: 1},
 		},
 	}
 }
@@ -187,5 +188,25 @@ func TestExpandNeverAllocatesTheSinkOrUpfN6IP(t *testing.T) {
 	require.NoError(t, err)
 	for _, g := range plan.Gnbs {
 		require.NotContains(t, []string{"10.0.1.2", "10.0.1.4"}, g.N2IP)
+	}
+}
+
+func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
+	p := sampleProfile()
+	p.Traffic.MaxDurationMin = 10080 // 7 days is allowed
+	_, err := Expand(p, nil)
+	require.NoError(t, err)
+
+	for _, bad := range []int{-1, 10081} {
+		p := sampleProfile()
+		p.Rates.Deregistration.RatePerSec = 0
+		p.Traffic.MaxDurationMin = bad
+		_, err := Expand(p, nil)
+		var verr *ValidationError
+		require.ErrorAs(t, err, &verr)
+		require.ElementsMatch(t, []FieldError{
+			{Field: "rates.deregistration.ratePerSec", Message: "must be between 1 and 100000"},
+			{Field: "traffic.maxDurationMin", Message: "must be between 0 (no limit) and 10080 (7 days)"},
+		}, verr.Errors, "maxDurationMin %d", bad)
 	}
 }
