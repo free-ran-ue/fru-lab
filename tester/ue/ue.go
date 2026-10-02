@@ -49,6 +49,7 @@ const (
 	EventPduEstablished                    // PDU Session Establishment Accept; UeIP set
 	EventPduRejected                       // PDU Session Establishment Reject or 5GMM cause; Cause set
 	EventConfigUpdate                      // Configuration Update Command: the AMF finished the registration
+	EventDeregistered                      // Deregistration Accept (UE originating)
 )
 
 // Result is the outcome of handling one downlink NAS message.
@@ -148,6 +149,22 @@ func (u *UE) PduSessionRequest() ([]byte, error) {
 	return message.Marshal(ul, u.secCtx, message.SecHdrTypeIntegrityProtectedAndCiphered)
 }
 
+// DeregistrationRequest returns the protected UE-originating
+// Deregistration Request (normal, not switch-off, so the AMF answers with
+// Deregistration Accept). The core releases the UE's PDU session as part
+// of it, so there is no separate PDU Session Release. Call after
+// EventRegistered.
+func (u *UE) DeregistrationRequest() ([]byte, error) {
+	if u.kAmf == nil {
+		return nil, errors.New("deregistration requested before registration")
+	}
+	return message.Marshal(&message.DeregReqUEOrig{
+		DeregType:   &ie.DeregType{AccessType: ie.AccessType_3gpp},
+		Ngksi:       &ie.NASKeySetId{Tsc: ie.SecCtxTypeNative, Ksi: ie.NASKeyNA},
+		MobileId5GS: u.mobileID,
+	}, u.secCtx, message.SecHdrTypeIntegrityProtectedAndCiphered)
+}
+
 // Handle processes one downlink NAS PDU.
 func (u *UE) Handle(pdu []byte) (Result, error) {
 	if u.secCtx == nil {
@@ -176,6 +193,8 @@ func (u *UE) Handle(pdu []byte) (Result, error) {
 		return u.onDownlinkTransport(m)
 	case *message.CfgUpdateCmd:
 		return Result{Event: EventConfigUpdate}, nil
+	case *message.DeregAcceptUEOrig:
+		return Result{Event: EventDeregistered}, nil
 	default:
 		// 5GMM Status and the like: nothing the procedures wait for.
 		return Result{}, nil

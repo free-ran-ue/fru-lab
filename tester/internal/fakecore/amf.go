@@ -27,6 +27,7 @@ type AMF struct {
 	mu        sync.Mutex
 	setupRsps []SetupResponse
 	released  int
+	deregs    int
 }
 
 // SetupResponse is what a gNB answered to a PDU Session Resource Setup.
@@ -40,6 +41,13 @@ func (a *AMF) SetupResponses() []SetupResponse {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]SetupResponse(nil), a.setupRsps...)
+}
+
+// Deregistrations counts Deregistration Accepts sent.
+func (a *AMF) Deregistrations() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.deregs
 }
 
 func (a *AMF) ReleaseCompletes() int {
@@ -127,24 +135,37 @@ func (a *AMF) onNas(conn io.Writer, ue *amfUe, nas []byte) error {
 		if err == nil {
 			err = a.write(conn, raw, nil)
 		}
+		if err == nil && dl.Release {
+			a.mu.Lock()
+			a.deregs++
+			a.mu.Unlock()
+			raw, err = ueContextReleaseCommand(ue)
+			if err == nil {
+				err = a.write(conn, raw, nil)
+			}
+		}
 		if err != nil {
 			return err
 		}
 	}
 	if ue.nas.state == "done" && ue.nas.behavior.RejectRegistration != 0 {
-		raw, err := (&message.UEContextReleaseCommand{
-			UENGAPIDs: &ie.UENGAPIDs{Choice: &ie.UENGAPIDPair{
-				AMFUENGAPID: &ie.AMFUENGAPID{Value: ue.amfID},
-				RANUENGAPID: &ie.RANUENGAPID{Value: ue.ranID},
-			}},
-			Cause: &ie.Cause{Choice: &ie.CauseNas{Value: ie.CauseNasPresentNormalRelease}},
-		}).MarshalBinary()
+		raw, err := ueContextReleaseCommand(ue)
 		if err == nil {
 			err = a.write(conn, raw, nil)
 		}
 		return err
 	}
 	return nil
+}
+
+func ueContextReleaseCommand(ue *amfUe) ([]byte, error) {
+	return (&message.UEContextReleaseCommand{
+		UENGAPIDs: &ie.UENGAPIDs{Choice: &ie.UENGAPIDPair{
+			AMFUENGAPID: &ie.AMFUENGAPID{Value: ue.amfID},
+			RANUENGAPID: &ie.RANUENGAPID{Value: ue.ranID},
+		}},
+		Cause: &ie.Cause{Choice: &ie.CauseNas{Value: ie.CauseNasPresentNormalRelease}},
+	}).MarshalBinary()
 }
 
 func (a *AMF) write(conn io.Writer, raw []byte, err error) error {

@@ -131,3 +131,43 @@ func TestRetryStartsFreshSecurityContext(t *testing.T) {
 	second := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{}, netip.Addr{})
 	require.Equal(t, EventRegistered, register(t, u, second).Event)
 }
+
+// establish registers u and sets up its PDU session against net.
+func establish(t *testing.T, u *UE, net *fakecore.NasSession) {
+	t.Helper()
+	r := register(t, u, net)
+	exchange(t, u, net, r.Reply)
+	req, err := u.PduSessionRequest()
+	require.NoError(t, err)
+	require.Equal(t, EventPduEstablished, exchange(t, u, net, req)[0].Event)
+}
+
+func TestDeregistrationAfterPduSession(t *testing.T) {
+	u, err := New(testConfig())
+	require.NoError(t, err)
+	net := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{}, netip.MustParseAddr("10.60.0.7"))
+	establish(t, u, net)
+
+	dereg, err := u.DeregistrationRequest()
+	require.NoError(t, err)
+	require.Equal(t, []Result{{Event: EventDeregistered}}, exchange(t, u, net, dereg))
+}
+
+func TestDeregistrationWithoutPduSession(t *testing.T) {
+	u, err := New(testConfig())
+	require.NoError(t, err)
+	net := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{}, netip.MustParseAddr("10.60.0.7"))
+	r := register(t, u, net)
+	exchange(t, u, net, r.Reply)
+
+	dereg, err := u.DeregistrationRequest()
+	require.NoError(t, err)
+	require.Equal(t, []Result{{Event: EventDeregistered}}, exchange(t, u, net, dereg))
+}
+
+func TestDeregistrationBeforeRegistrationIsAnError(t *testing.T) {
+	u, err := New(testConfig())
+	require.NoError(t, err)
+	_, err = u.DeregistrationRequest()
+	require.Error(t, err)
+}

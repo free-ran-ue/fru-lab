@@ -33,6 +33,8 @@ type Behavior struct {
 	NoConfigUpdate     bool  // skip the Configuration Update Command free5GC sends after Registration Complete
 	IgnorePduRequest   bool  // never answer the PDU request (for timeouts)
 	BadAutn            bool  // corrupt AUTN so the UE's MAC check fails
+	// IgnoreDeregistration never answers the deregistration request (for timeouts).
+	IgnoreDeregistration bool
 }
 
 // NasSession is the network side of one UE's NAS signalling.
@@ -59,6 +61,7 @@ type Downlink struct {
 	Nas          []byte
 	InitialSetup bool // carry in Initial Context Setup Request (Registration Accept)
 	PduSetup     bool
+	Release      bool // follow with a UE Context Release Command (after Deregistration Accept)
 }
 
 // Handle consumes one uplink NAS PDU and returns the downlink replies.
@@ -72,8 +75,8 @@ func (s *NasSession) Handle(uplink []byte) ([]Downlink, error) {
 		return s.onSecurityModeComplete(uplink)
 	case "accepted":
 		return s.onRegistrationComplete(uplink)
-	case "registered":
-		return s.onPduRequest(uplink)
+	case "registered", "established":
+		return s.onRegisteredUplink(uplink)
 	default:
 		return nil, fmt.Errorf("unexpected uplink in state %s", s.state)
 	}
@@ -198,11 +201,32 @@ func (s *NasSession) onRegistrationComplete(b []byte) ([]Downlink, error) {
 	return []Downlink{{Nas: cmd}}, err
 }
 
-func (s *NasSession) onPduRequest(b []byte) ([]Downlink, error) {
+// onRegisteredUplink handles what a registered UE sends: a PDU session
+// request (once) or a deregistration request.
+func (s *NasSession) onRegisteredUplink(b []byte) ([]Downlink, error) {
 	m, err := message.Parse(b, s.secCtx)
 	if err != nil {
-		return nil, fmt.Errorf("decode ul nas transport: %w", err)
+		return nil, fmt.Errorf("decode uplink: %w", err)
 	}
+	if _, ok := m.(*message.DeregReqUEOrig); ok {
+		return s.onDeregistration()
+	}
+	if s.state == "established" {
+		return nil, fmt.Errorf("unexpected %T after the pdu session", m)
+	}
+	return s.onPduRequest(m)
+}
+
+func (s *NasSession) onDeregistration() ([]Downlink, error) {
+	s.state = "deregistered"
+	if s.behavior.IgnoreDeregistration {
+		return nil, nil
+	}
+	acc, err := message.Marshal(&message.DeregAcceptUEOrig{}, s.secCtx, message.SecHdrTypeIntegrityProtectedAndCiphered)
+	return []Downlink{{Nas: acc, Release: true}}, err
+}
+
+func (s *NasSession) onPduRequest(m message.Message) ([]Downlink, error) {
 	ul, ok := m.(*message.ULNASTransport)
 	if !ok || ul.PayloadCntr == nil {
 		return nil, fmt.Errorf("expected ul nas transport, got %T", m)
@@ -215,6 +239,7 @@ func (s *NasSession) onPduRequest(b []byte) ([]Downlink, error) {
 	}
 	s.state = "done"
 	var gsm []byte
+	var err error
 	pduSetup := false
 	if s.behavior.RejectPdu != 0 {
 		gsm, err = (&message.PDUSessEstRej{PDUSessId: 1, Cause5GSM: &ie.Cause5GSM{Value: s.behavior.RejectPdu}}).MarshalBinary()
@@ -232,6 +257,7 @@ func (s *NasSession) onPduRequest(b []byte) ([]Downlink, error) {
 			PDUAddr:  &ie.PDUAddr{IPv4: ip[:]},
 		}).MarshalBinary()
 		pduSetup = true
+		s.state = "established"
 	}
 	if err != nil {
 		return nil, fmt.Errorf("encode 5gsm reply: %w", err)
