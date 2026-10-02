@@ -78,7 +78,7 @@ function Field({ label, path, profile, errors, numeric = false, options, onChang
 }
 
 // RateFields renders one per-UE stage's pacing knobs.
-function RateFields({ stage, fieldProps }: { stage: 'registration' | 'pdu', fieldProps: Omit<FieldProps, 'label' | 'path'> }) {
+function RateFields({ stage, fieldProps }: { stage: 'registration' | 'pdu' | 'deregistration', fieldProps: Omit<FieldProps, 'label' | 'path'> }) {
   return (
     <>
       <Field label="Starts per second" path={`rates.${stage}.ratePerSec`} numeric {...fieldProps} />
@@ -272,12 +272,13 @@ export default function TesterSetupPage() {
                 <Field label="Downlink (Mbps)" path="traffic.dlMbps" numeric {...fieldProps} />
                 <Field label="Packet size (bytes, inner IP)" path="traffic.packetSize" numeric {...fieldProps} />
                 <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
+                <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
                 {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>,
                 downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>.
-                0 turns a direction off.
+                0 turns a direction off. With a max run time the run stops itself, exactly as if you pressed Stop.
               </p>
             </section>
 
@@ -304,6 +305,14 @@ export default function TesterSetupPage() {
                 <RateFields stage="pdu" fieldProps={fieldProps} />
               </div>
               <p className={styles.hint}>A UE moves on to its PDU session as soon as it is registered.</p>
+            </section>
+
+            <section className={styles.card}>
+              <h3 className={styles.cardTitle}>Deregistration pacing (on Stop)</h3>
+              <div className={styles.fieldGrid}>
+                <RateFields stage="deregistration" fieldProps={fieldProps} />
+              </div>
+              <p className={styles.hint}>After Stop, every UE that registered deregisters; the core releases its PDU session with it. Then each gNB's SCTP association is closed.</p>
             </section>
 
             <section className={styles.card}>

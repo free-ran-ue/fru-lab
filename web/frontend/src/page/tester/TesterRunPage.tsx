@@ -19,7 +19,7 @@ const STATE_LABELS: Record<TesterRunSnapshot['state'], string> = {
   configuring: 'Configuring gNB IPs',
   n2: 'N2 setup in progress',
   running: 'Running',
-  stopping: 'Stopping',
+  stopping: 'Cleaning up: deregistering UEs, closing N2',
   stopped: 'Stopped',
   failed: 'Failed',
 }
@@ -34,6 +34,8 @@ const UE_STATES: [keyof TesterUeSummary, string, 'pillOk' | 'pillBad' | 'pillAct
   ['failed', 'Failed', 'pillBad'],
   ['skipped', 'gNB down', 'pillMuted'],
   ['cancelled', 'Cancelled', 'pillMuted'],
+  ['deregistering', 'Deregistering', 'pillActive'],
+  ['deregistered', 'Deregistered', 'pillMuted'],
 ]
 
 // gnbTraffic renders one gNB's received bytes and loss for a direction.
@@ -280,19 +282,22 @@ export default function TesterRunPage() {
     }
   }, [])
 
+  const isActive = snapshot ? ACTIVE_STATES.includes(snapshot.state) : false
+  const isCleaningUp = snapshot?.state === 'stopping'
+
+  // Stop during cleanup skips the deregistrations still pending.
   const handleStop = useCallback(async () => {
+    if (isCleaningUp && !window.confirm('Skip the remaining deregistrations? SCTP is still closed and the IPs removed.')) return
     setIsStopping(true)
     try {
       await api.testerRunStop()
-      addSuccess('Stopping: closing N2 and removing gNB IPs')
+      addSuccess(isCleaningUp ? 'Skipping the rest of the cleanup' : 'Stopping: deregistering UEs, then closing N2')
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to stop the run'))
     } finally {
       setIsStopping(false)
     }
-  }, [addError, addSuccess])
-
-  const isActive = snapshot ? ACTIVE_STATES.includes(snapshot.state) : false
+  }, [addError, addSuccess, isCleaningUp])
 
   return (
     <div className={styles.layout}>
@@ -311,9 +316,10 @@ export default function TesterRunPage() {
           </div>
           <div className={styles.headerActions}>
             {snapshot && <span className={`${styles.pill} ${isActive ? styles.pillActive : snapshot.state === 'failed' ? styles.pillBad : styles.pillMuted}`}>{STATE_LABELS[snapshot.state]}</span>}
+            {snapshot?.stopReason === 'maxDuration' && <span className={`${styles.pill} ${styles.pillMuted}`}>Stopped at max run time</span>}
             {!isConnected && <span className={`${styles.pill} ${styles.pillBad}`}>Live updates disconnected</span>}
-            <Button variant="danger" onClick={handleStop} disabled={!isActive || isStopping}>
-              {isStopping ? 'Stopping…' : 'Stop'}
+            <Button variant="danger" onClick={handleStop} disabled={!(isActive || isCleaningUp) || isStopping}>
+              {isStopping ? 'Stopping…' : isCleaningUp ? 'Skip cleanup' : 'Stop'}
             </Button>
           </div>
         </header>
@@ -322,6 +328,12 @@ export default function TesterRunPage() {
 
         {snapshot && snapshot.state !== 'idle' && (
           <>
+            {(snapshot.state === 'stopping' || snapshot.state === 'stopped') && (
+              <div className={styles.stageRow}>
+                <StageCard title="Cleanup · UE deregistration" stage={snapshot.deregistration} />
+                <StageCard title="Cleanup · gNB SCTP close" stage={snapshot.n2Release} />
+              </div>
+            )}
             <div className={styles.stageRow}>
               <StageCard title="N2 setup" stage={snapshot.n2} />
               <StageCard title="Registration" stage={snapshot.registration} />

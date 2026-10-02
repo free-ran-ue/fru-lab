@@ -8,6 +8,7 @@ Name | Type | Description | Notes
 **n2** | [**TesterStageRate**](TesterStageRate.md) |  | [default to undefined]
 **registration** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
 **pdu** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
+**deregistration** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
 
 ## Example
 
@@ -18,6 +19,7 @@ const instance: TesterProfileRates = {
     n2,
     registration,
     pdu,
+    deregistration,
 };
 ```
 

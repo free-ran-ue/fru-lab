@@ -1228,7 +1228,7 @@ components:
                   example: 10.60.0.0/16
         rates:
           type: object
-          required: [n2, registration, pdu]
+          required: [n2, registration, pdu, deregistration]
           properties:
             n2:
               $ref: '#/components/schemas/TesterStageRate'
@@ -1236,10 +1236,12 @@ components:
               $ref: '#/components/schemas/TesterProcedureRate'
             pdu:
               $ref: '#/components/schemas/TesterProcedureRate'
+            deregistration:
+              $ref: '#/components/schemas/TesterProcedureRate'
     TesterTraffic:
       type: object
       description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
-      required: [ulMbps, dlMbps, packetSize, port]
+      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin]
       properties:
         ulMbps:
           type: number
@@ -1256,6 +1258,10 @@ components:
           type: integer
           description: UDP port at the N6 sink and at the UEs.
           example: 9200
+        maxDurationMin:
+          type: integer
+          description: Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
+          example: 0
     TesterUeTemplate:
       type: object
       description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
@@ -1477,7 +1483,7 @@ components:
               type: integer
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, gnbs, ues, failedUes, dataplane]
+      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane]
       properties:
         runId:
           type: string
@@ -1502,6 +1508,14 @@ components:
           $ref: '#/components/schemas/TesterStageSnapshot'
         pdu:
           $ref: '#/components/schemas/TesterStageSnapshot'
+        deregistration:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        n2Release:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        stopReason:
+          type: string
+          description: Why the run stopped; empty while running.
+          enum: ['', user, maxDuration]
         gnbs:
           type: array
           items:
@@ -1625,7 +1639,7 @@ components:
     TesterUeSummary:
       type: object
       description: UEs per pipeline state; the fields add up to the UE count.
-      required: [pending, registering, registered, establishing, established, failed, skipped, cancelled]
+      required: [pending, registering, registered, establishing, established, failed, skipped, cancelled, deregistering, deregistered]
       properties:
         pending:
           type: integer
@@ -1643,6 +1657,10 @@ components:
           type: integer
         cancelled:
           type: integer
+        deregistering:
+          type: integer
+        deregistered:
+          type: integer
     TesterUeFailure:
       type: object
       required: [supi, gnb, stage, cause, attempts]
@@ -1653,7 +1671,7 @@ components:
           type: string
         stage:
           type: string
-          enum: [registration, pdu]
+          enum: [registration, pdu, deregistration]
         cause:
           type: string
           example: 5gmm(62)

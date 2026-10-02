@@ -14,6 +14,8 @@ Name | Type | Description | Notes
 **failed** | **number** |  | [default to undefined]
 **skipped** | **number** |  | [default to undefined]
 **cancelled** | **number** |  | [default to undefined]
+**deregistering** | **number** |  | [default to undefined]
+**deregistered** | **number** |  | [default to undefined]
 
 ## Example
 
@@ -29,6 +31,8 @@ const instance: TesterUeSummary = {
     failed,
     skipped,
     cancelled,
+    deregistering,
+    deregistered,
 };
 ```
 

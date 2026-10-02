@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **dlMbps** | **number** | Per UE; 0 disables downlink. | [default to undefined]
 **packetSize** | **number** |  | [default to undefined]
 **port** | **number** | UDP port at the N6 sink and at the UEs. | [default to undefined]
+**maxDurationMin** | **number** | Stop the run this many minutes after it started, exactly like pressing Stop. 0 &#x3D; run until Stop. | [default to undefined]
 
 ## Example
 
@@ -21,6 +22,7 @@ const instance: TesterTraffic = {
     dlMbps,
     packetSize,
     port,
+    maxDurationMin,
 };
 ```
 

@@ -29,7 +29,7 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     sst: 1,
     sd: '010203',
   },
-  traffic: { ulMbps: 1, dlMbps: 1, packetSize: 1400, port: 9200 },
+  traffic: { ulMbps: 1, dlMbps: 1, packetSize: 1400, port: 9200, maxDurationMin: 0 },
   network: {
     n2: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', amfIp: '10.0.1.3', amfPort: 38412 },
     n3: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', upfIp: '10.0.1.5', upfPort: 2152 },
@@ -41,6 +41,7 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     n2: { timeoutMs: 5000, retries: 1 },
     registration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
     pdu: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
+    deregistration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 5000, retries: 1 },
   },
 }
 

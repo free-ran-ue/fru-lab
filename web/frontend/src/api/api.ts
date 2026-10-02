@@ -277,6 +277,7 @@ export interface TesterProfileRates {
     'n2': TesterStageRate;
     'registration': TesterProcedureRate;
     'pdu': TesterProcedureRate;
+    'deregistration': TesterProcedureRate;
 }
 export interface TesterProfileScale {
     'gnbCount': number;
@@ -292,6 +293,12 @@ export interface TesterRunSnapshot {
     'n2': TesterStageSnapshot;
     'registration': TesterStageSnapshot;
     'pdu': TesterStageSnapshot;
+    'deregistration': TesterStageSnapshot;
+    'n2Release': TesterStageSnapshot;
+    /**
+     * Why the run stopped; empty while running.
+     */
+    'stopReason': TesterRunSnapshotStopReasonEnum;
     'gnbs': Array<TesterGnbStatus>;
     'ues': TesterUeSummary;
     /**
@@ -312,6 +319,13 @@ export const TesterRunSnapshotStateEnum = {
 } as const;
 
 export type TesterRunSnapshotStateEnum = typeof TesterRunSnapshotStateEnum[keyof typeof TesterRunSnapshotStateEnum];
+export const TesterRunSnapshotStopReasonEnum = {
+    Empty: '',
+    User: 'user',
+    MaxDuration: 'maxDuration',
+} as const;
+
+export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReasonEnum[keyof typeof TesterRunSnapshotStopReasonEnum];
 
 export interface TesterStageRate {
     'timeoutMs': number;
@@ -364,6 +378,10 @@ export interface TesterTraffic {
      * UDP port at the N6 sink and at the UEs.
      */
     'port': number;
+    /**
+     * Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
+     */
+    'maxDurationMin': number;
 }
 /**
  * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
@@ -410,6 +428,7 @@ export interface TesterUeFailure {
 export const TesterUeFailureStageEnum = {
     Registration: 'registration',
     Pdu: 'pdu',
+    Deregistration: 'deregistration',
 } as const;
 
 export type TesterUeFailureStageEnum = typeof TesterUeFailureStageEnum[keyof typeof TesterUeFailureStageEnum];
@@ -426,6 +445,8 @@ export interface TesterUeSummary {
     'failed': number;
     'skipped': number;
     'cancelled': number;
+    'deregistering': number;
+    'deregistered': number;
 }
 /**
  * Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
