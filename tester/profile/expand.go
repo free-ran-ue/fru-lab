@@ -72,6 +72,8 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 	exclude := append([]netip.Addr{
 		netip.MustParseAddr(p.Network.N2.AmfIP),
 		netip.MustParseAddr(p.Network.N3.UpfIP),
+		netip.MustParseAddr(p.Network.N6.UpfIP),
+		netip.MustParseAddr(p.Network.N6.SinkIP),
 	}, hostIPs...)
 	n2IPs, err := AllocateIPs(p.Network.N2.Cidr, p.Network.N2.StartIP, count, exclude)
 	if err != nil {
@@ -165,6 +167,7 @@ func validateFields(p Profile, verr *ValidationError) {
 		verr.add("gnb.sd", "must be empty or 6 hex digits")
 	}
 	validateUe(p, verr)
+	validateTraffic(p, verr)
 	validateEndpoint(verr, "network.n2", p.Network.N2.Interface, p.Network.N2.Cidr, p.Network.N2.StartIP, "amfIp", p.Network.N2.AmfIP, "amfPort", p.Network.N2.AmfPort)
 	validateEndpoint(verr, "network.n3", p.Network.N3.Interface, p.Network.N3.Cidr, p.Network.N3.StartIP, "upfIp", p.Network.N3.UpfIP, "upfPort", p.Network.N3.UpfPort)
 	// The upper bound keeps Stop prompt: in-flight attempts finish within
@@ -212,6 +215,32 @@ func validateUe(p Profile, verr *ValidationError) {
 	}
 	if u.Sd != "" && !reHex6.MatchString(u.Sd) {
 		verr.add("ue.sd", "must be empty or 6 hex digits")
+	}
+}
+
+func validateTraffic(p Profile, verr *ValidationError) {
+	t, n6 := p.Traffic, p.Network.N6
+	for field, v := range map[string]float64{"traffic.ulMbps": t.UlMbps, "traffic.dlMbps": t.DlMbps} {
+		if v < 0 || v > 10000 {
+			verr.add(field, "must be between 0 and 10000")
+		}
+	}
+	if t.PacketSize < 64 || t.PacketSize > 1400 {
+		verr.add("traffic.packetSize", "must be between 64 and 1400")
+	}
+	if t.Port < 1 || t.Port > 65535 {
+		verr.add("traffic.port", "must be between 1 and 65535")
+	}
+	if strings.TrimSpace(n6.Interface) == "" {
+		verr.add("network.n6.interface", "must not be empty")
+	}
+	for field, v := range map[string]string{"network.n6.sinkIp": n6.SinkIP, "network.n6.upfIp": n6.UpfIP} {
+		if a, err := netip.ParseAddr(v); err != nil || !a.Is4() {
+			verr.add(field, fmt.Sprintf("%q is not an IPv4 address", v))
+		}
+	}
+	if pre, err := netip.ParsePrefix(n6.UePool); err != nil || !pre.Addr().Is4() {
+		verr.add("network.n6.uePool", fmt.Sprintf("%q is not an IPv4 CIDR", n6.UePool))
 	}
 }
 

@@ -9,8 +9,19 @@ type Profile struct {
 	Scale   Scale       `json:"scale"`
 	Gnb     GnbTemplate `json:"gnb"`
 	Ue      UeTemplate  `json:"ue"`
+	Traffic Traffic     `json:"traffic"`
 	Network Network     `json:"network"`
 	Rates   Rates       `json:"rates"`
+}
+
+// Traffic is what every established UE sends and receives, at a fixed
+// rate (design Q10). PacketSize is the inner IP packet's length; Port is
+// the UDP port used at the N6 sink and at the (simulated) UEs.
+type Traffic struct {
+	UlMbps     float64 `json:"ulMbps"` // per UE; 0 = no uplink
+	DlMbps     float64 `json:"dlMbps"` // per UE; 0 = no downlink
+	PacketSize int     `json:"packetSize"`
+	Port       int     `json:"port"`
 }
 
 type Scale struct {
@@ -50,6 +61,18 @@ type UeTemplate struct {
 type Network struct {
 	N2 N2Network `json:"n2"`
 	N3 N3Network `json:"n3"`
+	N6 N6Network `json:"n6"`
+}
+
+// N6Network is the data-network side. Uplink leaves the UPF addressed to
+// SinkIP (added to Interface if the host does not have it); downlink is
+// sent from SinkIP to the UEs' IPs, which the tester routes via UpfIP
+// (UePool via UpfIP dev Interface) for the duration of the run (Q16).
+type N6Network struct {
+	Interface string `json:"interface"`
+	SinkIP    string `json:"sinkIp"`
+	UpfIP     string `json:"upfIp"`
+	UePool    string `json:"uePool"`
 }
 
 // N2Network gives each gNB its own local IP from Cidr, starting at StartIP.
@@ -61,8 +84,8 @@ type N2Network struct {
 	AmfPort   int    `json:"amfPort"`
 }
 
-// N3Network is validated and allocated now so the setup page can show the
-// full per-gNB plan, but nothing binds to these IPs until phase 3.
+// N3Network gives each gNB its own N3 IP from Cidr (design N1); the data
+// plane sends uplink from it and the UPF sends downlink to it.
 type N3Network struct {
 	Interface string `json:"interface"`
 	Cidr      string `json:"cidr"`

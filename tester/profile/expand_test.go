@@ -23,7 +23,9 @@ func sampleProfile() Profile {
 		Network: Network{
 			N2: N2Network{Interface: "ens19", Cidr: "10.0.1.0/24", StartIP: "10.0.1.1", AmfIP: "10.0.1.1", AmfPort: 38412},
 			N3: N3Network{Interface: "ens20", Cidr: "10.0.2.0/24", StartIP: "10.0.2.2", UpfIP: "10.0.2.1", UpfPort: 2152},
+			N6: N6Network{Interface: "ens21", SinkIP: "10.0.3.2", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
 		},
+		Traffic: Traffic{UlMbps: 1, DlMbps: 5, PacketSize: 1400, Port: 9200},
 		Rates: Rates{
 			N2:           StageRate{TimeoutMs: 5000, Retries: 1},
 			Registration: ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
@@ -156,4 +158,34 @@ func TestExpandReportsMsinOverflow(t *testing.T) {
 	require.ErrorAs(t, err, &verr)
 	require.Equal(t, "ue.msinStart", verr.Errors[0].Field)
 	require.Contains(t, verr.Errors[0].Message, "overflows")
+}
+
+func TestExpandValidatesTrafficAndN6(t *testing.T) {
+	p := sampleProfile()
+	p.Traffic = Traffic{UlMbps: -1, DlMbps: 20000, PacketSize: 32, Port: 0}
+	p.Network.N6 = N6Network{Interface: "", SinkIP: "x", UpfIP: "10.0.3.1", UePool: "10.60.0.0"}
+	_, err := Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.ElementsMatch(t, []FieldError{
+		{Field: "traffic.ulMbps", Message: "must be between 0 and 10000"},
+		{Field: "traffic.dlMbps", Message: "must be between 0 and 10000"},
+		{Field: "traffic.packetSize", Message: "must be between 64 and 1400"},
+		{Field: "traffic.port", Message: "must be between 1 and 65535"},
+		{Field: "network.n6.interface", Message: "must not be empty"},
+		{Field: "network.n6.sinkIp", Message: `"x" is not an IPv4 address`},
+		{Field: "network.n6.uePool", Message: `"10.60.0.0" is not an IPv4 CIDR`},
+	}, verr.Errors)
+}
+
+// fru-lab's core puts N2, N3 and N6 on one bridge: the sink and the UPF's
+// N6 address must never be handed to a gNB.
+func TestExpandNeverAllocatesTheSinkOrUpfN6IP(t *testing.T) {
+	p := sampleProfile()
+	p.Network.N6.SinkIP, p.Network.N6.UpfIP = "10.0.1.2", "10.0.1.4"
+	plan, err := Expand(p, nil)
+	require.NoError(t, err)
+	for _, g := range plan.Gnbs {
+		require.NotContains(t, []string{"10.0.1.2", "10.0.1.4"}, g.N2IP)
+	}
 }
