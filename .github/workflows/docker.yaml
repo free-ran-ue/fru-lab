@@ -11,6 +11,7 @@ on:
 
 env:
   IMAGE_NAME: alonza0314/fru-lab
+  TESTER_IMAGE_NAME: alonza0314/fru-tester
 
 jobs:
   build:
@@ -20,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
+      - name: Build images
         run: ./docker/build_image.sh test
 
       - name: Test Docker image
@@ -28,6 +29,11 @@ jobs:
           docker images
           docker run --rm ${{ env.IMAGE_NAME }}:test ls /frulab/fru-lab
           docker run --rm ${{ env.IMAGE_NAME }}:test ls /frulab/frontend
+
+      - name: Test fru-tester Docker image
+        run: |
+          docker run --rm ${{ env.TESTER_IMAGE_NAME }}:test ls /frutester/fru-tester
+          docker run --rm ${{ env.TESTER_IMAGE_NAME }}:test ./fru-tester --help
 
   version-release:
     name: Release Version Image
@@ -50,6 +56,14 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
+      - name: Build and push fru-tester
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/tester.Dockerfile
+          push: true
+          tags: ${{ env.TESTER_IMAGE_NAME }}:${{ github.ref_name }}
+
   latest-release:
     name: Release Latest Image
     if: github.event_name == 'schedule'
@@ -70,3 +84,11 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest
+
+      - name: Build and push fru-tester
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/tester.Dockerfile
+          push: true
+          tags: ${{ env.TESTER_IMAGE_NAME }}:latest
