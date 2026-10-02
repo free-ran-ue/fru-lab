@@ -39,6 +39,9 @@ type backend struct {
 
 	// testerProxy is nil when backend.tester.url is not configured.
 	testerProxy *httputil.ReverseProxy
+	// testerHistory copies finished runs into the DB; nil like testerProxy.
+	testerHistory     *testerHistoryWatcher
+	stopTesterHistory context.CancelFunc
 
 	processor.Processor
 
@@ -97,6 +100,10 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 			return nil
 		}
 		b.testerProxy = proxy
+		b.testerHistory = &testerHistoryWatcher{
+			url: config.Backend.Tester.URL, token: config.Backend.Tester.ApiToken,
+			client: &http.Client{Timeout: 10 * time.Second}, store: flCtx, log: logger.TesterLog,
+		}
 	} else {
 		logger.BckLog.Warnln("backend.tester.url is empty; Throughput Tester routes will answer 503")
 	}
@@ -147,12 +154,22 @@ func (b *backend) Start() {
 	}()
 	time.Sleep(500 * time.Millisecond)
 
+	if b.testerHistory != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		b.stopTesterHistory = cancel
+		go b.testerHistory.run(ctx)
+	}
+
 	b.BckLog.Infof("Backend server started on port: %d", b.port)
 }
 
 func (b *backend) Stop() {
 	fmt.Println()
 	b.BckLog.Infoln("Stopping backend server...")
+
+	if b.stopTesterHistory != nil {
+		b.stopTesterHistory()
+	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
@@ -182,6 +199,7 @@ func addServices(router *gin.Engine, b *backend) {
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
 	addRoutes(authGroup, b.getTesterRoutes())
+	addTesterHistoryRoutes(authGroup, b.Processor.FlContext)
 	addRoutes(apiGroup, b.getTesterStreamRoutes())
 }
 

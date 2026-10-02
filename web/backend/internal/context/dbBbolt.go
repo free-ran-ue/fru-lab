@@ -53,6 +53,31 @@ func (b *bboltDb) Put(bucket, key string, value []byte) error {
 	})
 }
 
+func (b *bboltDb) List(bucket string) ([]KV, error) {
+	var out []KV
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		bk := tx.Bucket([]byte(bucket))
+		if bk == nil {
+			return nil
+		}
+		return bk.ForEach(func(k, v []byte) error {
+			out = append(out, KV{Key: string(k), Value: append([]byte(nil), v...)})
+			return nil
+		})
+	})
+	return out, err
+}
+
+func (b *bboltDb) Delete(bucket, key string) error {
+	return b.db.Update(func(tx *bbolt.Tx) error {
+		bk := tx.Bucket([]byte(bucket))
+		if bk == nil {
+			return nil
+		}
+		return bk.Delete([]byte(key))
+	})
+}
+
 func (b *bboltDb) Release() error {
 	if b.db != nil {
 		return b.db.Close()
