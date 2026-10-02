@@ -8,6 +8,7 @@ import LogsPage from './page/logs/LogsPage'
 import ImagesPage from './page/images/ImagesPage'
 import TesterSetupPage from './page/tester/TesterSetupPage'
 import TesterRunPage from './page/tester/TesterRunPage'
+import TesterHistoryPage from './page/tester/TesterHistoryPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -91,6 +92,14 @@ export default function App() {
         element={(
           <RequireAuth>
             <TesterRunPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/tester/history"
+        element={(
+          <RequireAuth>
+            <TesterHistoryPage />
           </RequireAuth>
         )}
       />

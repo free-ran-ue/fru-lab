@@ -193,6 +193,27 @@ export interface TesterGnbTraffic {
     'dlTxBytes': number;
     'dlRxBytes': number;
 }
+export interface TesterHistorySummary {
+    'runId': string;
+    'profileName': string;
+    'state': string;
+    'error': string;
+    'stopReason': string;
+    'startedAt'?: string | null;
+    'stoppedAt'?: string | null;
+    'gnbCount': number;
+    'ueCount': number;
+    'registered': number;
+    'registrationP95Ms': number;
+    'established': number;
+    'deregistered': number;
+    'ulTxBytes': number;
+    'ulRxBytes': number;
+    'ulLossRate': number;
+    'dlTxBytes': number;
+    'dlRxBytes': number;
+    'dlLossRate': number;
+}
 /**
  * One-way latency in milliseconds (send and receive share the host clock).
  */
@@ -282,6 +303,10 @@ export interface TesterProfileRates {
 export interface TesterProfileScale {
     'gnbCount': number;
     'ueCount': number;
+}
+export interface TesterRunReport {
+    'profile': TesterProfile;
+    'snapshot': TesterRunSnapshot;
 }
 export interface TesterRunSnapshot {
     'runId': string;
@@ -1298,6 +1323,116 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * 
+         * @summary One finished run\'s full report (JSON export)
+         * @param {string} runId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryGet: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'runId' is not null or undefined
+            assertParamExists('testerHistoryGet', 'runId', runId)
+            const localVarPath = `/api/tester/history/{runId}`
+                .replace('{runId}', encodeURIComponent(String(runId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * fru-lab keeps the last 50 runs fru-tester finished.
+         * @summary Finished runs, newest first
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/tester/history`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary One finished run\'s throughput time series (CSV export)
+         * @param {string} runId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistorySeriesCsv: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'runId' is not null or undefined
+            assertParamExists('testerHistorySeriesCsv', 'runId', runId)
+            const localVarPath = `/api/tester/history/{runId}/series.csv`
+                .replace('{runId}', encodeURIComponent(String(runId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'text/csv,application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Returns the last profile saved from the setup page. 204 when none has been saved yet.
          * @summary Get the saved Throughput Tester profile
          * @param {*} [options] Override http request option.
@@ -1483,7 +1618,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+         * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
          * @summary Stop the active run
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1805,6 +1940,44 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 
+         * @summary One finished run\'s full report (JSON export)
+         * @param {string} runId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerHistoryGet(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunReport>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryGet(runId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * fru-lab keeps the last 50 runs fru-tester finished.
+         * @summary Finished runs, newest first
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerHistoryList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterHistorySummary>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary One finished run\'s throughput time series (CSV export)
+         * @param {string} runId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistorySeriesCsv(runId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistorySeriesCsv']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Returns the last profile saved from the setup page. 204 when none has been saved yet.
          * @summary Get the saved Throughput Tester profile
          * @param {*} [options] Override http request option.
@@ -1868,7 +2041,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+         * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
          * @summary Stop the active run
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2102,6 +2275,35 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.logout(options).then((request) => request(axios, basePath));
         },
         /**
+         * 
+         * @summary One finished run\'s full report (JSON export)
+         * @param {string} runId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryGet(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunReport> {
+            return localVarFp.testerHistoryGet(runId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * fru-lab keeps the last 50 runs fru-tester finished.
+         * @summary Finished runs, newest first
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterHistorySummary>> {
+            return localVarFp.testerHistoryList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary One finished run\'s throughput time series (CSV export)
+         * @param {string} runId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.testerHistorySeriesCsv(runId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Returns the last profile saved from the setup page. 204 when none has been saved yet.
          * @summary Get the saved Throughput Tester profile
          * @param {*} [options] Override http request option.
@@ -2150,7 +2352,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerRunStart(testerProfile, options).then((request) => request(axios, basePath));
         },
         /**
-         * Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+         * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
          * @summary Stop the active run
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2401,6 +2603,38 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * 
+     * @summary One finished run\'s full report (JSON export)
+     * @param {string} runId 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerHistoryGet(runId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistoryGet(runId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * fru-lab keeps the last 50 runs fru-tester finished.
+     * @summary Finished runs, newest first
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerHistoryList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistoryList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary One finished run\'s throughput time series (CSV export)
+     * @param {string} runId 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistorySeriesCsv(runId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * Returns the last profile saved from the setup page. 204 when none has been saved yet.
      * @summary Get the saved Throughput Tester profile
      * @param {*} [options] Override http request option.
@@ -2454,7 +2688,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+     * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
      * @summary Stop the active run
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}

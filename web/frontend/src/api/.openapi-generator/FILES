@@ -24,6 +24,7 @@ docs/TesterFieldError.md
 docs/TesterGnbSpec.md
 docs/TesterGnbStatus.md
 docs/TesterGnbTraffic.md
+docs/TesterHistorySummary.md
 docs/TesterLatency.md
 docs/TesterPlan.md
 docs/TesterProcedureRate.md
@@ -35,6 +36,7 @@ docs/TesterProfileNetworkN3.md
 docs/TesterProfileNetworkN6.md
 docs/TesterProfileRates.md
 docs/TesterProfileScale.md
+docs/TesterRunReport.md
 docs/TesterRunSnapshot.md
 docs/TesterStageRate.md
 docs/TesterStageSnapshot.md

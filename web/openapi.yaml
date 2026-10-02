@@ -853,7 +853,7 @@ paths:
   /api/tester/run/stop:
     post:
       summary: Stop the active run
-      description: Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+      description: Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
       operationId: testerRunStop
       security:
         - bearerAuth: []
@@ -866,6 +866,72 @@ paths:
                 $ref: '#/components/schemas/TesterRunSnapshot'
         '409':
           description: No active run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/tester/history:
+    get:
+      summary: Finished runs, newest first
+      description: fru-lab keeps the last 50 runs fru-tester finished.
+      operationId: testerHistoryList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterHistorySummary'
+  /api/tester/history/{runId}:
+    get:
+      summary: One finished run's full report (JSON export)
+      operationId: testerHistoryGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The profile the run used and its final snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunReport'
+        '404':
+          description: No such run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/tester/history/{runId}/series.csv:
+    get:
+      summary: One finished run's throughput time series (CSV export)
+      operationId: testerHistorySeriesCsv
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 't,ulTxBps,ulRxBps,dlTxBps,dlRxBps, one row per chart point'
+          content:
+            text/csv:
+              schema:
+                type: string
+        '404':
+          description: No such run
           content:
             application/json:
               schema:
@@ -1661,6 +1727,67 @@ components:
           type: integer
         deregistered:
           type: integer
+    TesterRunReport:
+      type: object
+      required: [profile, snapshot]
+      properties:
+        profile:
+          $ref: '#/components/schemas/TesterProfile'
+        snapshot:
+          $ref: '#/components/schemas/TesterRunSnapshot'
+    TesterHistorySummary:
+      type: object
+      required: [runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
+      properties:
+        runId:
+          type: string
+        profileName:
+          type: string
+        state:
+          type: string
+        error:
+          type: string
+        stopReason:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        stoppedAt:
+          type: string
+          format: date-time
+          nullable: true
+        gnbCount:
+          type: integer
+        ueCount:
+          type: integer
+        registered:
+          type: integer
+          format: int64
+        registrationP95Ms:
+          type: number
+        established:
+          type: integer
+          format: int64
+        deregistered:
+          type: integer
+          format: int64
+        ulTxBytes:
+          type: integer
+          format: int64
+        ulRxBytes:
+          type: integer
+          format: int64
+        ulLossRate:
+          type: number
+        dlTxBytes:
+          type: integer
+          format: int64
+        dlRxBytes:
+          type: integer
+          format: int64
+        dlLossRate:
+          type: number
     TesterUeFailure:
       type: object
       required: [supi, gnb, stage, cause, attempts]
