@@ -26,6 +26,12 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**imageRemove**](#imageremove) | **DELETE** /api/images/{key} | Clear a locally cached image|
 |[**login**](#login) | **POST** /api/login | Login|
 |[**logout**](#logout) | **POST** /api/logout | Logout|
+|[**testerProfileGet**](#testerprofileget) | **GET** /api/tester/profile | Get the saved Throughput Tester profile|
+|[**testerProfilePut**](#testerprofileput) | **PUT** /api/tester/profile | Save the Throughput Tester profile|
+|[**testerProfileValidate**](#testerprofilevalidate) | **POST** /api/tester/profile/validate | Validate a profile and preview the per-gNB plan|
+|[**testerRunGet**](#testerrunget) | **GET** /api/tester/run | Current run snapshot|
+|[**testerRunStart**](#testerrunstart) | **POST** /api/tester/run | Start a run|
+|[**testerRunStop**](#testerrunstop) | **POST** /api/tester/run/stop | Stop the active run|
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()
@@ -1141,6 +1147,307 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**204** | No Content |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfileGet**
+> TesterProfile testerProfileGet()
+
+Returns the last profile saved from the setup page. 204 when none has been saved yet.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerProfileGet();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**TesterProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**204** | No profile saved yet |  -  |
+|**401** | Unauthorized |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfilePut**
+> MessageResponse testerProfilePut(testerProfile)
+
+Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let testerProfile: TesterProfile; //
+
+const { status, data } = await apiInstance.testerProfilePut(
+    testerProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerProfile** | **TesterProfile**|  | |
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Body is not a JSON object |  -  |
+|**401** | Unauthorized |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfileValidate**
+> TesterValidateResponse testerProfileValidate(testerProfile)
+
+Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let testerProfile: TesterProfile; //
+
+const { status, data } = await apiInstance.testerProfileValidate(
+    testerProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerProfile** | **TesterProfile**|  | |
+
+
+### Return type
+
+**TesterValidateResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**502** | fru-tester is unreachable |  -  |
+|**503** | backend.tester.url is not configured |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerRunGet**
+> TesterRunSnapshot testerRunGet()
+
+Forwarded to fru-tester. State is `idle` before the first run.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerRunGet();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**TesterRunSnapshot**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**502** | fru-tester is unreachable |  -  |
+|**503** | backend.tester.url is not configured |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerRunStart**
+> TesterRunSnapshot testerRunStart(testerProfile)
+
+Forwarded to fru-tester. Only one run may be active at a time.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let testerProfile: TesterProfile; //
+
+const { status, data } = await apiInstance.testerRunStart(
+    testerProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerProfile** | **TesterProfile**|  | |
+
+
+### Return type
+
+**TesterRunSnapshot**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**202** | Run started |  -  |
+|**400** | Profile is invalid |  -  |
+|**409** | A run is already active |  -  |
+|**502** | fru-tester is unreachable |  -  |
+|**503** | backend.tester.url is not configured |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerRunStop**
+> TesterRunSnapshot testerRunStop()
+
+Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerRunStop();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**TesterRunSnapshot**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**202** | Stop requested |  -  |
+|**409** | No active run |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

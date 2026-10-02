@@ -693,6 +693,183 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
 
+  /api/tester/profile:
+    get:
+      summary: Get the saved Throughput Tester profile
+      description: Returns the last profile saved from the setup page. 204 when none has been saved yet.
+      operationId: testerProfileGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterProfile'
+        '204':
+          description: No profile saved yet
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    put:
+      summary: Save the Throughput Tester profile
+      description: Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
+      operationId: testerProfilePut
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Body is not a JSON object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/tester/profile/validate:
+    post:
+      summary: Validate a profile and preview the per-gNB plan
+      description: Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
+      operationId: testerProfileValidate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterValidateResponse'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/tester/run:
+    get:
+      summary: Current run snapshot
+      description: Forwarded to fru-tester. State is `idle` before the first run.
+      operationId: testerRunGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Start a run
+      description: Forwarded to fru-tester. Only one run may be active at a time.
+      operationId: testerRunStart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '202':
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '400':
+          description: Profile is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run is already active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/tester/run/stop:
+    post:
+      summary: Stop the active run
+      description: Closes every N2 association and removes the gNB IPs fru-tester added. Returns at once; watch the stream for `stopped`.
+      operationId: testerRunStop
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: Stop requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '409':
+          description: No active run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -941,3 +1118,275 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageInfo'
+    TesterProfile:
+      type: object
+      required: [name, scale, gnb, network, rates]
+      properties:
+        name:
+          type: string
+          example: 1000 UE baseline
+        scale:
+          type: object
+          required: [gnbCount, ueCount]
+          properties:
+            gnbCount:
+              type: integer
+              example: 10
+            ueCount:
+              type: integer
+              example: 1000
+        gnb:
+          type: object
+          required: [gnbIdStart, namePattern, mcc, mnc, tac, sst, sd]
+          properties:
+            gnbIdStart:
+              type: string
+              description: 6 or 8 hex digits; incremented per gNB, keeping its width.
+              example: '000314'
+            namePattern:
+              type: string
+              description: Must contain {i}, replaced by the 1-based gNB index.
+              example: gNB-{i}
+            mcc:
+              type: string
+              example: '208'
+            mnc:
+              type: string
+              example: '93'
+            tac:
+              type: string
+              example: '000001'
+            sst:
+              type: integer
+              example: 1
+            sd:
+              type: string
+              description: Empty or 6 hex digits.
+              example: '010203'
+        network:
+          type: object
+          required: [n2, n3]
+          properties:
+            n2:
+              type: object
+              required: [interface, cidr, startIp, amfIp, amfPort]
+              properties:
+                interface:
+                  type: string
+                  example: ens19
+                cidr:
+                  type: string
+                  example: 10.0.1.0/24
+                startIp:
+                  type: string
+                  example: 10.0.1.100
+                amfIp:
+                  type: string
+                  example: 10.0.1.1
+                amfPort:
+                  type: integer
+                  example: 38412
+            n3:
+              type: object
+              required: [interface, cidr, startIp, upfIp, upfPort]
+              properties:
+                interface:
+                  type: string
+                  example: ens20
+                cidr:
+                  type: string
+                  example: 10.0.2.0/24
+                startIp:
+                  type: string
+                  example: 10.0.2.100
+                upfIp:
+                  type: string
+                  example: 10.0.2.1
+                upfPort:
+                  type: integer
+                  example: 2152
+        rates:
+          type: object
+          required: [n2]
+          properties:
+            n2:
+              $ref: '#/components/schemas/TesterStageRate'
+    TesterStageRate:
+      type: object
+      required: [timeoutMs, retries]
+      properties:
+        timeoutMs:
+          type: integer
+          example: 5000
+        retries:
+          type: integer
+          example: 1
+    TesterFieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: network.n2.cidr
+        message:
+          type: string
+    TesterGnbSpec:
+      type: object
+      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, ueFirst, ueLast]
+      properties:
+        index:
+          type: integer
+        name:
+          type: string
+        gnbId:
+          type: string
+        n2Ip:
+          type: string
+        n3Ip:
+          type: string
+        ueCount:
+          type: integer
+        ueFirst:
+          type: integer
+          description: 1-based index of the first UE on this gNB; 0 when it has none.
+        ueLast:
+          type: integer
+    TesterPlan:
+      type: object
+      required: [gnbs, uesPerGnb, n2Prefix, n3Prefix]
+      properties:
+        gnbs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterGnbSpec'
+        uesPerGnb:
+          type: integer
+        n2Prefix:
+          type: integer
+        n3Prefix:
+          type: integer
+    TesterValidateResponse:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterFieldError'
+        plan:
+          allOf:
+            - $ref: '#/components/schemas/TesterPlan'
+          nullable: true
+    TesterStartErrorResponse:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterFieldError'
+    TesterCauseCount:
+      type: object
+      required: [cause, count]
+      properties:
+        cause:
+          type: string
+          example: misc(4)
+        count:
+          type: integer
+          format: int64
+    TesterStageSnapshot:
+      type: object
+      description: One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
+      required: [name, expected, attempted, retries, inFlight, accepted, rejected, timedOut, failed, done, totalTimeMs, avgMs, p50Ms, p95Ms, p99Ms, maxMs, causes]
+      properties:
+        name:
+          type: string
+        expected:
+          type: integer
+        attempted:
+          type: integer
+          format: int64
+        retries:
+          type: integer
+          format: int64
+        inFlight:
+          type: integer
+          format: int64
+        accepted:
+          type: integer
+          format: int64
+        rejected:
+          type: integer
+          format: int64
+        timedOut:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        done:
+          type: boolean
+        totalTimeMs:
+          type: number
+        avgMs:
+          type: number
+        p50Ms:
+          type: number
+        p95Ms:
+          type: number
+        p99Ms:
+          type: number
+        maxMs:
+          type: number
+        causes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterCauseCount'
+    TesterGnbStatus:
+      allOf:
+        - $ref: '#/components/schemas/TesterGnbSpec'
+        - type: object
+          required: [state, attempts, latencyMs, cause]
+          properties:
+            state:
+              type: string
+              enum: [pending, connecting, up, failed, lost, closed]
+              description: lost = was up, then the AMF side dropped the association.
+            attempts:
+              type: integer
+            latencyMs:
+              type: number
+            cause:
+              type: string
+    TesterRunSnapshot:
+      type: object
+      required: [runId, profileName, state, error, n2, gnbs]
+      properties:
+        runId:
+          type: string
+        profileName:
+          type: string
+        state:
+          type: string
+          enum: [idle, configuring, n2, running, stopping, stopped, failed]
+        error:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        stoppedAt:
+          type: string
+          format: date-time
+          nullable: true
+        n2:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        gnbs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterGnbStatus'
