@@ -262,6 +262,8 @@ func TestStopDeregistersRegisteredButNotEstablishedUes(t *testing.T) {
 	snap := stopAndWait(t, c)
 	require.Equal(t, int64(10), snap.Deregistration.Accepted, "registered UEs deregister even without a PDU session")
 	require.Equal(t, 10, amf.Deregistrations())
+	require.Equal(t, UeSummary{Failed: 10}, snap.Ues, "a UE whose PDU failed stays counted as failed")
+	require.Len(t, snap.FailedUes, 10)
 }
 
 func TestUesThatNeverRegisteredAreSkippedAtCleanup(t *testing.T) {
@@ -334,6 +336,7 @@ func TestSecondStopAbortsCleanup(t *testing.T) {
 	snap := waitState(t, c, StateStopped)
 	require.True(t, snap.Deregistration.Done)
 	require.Equal(t, int64(5), snap.Deregistration.Skipped, "the queued half was never sent")
+	require.Equal(t, UeSummary{Cancelled: 10}, snap.Ues, "sent or not, a skipped deregistration leaves the UE cancelled")
 	require.True(t, snap.N2Release.Done)
 	present, _ := addrs.snapshot()
 	require.Empty(t, present)

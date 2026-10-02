@@ -118,7 +118,7 @@ What each stage times:
 | UE deregistration | Deregistration Request sent | Deregistration Accept received |
 | gNB SCTP close | close started | close returned (up to about 1 s: the socket lingers to deliver what is queued) |
 
-In the cleanup cards, *Not started* counts UEs that never registered, UEs and gNBs whose association was lost, and deregistrations skipped by a second Stop.
+In the cleanup cards, *Not started* counts UEs that never registered, UEs and gNBs whose association was lost, and deregistrations still queued when a second Stop skipped the cleanup. Deregistrations already sent at that moment count as *Connection errors* with the cause `cleanup skipped`. Either way those UEs end up *cancelled*; a UE whose PDU session had failed stays *failed*.
 
 If **every** PDU session of a run times out while registration succeeds, look at the core first. Check the SMF log for charging (CHF) timeouts; the usual cause is CHF billing (CGF) being on (see Known limitations).
 

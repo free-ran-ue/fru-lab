@@ -689,13 +689,23 @@ func (r *run) deregisterAll() {
 		stage.enqueue(i)
 	}
 	stage.run(ctx)
-	for _, i := range stage.drain() { // aborted before they were sent
+	for _, i := range stage.drain() { // aborted before they were sent (or retried)
 		r.dereg.Skip()
 		r.mu.Lock()
 		r.detach(i)
+		r.setCleanupState(i, UeCancelled)
 		r.mu.Unlock()
 	}
 	r.notify()
+}
+
+// setCleanupState moves a UE to st during cleanup, except one that
+// already failed: a UE whose PDU session failed stays counted as failed
+// (UeSummary.Failed matches the failure list). r.mu must be held.
+func (r *run) setCleanupState(i int, st UeState) {
+	if r.ues[i].state != UeFailed {
+		r.setUeState(i, st)
+	}
 }
 
 // detach drops a UE's link from its association; r.mu must be held.
@@ -718,7 +728,7 @@ func (r *run) attemptDeregistration(i int) bool {
 		u.deregStart = r.deps.Now()
 	}
 	assoc, link := r.assocs[u.spec.Gnb], u.link
-	r.setUeState(i, UeDeregistering)
+	r.setCleanupState(i, UeDeregistering)
 	r.mu.Unlock()
 	r.dereg.Begin(attempt > 1)
 	r.notify()
@@ -735,7 +745,7 @@ func (r *run) attemptDeregistration(i int) bool {
 		r.dereg.Finish(metrics.Failed, latency, "cleanup skipped")
 		r.mu.Lock()
 		r.detach(i)
-		r.setUeState(i, UeCancelled)
+		r.setCleanupState(i, UeCancelled)
 		r.mu.Unlock()
 		r.notify()
 		return false
@@ -744,7 +754,7 @@ func (r *run) attemptDeregistration(i int) bool {
 		r.dereg.Finish(metrics.Accepted, latency, "")
 		r.mu.Lock()
 		r.detach(i)
-		r.setUeState(i, UeDeregistered)
+		r.setCleanupState(i, UeDeregistered)
 		r.mu.Unlock()
 		r.notify()
 		return false
@@ -757,7 +767,7 @@ func (r *run) attemptDeregistration(i int) bool {
 	r.dereg.Finish(out.Result, latency, out.Cause)
 	r.mu.Lock()
 	r.detach(i)
-	r.setUeState(i, UeFailed)
+	r.setCleanupState(i, UeFailed)
 	r.recordFailure(i, "deregistration", out.Cause, attempt)
 	r.mu.Unlock()
 	r.notify()
