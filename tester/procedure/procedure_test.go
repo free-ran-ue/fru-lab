@@ -202,3 +202,39 @@ func TestAssociationLostIsNotDroppedWithAFullBuffer(t *testing.T) {
 	}
 	require.ErrorContains(t, assoc.Err(), "association lost")
 }
+
+func TestDeregisterAfterPdu(t *testing.T) {
+	assoc, amf, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{} })
+	u := newUE(t, "0000000001")
+	link, out := Register(assoc, u, time.Second)
+	require.Equal(t, metrics.Accepted, out.Result)
+	require.Equal(t, metrics.Accepted, EstablishPdu(assoc, link, u, time.Second).Result)
+
+	out = Deregister(assoc, link, u, time.Second)
+	require.Equal(t, metrics.Accepted, out.Result, out.Cause)
+	require.False(t, out.DoneAt.IsZero())
+	require.Equal(t, 1, amf.Deregistrations())
+	require.Eventually(t, func() bool { return amf.ReleaseCompletes() == 1 }, time.Second, 5*time.Millisecond,
+		"the gNB answers the UE Context Release that follows")
+}
+
+func TestDeregisterTimeout(t *testing.T) {
+	assoc, _, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{IgnoreDeregistration: true} })
+	u := newUE(t, "0000000001")
+	link, out := Register(assoc, u, time.Second)
+	require.Equal(t, metrics.Accepted, out.Result)
+
+	out = Deregister(assoc, link, u, 100*time.Millisecond)
+	require.Equal(t, metrics.TimedOut, out.Result)
+}
+
+func TestDeregisterWhenTheAssociationIsLost(t *testing.T) {
+	assoc, _, amfEnd := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{IgnoreDeregistration: true} })
+	u := newUE(t, "0000000001")
+	link, out := Register(assoc, u, time.Second)
+	require.Equal(t, metrics.Accepted, out.Result)
+	_ = amfEnd.Close()
+
+	out = Deregister(assoc, link, u, time.Second)
+	require.Equal(t, metrics.Failed, out.Result)
+}

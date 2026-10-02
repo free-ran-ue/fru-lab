@@ -20,7 +20,7 @@ type Outcome struct {
 	Cause  string        // empty when Accepted
 	UeIP   netip.Addr    // PDU only
 	Pdu    *gnb.PduSetup // PDU only; nil if the accept came without a resource setup
-	DoneAt time.Time     // registration only: when Registration Complete was sent
+	DoneAt time.Time     // registration: Registration Complete sent; deregistration: accept received
 }
 
 // configUpdateWait bounds how long Register waits, after Registration
@@ -128,6 +128,61 @@ func EstablishPdu(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout ti
 			return Outcome{Result: metrics.Accepted, UeIP: r.UeIP, Pdu: setup}
 		case ue.EventPduRejected:
 			return Outcome{Result: metrics.Rejected, Cause: r.Cause}
+		}
+	}
+}
+
+// releaseWait bounds how long Deregister waits, after the Deregistration
+// Accept, for the AMF's UE Context Release Command, so the AMF is done
+// with the UE before cleanup closes the association.
+var releaseWait = time.Second
+
+// Deregister runs one UE-originating deregistration attempt; the core
+// releases the PDU session with it. Timing: from sending the request to
+// receiving Deregistration Accept (DoneAt). The link stays attached so a
+// retry can reuse its AMF UE NGAP ID; the caller detaches it.
+func Deregister(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout time.Duration) Outcome {
+	deadline := time.Now().Add(timeout)
+	req, err := u.DeregistrationRequest()
+	if err != nil {
+		return failed(err)
+	}
+	if err := assoc.SendUplinkNas(link, req); err != nil {
+		return failed(err)
+	}
+	for {
+		d, err := next(assoc, link, deadline)
+		if err != nil {
+			return failed(err)
+		}
+		switch d.Kind {
+		case gnb.DownlinkLost:
+			return failed(fmt.Errorf("association lost: %w", d.Err))
+		case gnb.DownlinkReleased:
+			return Outcome{Result: metrics.Rejected, Cause: "ue context released without deregistration accept"}
+		}
+		if d.Nas == nil {
+			continue
+		}
+		r, err := u.Handle(d.Nas)
+		if err != nil {
+			return failed(err)
+		}
+		if r.Event == ue.EventDeregistered {
+			done := time.Now()
+			awaitRelease(assoc, link, done.Add(releaseWait))
+			return Outcome{Result: metrics.Accepted, DoneAt: done}
+		}
+	}
+}
+
+// awaitRelease consumes downlinks until the UE Context Release Command
+// (DownlinkReleased) or the deadline.
+func awaitRelease(assoc *gnb.Association, link *gnb.UeLink, deadline time.Time) {
+	for {
+		d, err := next(assoc, link, deadline)
+		if err != nil || d.Kind != gnb.DownlinkNas {
+			return
 		}
 	}
 }
