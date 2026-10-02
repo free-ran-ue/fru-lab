@@ -1532,7 +1532,7 @@ components:
             $ref: '#/components/schemas/TesterGnbTraffic'
         series:
           type: array
-          description: One point per second, the last 300 seconds.
+          description: The whole run from its first second, in at most 600 points. A point covers 1 second until the run outgrows that, then 2, 4, 8 ... seconds (averaged).
           items:
             $ref: '#/components/schemas/TesterTrafficPoint'
     TesterTrafficDirection:

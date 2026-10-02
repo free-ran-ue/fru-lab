@@ -102,16 +102,13 @@ func (e *Engine) takeSample() {
 		float64(now.dlTxP-e.prev.dlTxP) / dt, float64(now.dlRxP-e.prev.dlRxP) / dt,
 	}
 	e.prev = now
-	e.series = append(e.series, p)
-	if len(e.series) > historyLen {
-		e.series = e.series[len(e.series)-historyLen:]
-	}
+	e.history.add(p)
 }
 
 func (e *Engine) Snapshot() Snapshot {
 	e.mu.Lock()
 	last, pps := e.last, e.lastPps
-	series := append([]Point{}, e.series...)
+	series := e.history.points()
 	e.mu.Unlock()
 	s := Snapshot{
 		ActiveUes: int(e.active.Load()),

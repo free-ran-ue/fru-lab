@@ -45,8 +45,8 @@ const rcvBuf = 8 << 20
 // senders sharing one top out at what a single thread can send.
 const dlSenders = 4
 
-// historyLen is how many 1-second points Snapshot.Series keeps.
-const historyLen = 300
+// historyPoints bounds Snapshot.Series, which covers the whole run.
+const historyPoints = 600
 
 type flow struct {
 	ue             uint32
@@ -111,7 +111,7 @@ type Engine struct {
 
 	mu      sync.Mutex
 	started time.Time
-	series  []Point
+	history *history
 	last    Point
 	lastPps [4]float64 // ul tx, ul rx, dl tx, dl rx
 	prev    counters
@@ -121,7 +121,8 @@ func New(cfg Config) *Engine {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), gnbs: make([]gnbCounters, len(cfg.GnbN3IPs))}
+	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), gnbs: make([]gnbCounters, len(cfg.GnbN3IPs)),
+		history: newHistory(historyPoints)}
 	for range cfg.GnbN3IPs {
 		e.ulShards = append(e.ulShards, &shard{})
 	}

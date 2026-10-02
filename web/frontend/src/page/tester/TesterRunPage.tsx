@@ -52,6 +52,12 @@ function niceStep(v: number): number {
   return ([1, 2, 2.5, 5, 10].find((m) => m * p >= v) ?? 10) * p
 }
 
+// clock renders seconds since traffic started as h:mm:ss.
+function clock(sec: number): string {
+  const s = Math.max(0, Math.round(sec))
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
 // axisBps is a short rate for the chart axis, e.g. 500M or 1.5G.
 function axisBps(bps: number): string {
   if (!bps) return '0'
@@ -75,7 +81,9 @@ function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
 
 type Dir = 'ul' | 'dl'
 
-// RateChart plots one direction's sent (Tx) and received (Rx) rate.
+// RateChart plots one direction's sent (Tx) and received (Rx) rate over
+// the whole run: the time axis always starts at 0 and shrinks as the run
+// goes on.
 function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) {
   const [ref, W] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
@@ -86,7 +94,7 @@ function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) 
   if (series.length < 2) {
     return <div ref={ref} className={styles.chartEmpty}>The chart starts after two seconds of traffic.</div>
   }
-  const t0 = series[0].t
+  const t0 = 0
   const t1 = series[series.length - 1].t
   const peak = Math.max(1000, ...series.flatMap((p) => [tx(p), rx(p)]))
   const gridStep = niceStep(peak / 4)
@@ -96,9 +104,11 @@ function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) 
   const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
   const line = (f: (p: TesterTrafficPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
   const span = Math.max(1, t1 - t0)
-  const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => span / s <= Math.max(2, plotW / 90)) ?? 60
+  const maxTicks = Math.max(2, Math.floor(plotW / 70))
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
+    .find((s) => span / s <= maxTicks) ?? 86400
   const ticks: number[] = []
-  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) ticks.push(t)
+  for (let t = 0; t <= t1; t += step) ticks.push(t)
   const h = hover === null ? null : series[hover]
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
     const px = ev.clientX - ev.currentTarget.getBoundingClientRect().left
@@ -119,7 +129,7 @@ function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) 
             </g>
           ))}
           {ticks.map((t) => (
-            <text key={t} x={x(t)} y={H - 5} textAnchor="middle" className={styles.chartAxis}>{t}s</text>
+            <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
           ))}
           <polyline points={line(rx)} className={styles.lineRx} />
           <polyline points={line(tx)} className={styles.lineTx} />
@@ -134,7 +144,7 @@ function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) 
       )}
       {h && W > 0 && (
         <div className={styles.chartTip} style={{ left: Math.min(x(h.t) + 10, W - 150) }}>
-          <b>{Math.round(h.t)}s</b>
+          <b>{clock(h.t)}</b>
           <span><i className={styles.swatchTx} />Tx {formatBps(tx(h))}</span>
           <span><i className={styles.swatchRx} />Rx {formatBps(rx(h))}</span>
         </div>

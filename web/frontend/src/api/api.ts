@@ -122,7 +122,7 @@ export interface TesterDataplaneSnapshot {
      */
     'gnbs': Array<TesterGnbTraffic>;
     /**
-     * One point per second, the last 300 seconds.
+     * The whole run from its first second, in at most 600 points. A point covers 1 second until the run outgrows that, then 2, 4, 8 ... seconds (averaged).
      */
     'series': Array<TesterTrafficPoint>;
 }
