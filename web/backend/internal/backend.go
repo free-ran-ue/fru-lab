@@ -37,6 +37,8 @@ type backend struct {
 
 	frontendFilePath string
 
+	// webconsoleProxy serves free5GC's webconsole under /api/webconsole.
+	webconsoleProxy *httputil.ReverseProxy
 	// testerProxy is nil when backend.tester.url is not configured.
 	testerProxy *httputil.ReverseProxy
 	// testerHistory copies finished runs into the DB; nil like testerProxy.
@@ -53,7 +55,9 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 		DbType: config.Backend.Db.Type,
 		DbPath: config.Backend.Db.Path,
 
-		DeployWorkDir: config.Backend.Deploy.WorkDir,
+		DeployWorkDir:  config.Backend.Deploy.WorkDir,
+		WebconsolePort: config.Backend.Deploy.WebconsolePort(),
+		DeployTimeout:  config.Backend.Deploy.DeployTimeout(),
 
 		BackendLogger: logger,
 	})
@@ -92,6 +96,13 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 
 		BackendLogger: logger,
 	}
+
+	webconsoleProxy, err := newWebconsoleProxy(config.Backend.Deploy.WebconsoleURL())
+	if err != nil {
+		logger.BckLog.Errorf("Invalid webconsole config: %v", err)
+		return nil
+	}
+	b.webconsoleProxy = webconsoleProxy
 
 	if config.Backend.Tester.URL != "" {
 		proxy, err := newTesterProxy(config.Backend.Tester.URL, config.Backend.Tester.ApiToken)
@@ -200,6 +211,7 @@ func addServices(router *gin.Engine, b *backend) {
 	addRoutes(apiGroup, b.getTerminalRoutes())
 	addRoutes(authGroup, b.getTesterRoutes())
 	addTesterHistoryRoutes(authGroup, b.Processor.FlContext)
+	authGroup.Any("/webconsole/*path", func(c *gin.Context) { b.webconsoleProxy.ServeHTTP(c.Writer, c.Request) })
 	addRoutes(apiGroup, b.getTesterStreamRoutes())
 }
 
