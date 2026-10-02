@@ -6,6 +6,7 @@ package run
 import (
 	"time"
 
+	"tester/dataplane"
 	"tester/metrics"
 	"tester/profile"
 )
@@ -123,4 +124,5 @@ type Snapshot struct {
 	Gnbs         []GnbStatus           `json:"gnbs"`
 	Ues          UeSummary             `json:"ues"`
 	FailedUes    []UeFailure           `json:"failedUes"` // first maxFailuresListed failures
+	Dataplane    dataplane.Snapshot    `json:"dataplane"`
 }

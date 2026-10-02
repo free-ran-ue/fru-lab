@@ -2,8 +2,10 @@ package run
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net/netip"
 	"slices"
 	"sync"
@@ -11,6 +13,7 @@ import (
 
 	loggergoModel "github.com/Alonza0314/logger-go/v2/model"
 
+	"tester/dataplane"
 	"tester/gnb"
 	"tester/metrics"
 	"tester/netcfg"
@@ -31,7 +34,21 @@ type Deps struct {
 	Log    loggergoModel.LoggerInterface
 	Now    func() time.Time
 	NewID  func() string
+	// NewDataplane builds the traffic engine; nil = dataplane.New.
+	NewDataplane func(dataplane.Config) Dataplane
 }
+
+// Dataplane is the slice of *dataplane.Engine a run uses.
+type Dataplane interface {
+	Start() error
+	AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort)
+	Stop(drain time.Duration)
+	Snapshot() dataplane.Snapshot
+}
+
+// dataplaneDrain is how long Stop lets in-flight packets arrive before
+// closing the sockets, so the final loss figure is not inflated.
+const dataplaneDrain = 200 * time.Millisecond
 
 type Controller struct {
 	deps Deps
@@ -47,6 +64,9 @@ func NewController(deps Deps) *Controller {
 	}
 	if deps.NewID == nil {
 		deps.NewID = func() string { return deps.Now().UTC().Format("20060102-150405") }
+	}
+	if deps.NewDataplane == nil {
+		deps.NewDataplane = func(c dataplane.Config) Dataplane { return dataplane.New(c) }
 	}
 	return &Controller{deps: deps, changed: make(chan struct{})}
 }
@@ -157,7 +177,7 @@ func (c *Controller) Snapshot() Snapshot {
 	if r == nil {
 		empty := metrics.NewStage("", 0).Snapshot()
 		return Snapshot{State: StateIdle, Gnbs: []GnbStatus{}, FailedUes: []UeFailure{},
-			N2: empty, Registration: empty, Pdu: empty}
+			N2: empty, Registration: empty, Pdu: empty, Dataplane: emptyDataplane()}
 	}
 	return r.snapshot()
 }
@@ -203,7 +223,15 @@ type run struct {
 	ues       []ueRun
 	summary   UeSummary
 	failures  []UeFailure
-	added     []addedAddr // in the order they were added
+	added     []addedAddr  // in the order they were added
+	routes    []addedRoute // routes this run added
+	dp        Dataplane    // nil until the IPs are configured
+}
+
+type addedRoute struct {
+	iface string
+	dst   netip.Prefix
+	gw    netip.Addr
 }
 
 // ueRun is one UE's progress; guarded by run.mu except nas and link,
@@ -298,11 +326,15 @@ func (r *run) snapshot() Snapshot {
 	snap := Snapshot{
 		RunID: r.id, ProfileName: r.profile.Name, State: r.st, Error: r.errMsg,
 		N2: r.n2.Snapshot(), Registration: r.reg.Snapshot(), Pdu: r.pdu.Snapshot(),
-		Gnbs:      append([]GnbStatus(nil), r.gnbs...),
-		Ues:       r.summary,
+		Gnbs: append([]GnbStatus(nil), r.gnbs...),
+		Ues:  r.summary,
 		// copy into a non-nil slice: an empty list must encode as [] (the
 		// Run page reads failedUes.length; null blanked it)
 		FailedUes: append([]UeFailure{}, r.failures...),
+		Dataplane: emptyDataplane(),
+	}
+	if r.dp != nil {
+		snap.Dataplane = r.dp.Snapshot()
 	}
 	started := r.startedAt
 	snap.StartedAt = &started
@@ -316,7 +348,11 @@ func (r *run) snapshot() Snapshot {
 func (r *run) execute() {
 	defer close(r.done)
 
-	if err := r.configureIPs(); err != nil {
+	err := r.configureIPs()
+	if err == nil && r.ctx.Err() == nil {
+		err = r.startDataplane()
+	}
+	if err != nil {
 		r.mu.Lock()
 		r.errMsg = err.Error()
 		r.mu.Unlock()
@@ -339,6 +375,9 @@ func (r *run) execute() {
 	}
 
 	r.setState(StateStopping)
+	if dp := r.dataplane(); dp != nil {
+		dp.Stop(dataplaneDrain) // traffic stops at once (design Q12)
+	}
 	pipelines.Wait() // in-flight procedures finish or time out (design N4)
 	r.skipUnfinished()
 	r.closeConns()
@@ -377,31 +416,109 @@ func (r *run) skipUnfinished() {
 	r.notify()
 }
 
+// configureIPs puts everything the run needs on the host: each gNB's N2
+// and N3 IP, the N6 sink IP if the host lacks it, and the UE pool route
+// via the UPF's N6 (design Q16). removeIPs undoes exactly what was added.
 func (r *run) configureIPs() error {
-	n2 := r.profile.Network.N2
+	nw := r.profile.Network
 	for _, g := range r.plan.Gnbs {
-		if r.ctx.Err() != nil {
-			return nil // stopping; execute() skips N2 and removes what was added
+		for _, a := range []struct {
+			iface, ip string
+			bits      int
+		}{{nw.N2.Interface, g.N2IP, r.plan.N2Prefix}, {nw.N3.Interface, g.N3IP, r.plan.N3Prefix}} {
+			if r.ctx.Err() != nil {
+				return nil // stopping; execute() skips N2 and removes what was added
+			}
+			if err := r.addAddr(a.iface, netip.PrefixFrom(netip.MustParseAddr(a.ip), a.bits)); err != nil {
+				return fmt.Errorf("configure %s: %w", g.Name, err)
+			}
 		}
-		prefix := netip.PrefixFrom(netip.MustParseAddr(g.N2IP), r.plan.N2Prefix)
-		if err := r.deps.Addrs.Add(n2.Interface, prefix); err != nil {
-			return fmt.Errorf("configure %s: %w", g.Name, err)
+	}
+	hostIPs, err := r.deps.Addrs.HostIPv4s()
+	if err != nil {
+		return err
+	}
+	sink := netip.MustParseAddr(nw.N6.SinkIP)
+	if !slices.Contains(hostIPs, sink) {
+		if err := r.addAddr(nw.N6.Interface, netip.PrefixFrom(sink, 32)); err != nil {
+			return fmt.Errorf("configure N6 sink: %w", err)
 		}
+	}
+	pool, gw := netip.MustParsePrefix(nw.N6.UePool), netip.MustParseAddr(nw.N6.UpfIP)
+	added, err := r.deps.Addrs.EnsureRoute(nw.N6.Interface, pool, gw)
+	if err != nil {
+		return fmt.Errorf("configure UE pool route: %w", err)
+	}
+	if added {
 		r.mu.Lock()
-		r.added = append(r.added, addedAddr{iface: n2.Interface, prefix: prefix})
+		r.routes = append(r.routes, addedRoute{iface: nw.N6.Interface, dst: pool, gw: gw})
 		r.mu.Unlock()
 	}
 	return nil
 }
 
-// removeIPs walks backwards so a primary address (added first) goes last;
-// removing it first would make the kernel drop the secondaries with it.
+func (r *run) addAddr(iface string, prefix netip.Prefix) error {
+	if err := r.deps.Addrs.Add(iface, prefix); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.added = append(r.added, addedAddr{iface: iface, prefix: prefix})
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *run) startDataplane() error {
+	t, n6 := r.profile.Traffic, r.profile.Network.N6
+	n3 := make([]netip.Addr, len(r.plan.Gnbs))
+	for i, g := range r.plan.Gnbs {
+		n3[i] = netip.MustParseAddr(g.N3IP)
+	}
+	dp := r.deps.NewDataplane(dataplane.Config{
+		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3,
+		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
+		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6,
+	})
+	if err := dp.Start(); err != nil {
+		return fmt.Errorf("start data plane: %w", err)
+	}
+	r.mu.Lock()
+	r.dp = dp
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *run) dataplane() Dataplane {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.dp
+}
+
+// runIDHash tags this run's packets, so leftovers from an earlier run that
+// arrive late are not counted.
+func runIDHash(id string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(id))
+	return h.Sum32()
+}
+
+func emptyDataplane() dataplane.Snapshot {
+	return dataplane.Snapshot{Gnbs: []dataplane.GnbTraffic{}, Series: []dataplane.Point{}}
+}
+
+// removeIPs removes the routes this run added, then walks the addresses
+// backwards so a primary address (added first) goes last; removing it
+// first would make the kernel drop the secondaries with it.
 func (r *run) removeIPs() {
 	r.mu.Lock()
-	added := r.added
-	r.added = nil
+	added, routes := r.added, r.routes
+	r.added, r.routes = nil, nil
 	r.mu.Unlock()
 	var errs []error
+	for _, rt := range routes {
+		if err := r.deps.Addrs.RemoveRoute(rt.iface, rt.dst, rt.gw); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	for i := len(added) - 1; i >= 0; i-- {
 		if err := r.deps.Addrs.Remove(added[i].iface, added[i].prefix); err != nil {
 			errs = append(errs, err)
@@ -694,7 +811,9 @@ func (r *run) attemptPdu(i int) bool {
 		u.ueIP, u.pduSetup = out.UeIP.String(), out.Pdu
 		r.setUeState(i, UeEstablished)
 		r.gnbs[u.spec.Gnb].Established++
+		dp := r.dp
 		r.mu.Unlock()
+		r.startTraffic(dp, i, out)
 		r.notify()
 		return false
 	}
@@ -714,6 +833,20 @@ func (r *run) attemptPdu(i int) bool {
 	r.mu.Unlock()
 	r.notify()
 	return false
+}
+
+// startTraffic hands an established UE to the data plane (design Q9:
+// each UE starts as soon as its PDU session is up).
+func (r *run) startTraffic(dp Dataplane, i int, out procedure.Outcome) {
+	if dp == nil || out.Pdu == nil || len(out.Pdu.UlTeid) != 4 {
+		return
+	}
+	upf := out.Pdu.UpfIP
+	if !upf.IsValid() {
+		upf = netip.MustParseAddr(r.profile.Network.N3.UpfIP)
+	}
+	dp.AddUE(i, r.ues[i].spec.Gnb, out.UeIP, binary.BigEndian.Uint32(out.Pdu.UlTeid), out.Pdu.DlTeid,
+		netip.AddrPortFrom(upf, uint16(r.profile.Network.N3.UpfPort)))
 }
 
 func (r *run) connectGnb(spec profile.GnbSpec, timeout time.Duration) (gnb.Conn, gnb.Identity, error) {

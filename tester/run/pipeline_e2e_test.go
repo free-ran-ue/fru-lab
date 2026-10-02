@@ -10,6 +10,7 @@ import (
 	loggergo "github.com/Alonza0314/logger-go/v2"
 	"github.com/stretchr/testify/require"
 
+	"tester/dataplane"
 	"tester/gnb"
 	"tester/internal/fakecore"
 	"tester/metrics"
@@ -50,10 +51,20 @@ func e2eProfile() profile.Profile {
 }
 
 func newE2EController(d amfDialer) (*Controller, *fakeAddrs) {
+	c, addrs, _ := newE2EControllerWithDataplane(d, nil)
+	return c, addrs
+}
+
+// newE2EControllerWithDataplane also returns the fake data plane; startErr
+// makes its Start fail.
+func newE2EControllerWithDataplane(d amfDialer, startErr error) (*Controller, *fakeAddrs, *fakeDataplane) {
 	lg := loggergo.NewLogger("", true)
 	lg.SetLevel("error")
 	addrs := &fakeAddrs{}
-	return NewController(Deps{Addrs: addrs, Dialer: d, Log: lg.WithTags("TEST"), NewID: func() string { return "e2e" }}), addrs
+	dp := &fakeDataplane{ues: map[int]fakeFlow{}, startErr: startErr}
+	c := NewController(Deps{Addrs: addrs, Dialer: d, Log: lg.WithTags("TEST"), NewID: func() string { return "e2e" },
+		NewDataplane: func(cfg dataplane.Config) Dataplane { dp.cfg = cfg; return dp }})
+	return c, addrs, dp
 }
 
 func stopAndWait(t *testing.T, c *Controller) Snapshot {
@@ -170,4 +181,39 @@ func TestSnapshotJSONHasEmptyFailedUesNotNull(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"failedUes":[]`)
 	stopAndWait(t, c)
+}
+
+func TestEstablishedUesStartTrafficWithTheirTunnel(t *testing.T) {
+	c, _, dp := newE2EControllerWithDataplane(amfDialer{amf: newFakeAMF(nil)}, nil)
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+
+	require.Equal(t, uint16(9200), dp.cfg.Port)
+	require.Equal(t, 1400, dp.cfg.PacketSize)
+	require.Equal(t, 5e6, dp.cfg.DlBps)
+	require.Equal(t, []netip.Addr{netip.MustParseAddr("10.0.2.10"), netip.MustParseAddr("10.0.2.11"), netip.MustParseAddr("10.0.2.12")}, dp.cfg.GnbN3IPs)
+	flows := dp.flows()
+	require.Len(t, flows, 10)
+	teids := map[uint32]bool{}
+	for ue, f := range flows {
+		require.Equal(t, ue/4, f.gnb, "UE %d", ue)
+		require.Equal(t, netip.MustParseAddrPort("10.0.1.5:2152"), f.upf, "UPF N3 from the PDU Session Resource Setup")
+		require.Equal(t, uint32(0x1000), f.ulTeid&0xffffff00, "UL TEID from the AMF's transfer")
+		teids[f.dlTeid] = true
+	}
+	require.Len(t, teids, 10)
+	stopAndWait(t, c)
+	require.True(t, dp.stopped)
+}
+
+func TestDataplaneStartFailureFailsTheRunAndRollsBack(t *testing.T) {
+	c, addrs, _ := newE2EControllerWithDataplane(amfDialer{amf: newFakeAMF(nil)}, errors.New("bind gNB-1 N3 10.0.2.10:2152: address already in use"))
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	snap := waitState(t, c, StateFailed)
+	require.Contains(t, snap.Error, "start data plane: bind gNB-1 N3")
+	present, _ := addrs.snapshot()
+	require.Empty(t, present)
+	require.Equal(t, int64(0), snap.N2.Attempted)
 }

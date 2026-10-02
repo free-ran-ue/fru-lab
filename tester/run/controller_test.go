@@ -11,9 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"maps"
+
 	loggergo "github.com/Alonza0314/logger-go/v2"
 	"github.com/stretchr/testify/require"
 
+	"tester/dataplane"
 	"tester/gnb"
 	"tester/metrics"
 	"tester/profile"
@@ -32,7 +35,58 @@ type fakeAddrs struct {
 }
 
 func (f *fakeAddrs) HostIPv4s() ([]netip.Addr, error) { return f.host, nil }
-func (f *fakeAddrs) Interfaces() ([]string, error)    { return []string{"lo", "eth-n2", "eth-n3"}, nil }
+func (f *fakeAddrs) Interfaces() ([]string, error) {
+	return []string{"lo", "eth-n2", "eth-n3", "eth-n6"}, nil
+}
+
+func (f *fakeAddrs) EnsureRoute(iface string, dst netip.Prefix, gw netip.Addr) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.log = append(f.log, "route "+dst.String()+" via "+gw.String()+" dev "+iface)
+	return true, nil
+}
+
+func (f *fakeAddrs) RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.log = append(f.log, "unroute "+dst.String())
+	return nil
+}
+
+// fakeDataplane records the UEs handed to the data plane.
+type fakeDataplane struct {
+	mu       sync.Mutex
+	cfg      dataplane.Config
+	ues      map[int]fakeFlow
+	stopped  bool
+	startErr error
+}
+
+type fakeFlow struct {
+	gnb            int
+	ueIP           netip.Addr
+	ulTeid, dlTeid uint32
+	upf            netip.AddrPort
+}
+
+func (d *fakeDataplane) Start() error { return d.startErr }
+func (d *fakeDataplane) AddUE(ue, gnb int, ueIP netip.Addr, ul, dl uint32, upf netip.AddrPort) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ues[ue] = fakeFlow{gnb: gnb, ueIP: ueIP, ulTeid: ul, dlTeid: dl, upf: upf}
+}
+func (d *fakeDataplane) Stop(time.Duration) { d.mu.Lock(); d.stopped = true; d.mu.Unlock() }
+func (d *fakeDataplane) Snapshot() dataplane.Snapshot {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return dataplane.Snapshot{ActiveUes: len(d.ues), Gnbs: []dataplane.GnbTraffic{}, Series: []dataplane.Point{}}
+}
+
+func (d *fakeDataplane) flows() map[int]fakeFlow {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.ues)
+}
 
 func (f *fakeAddrs) Add(iface string, p netip.Prefix) error {
 	f.mu.Lock()
@@ -158,7 +212,9 @@ func testProfile() profile.Profile {
 		Network: profile.Network{
 			N2: profile.N2Network{Interface: "eth-n2", Cidr: "10.0.1.0/24", StartIP: "10.0.1.10", AmfIP: "10.0.1.1", AmfPort: 38412},
 			N3: profile.N3Network{Interface: "eth-n3", Cidr: "10.0.2.0/24", StartIP: "10.0.2.10", UpfIP: "10.0.2.1", UpfPort: 2152},
+			N6: profile.N6Network{Interface: "eth-n6", SinkIP: "10.0.3.2", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
 		},
+		Traffic: profile.Traffic{UlMbps: 1, DlMbps: 5, PacketSize: 1400, Port: 9200},
 		// N2-only tests use fakeConn, which never answers NAS: keep the UE
 		// stages short so Stop does not wait long for their timeouts.
 		Rates: profile.Rates{
@@ -172,7 +228,8 @@ func testProfile() profile.Profile {
 func newTestController(addrs *fakeAddrs, dialer *fakeDialer) *Controller {
 	lg := loggergo.NewLogger("", true) // debugMode=true logs to stdout instead of a file
 	lg.SetLevel("error")
-	return NewController(Deps{Addrs: addrs, Dialer: dialer, Log: lg.WithTags("TEST"), NewID: func() string { return "run-1" }})
+	return NewController(Deps{Addrs: addrs, Dialer: dialer, Log: lg.WithTags("TEST"), NewID: func() string { return "run-1" },
+		NewDataplane: func(c dataplane.Config) Dataplane { return &fakeDataplane{cfg: c, ues: map[int]fakeFlow{}} }})
 }
 
 // waitFor blocks until ok(snapshot) holds, re-checking on every change.
@@ -214,7 +271,7 @@ func TestRunAllGnbsUpThenStopCleansUp(t *testing.T) {
 		require.Equal(t, 1, g.Attempts)
 	}
 	present, _ := addrs.snapshot()
-	require.Len(t, present, 3)
+	require.Len(t, present, 7) // N2 + N3 per gNB, and the N6 sink
 
 	_, err = c.Stop()
 	require.NoError(t, err)
@@ -229,8 +286,15 @@ func TestRunAllGnbsUpThenStopCleansUp(t *testing.T) {
 	present, log := addrs.snapshot()
 	require.Empty(t, present)
 	require.Equal(t, []string{
-		"add eth-n2 10.0.1.10/24", "add eth-n2 10.0.1.11/24", "add eth-n2 10.0.1.12/24",
-		"remove eth-n2 10.0.1.12/24", "remove eth-n2 10.0.1.11/24", "remove eth-n2 10.0.1.10/24",
+		"add eth-n2 10.0.1.10/24", "add eth-n3 10.0.2.10/24",
+		"add eth-n2 10.0.1.11/24", "add eth-n3 10.0.2.11/24",
+		"add eth-n2 10.0.1.12/24", "add eth-n3 10.0.2.12/24",
+		"add eth-n6 10.0.3.2/32", "route 10.60.0.0/16 via 10.0.3.1 dev eth-n6",
+		"unroute 10.60.0.0/16",
+		"remove eth-n6 10.0.3.2/32",
+		"remove eth-n3 10.0.2.12/24", "remove eth-n2 10.0.1.12/24",
+		"remove eth-n3 10.0.2.11/24", "remove eth-n2 10.0.1.11/24",
+		"remove eth-n3 10.0.2.10/24", "remove eth-n2 10.0.1.10/24",
 	}, log)
 }
 
@@ -311,7 +375,7 @@ func TestHostIPsAreSkippedWhenAllocating(t *testing.T) {
 }
 
 func TestIPConfigFailureRollsBackAndFails(t *testing.T) {
-	addrs := &fakeAddrs{failAdd: 3}
+	addrs := &fakeAddrs{failAdd: 5} // gNB-3's N2 IP (each gNB adds N2 then N3)
 	dialer := newFakeDialer(func(string, int) (func() ([]byte, error), error) { return accept(t), nil })
 	c := newTestController(addrs, dialer)
 
