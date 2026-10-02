@@ -17,5 +17,10 @@ backend:
 
   frontendFilePath: "build/frontend"
 
+  tester:
+    # fru-tester API (see tester.yaml). Leave url empty to disable the pages.
+    url: "http://127.0.0.1:9100"
+    apiToken: "frulab-tester"
+
 logger:
   level: "info"

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,6 +36,9 @@ type backend struct {
 	jwt
 
 	frontendFilePath string
+
+	// testerProxy is nil when backend.tester.url is not configured.
+	testerProxy *httputil.ReverseProxy
 
 	processor.Processor
 
@@ -84,6 +88,17 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 		}),
 
 		BackendLogger: logger,
+	}
+
+	if config.Backend.Tester.URL != "" {
+		proxy, err := newTesterProxy(config.Backend.Tester.URL, config.Backend.Tester.ApiToken)
+		if err != nil {
+			logger.BckLog.Errorf("Invalid tester config: %v", err)
+			return nil
+		}
+		b.testerProxy = proxy
+	} else {
+		logger.BckLog.Warnln("backend.tester.url is empty; Throughput Tester routes will answer 503")
 	}
 
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
@@ -166,6 +181,8 @@ func addServices(router *gin.Engine, b *backend) {
 	// a browser can't set an Authorization header on a WS handshake), so it
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
+	addRoutes(authGroup, b.getTesterRoutes())
+	addRoutes(apiGroup, b.getTesterStreamRoutes())
 }
 
 func addRoutes(group *gin.RouterGroup, routes util.Routes) {
