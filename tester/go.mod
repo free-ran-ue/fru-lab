@@ -3,6 +3,7 @@ module tester
 go 1.26.2
 
 require (
+	github.com/Alonza0314/logger-go/v2 v2.1.0
 	github.com/free-ran-ue/util v0.2.0
 	github.com/free5gc/ngap v1.2.0
 	github.com/free5gc/openapi v1.3.0
@@ -13,7 +14,6 @@ require (
 )
 
 require (
-	github.com/Alonza0314/logger-go/v2 v2.1.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
