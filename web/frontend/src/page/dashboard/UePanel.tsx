@@ -68,7 +68,8 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
                     {isRunning && (
                       <button className={ueStyles.linkButton} onClick={() => onOpenTerminal(row.ueId)}>Terminal</button>
                     )}
-                    {isRunning ? (
+                    {row.status !== 'stopped' ? (
+                      // a deploying (possibly stuck) or unhealthy UE can be stopped too
                       <button className={ueStyles.linkButton} onClick={() => onStop(row.ueId)} disabled={isPending}>
                         {isPending ? 'Stopping…' : 'Stop'}
                       </button>

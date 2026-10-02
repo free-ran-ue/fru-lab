@@ -151,7 +151,9 @@ export default function DashboardPage() {
     if (!activeTarget) return
 
     try {
-      if (activeTarget.node.status === 'running') {
+      // anything not fully stopped can be stopped, including a deploy that
+      // is stuck (e.g. a container that could not start stays "deploying")
+      if (activeTarget.node.status !== 'stopped') {
         await activeTarget.stop()
         addSuccess(`${activeTarget.node.label} stopped`)
       } else {
@@ -191,11 +193,13 @@ export default function DashboardPage() {
   // checkStopDependents / checkDeployPrerequisite), just so the button is
   // disabled with a reason instead of only erroring after a click.
   const anyUeRunning = ue.rows.some((row) => row.status !== 'stopped')
-  const actionBlockedReason = selected === 'core' && nodes.core.status === 'running' && anyGnbRunning
+  // the primary action is Stop for anything not stopped (a stuck deploy
+  // included) and Deploy otherwise, so the rules follow the same split
+  const actionBlockedReason = selected === 'core' && nodes.core.status !== 'stopped' && anyGnbRunning
     ? 'Stop gNB before stopping the core network'
-    : selected === 'gnb' && nodes.gnb.status === 'running' && anyUeRunning
+    : selected === 'gnb' && nodes.gnb.status !== 'stopped' && anyUeRunning
       ? 'Stop all UE instances before stopping gNB'
-      : selected === 'gnb' && nodes.gnb.status !== 'running' && nodes.core.status !== 'running'
+      : selected === 'gnb' && nodes.gnb.status === 'stopped' && nodes.core.status !== 'running'
         ? 'Deploy the core network before deploying gNB'
         : undefined
 

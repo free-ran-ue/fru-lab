@@ -25,7 +25,8 @@ interface DetailPanelProps {
 
 export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false, actionBlockedReason, templateOptions, selectedTemplate, onTemplateChange, templateLabel = 'Template' }: DetailPanelProps) {
   const meta = getStatusMeta(node.status)
-  const isRunning = node.status === 'running'
+  // running, deploying (possibly stuck) and unhealthy nodes all offer Stop
+  const isRunning = node.status !== 'stopped'
   const isActionBlocked = Boolean(actionBlockedReason)
 
   const primaryActionLabel = isActionPending
