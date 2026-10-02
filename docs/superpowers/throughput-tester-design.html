@@ -1302,7 +1302,7 @@ ul.tight li { margin: 3px 0; }
     <div class="phase"><div class="p">第 2 期 <span class="pill ok">已完成</span></div><h4>註冊與 PDU</h4>
       <ul><li>UE 模組（NAS 狀態機，不開 socket）</li><li>信箱式下行分派</li><li>流水線：速率 + 同時上限 + 逾時 + 重試</li><li>失敗清單與 cause 統計</li></ul>
       <div class="done-when">完成標準：1000 UE 全部走到 PDU 成功，重試與 p95 數字正確</div></div>
-    <div class="phase"><div class="p">第 3 期</div><h4>資料面（UDP socket PoC）</h4>
+    <div class="phase"><div class="p">第 3 期 <span class="pill ok">已完成</span></div><h4>資料面（UDP socket PoC）</h4>
       <ul><li>封包模板與 payload 標頭</li><li>UE 一就緒就加入發送分組</li><li>N3 / N6 收包驗證、丟包、延遲</li><li>UE pool 路由自動加入與移除</li><li>吞吐曲線</li></ul>
       <div class="done-when">完成標準：設定 1 Gbps DL，收到的量與 UPF 側計數一致</div></div>
     <div class="phase"><div class="p">第 4 期</div><h4>Stop 與收尾</h4>
@@ -1447,6 +1447,61 @@ ul.tight li { margin: 3px 0; }
       <li>N2 進行中按 Stop，該 gNB 的 UE 會顯示「gNB down」而不是「已取消」。</li>
       <li>註冊延遲用了兩種時鐘；統計數字更新和 UE 狀態更新不是同一時刻，畫面可能短暫對不上。</li>
       <li>AMF 只帶 AMF ID 的 UE Context Release 不會回應；UPF 用 IPv6 位址時會讀錯。</li>
+    </ul>
+  </div>
+  <div class="log-entry">
+    <div class="log-head"><h3>第 3 期 · 資料面</h3><span class="pill ok">已完成</span></div>
+    <div class="log-meta">
+      <span>2026-10-02</span>
+      <span>分支 feat/throughput-tester-phase3（接在第 2 期之後，尚未合併）</span>
+      <span>計畫：docs/superpowers/plans/2026-10-02-throughput-tester-phase3.md</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/dataplane</td><td>不開 TUN，tester 自己組封包。UL：從 gNB 的 N3 IP 用 GTP-U 打到 UPF，裡面是 UE IP → sink IP:port 的 UDP；在 sink 收。DL：從 sink 用一般 UDP 打到 UE IP:port，經 UE pool 路由送進 UPF，回到 gNB 的 N3 IP 變成 GTP-U 收下。每個封包帶 24 bytes 標頭（run、UE、方向、序號、送出時間），UPF 改了來源位址也認得出是哪個 UE</td></tr>
+        <tr><td class="mono">tester/netcfg</td><td>run 開始時加上 gNB 的 N3 IP、主機沒有的 sink IP、<code>UE pool via UPF N6 IP</code> 路由；結束時只移除自己加的。已存在別的閘道的 UE pool 路由不會覆蓋，直接報錯</td></tr>
+        <tr><td class="mono">tester/run</td><td>每個 UE 的 PDU session 一建好，500 ms 後開始打流量（給 UPF 時間裝好下行隧道）；Stop 立即停流量</td></tr>
+        <tr><td class="mono">tester/metrics</td><td>每秒速率、累計位元組、丟包率、單向延遲 p50/p99、亂序、送出失敗、送錯隧道（misrouted）；Run 頁有最近 5 分鐘曲線與每個 gNB 的收量</td></tr>
+        <tr><td class="mono">web/</td><td>Setup 頁新增 N6（介面、sink IP、UPF N6 IP、UE pool）與流量（每 UE 的 UL/DL Mbps，預設各 1、封包大小、UDP port）；Run 頁新增資料面卡片與曲線</td></tr>
+        <tr><td>free5GC 範本</td><td>SMF 的 <code>urrThreshold</code> 改成 10 GB（tester 以外的改動）</td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>自動測試</td><td>11 個 Go 套件在 -race 下全部通過（包含假 UPF 的 UL/DL 往返、延遲啟動、送錯隧道）；lint 0 issues；前端 build 成功</td></tr>
+        <tr><td>真實 free5GC，4 UE，每 UE 1/1 Mbps，30 秒（加了 500 ms 延遲之後）</td><td><span class="pill ok">通過</span> UL 10447 → 10447、DL 10445 → 10445，兩個方向都 0 掉包；單向延遲 p50 約 0.05 ms、p99 約 0.1 ms；結束後路由和 IP 都清乾淨</td></tr>
+        <tr><td>真實 free5GC，高速（加延遲之前）</td><td><span class="pill ok">通過</span> UL 200 Mbps 0 掉包；DL 約 904 Mbps，0.76% 掉包，全部集中在每個 UE 剛起來的那一刻（這就是後來加 500 ms 延遲的原因）</td></tr>
+        <tr><td>DL 收不到（已找到原因）</td><td><span class="pill ok">已解決</span> SMF 的 urrThreshold 只有幾百 bytes，UPF 每一兩個封包就送一次用量報告，PFCP 塞爆，下行規則一直裝不上。範本已改 10 GB</td></tr>
+        <tr><td>完成標準「1 Gbps DL 與 UPF 計數一致」</td><td><span class="pill draft">部分</span> 用一般 UDP socket，這台機器 DL 最高約 78 k pps（約 875–904 Mbps）；收發數字由 tester 兩端比對，沒有拿 UPF 自己的計數比</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li>fru-lab 的 free5GC 沒有獨立的 N6 網段，UPF 解封裝後直接從 docker-cn-ran 出去（還會做 MASQUERADE），所以預設 sink 是主機在那張網卡上的 10.0.1.1，UPF N6 IP 是 10.0.1.5。</li>
+      <li>封包標頭讓 tester 即使被 NAT 也能把封包對回 UE；上一個 run 殘留的封包會被忽略。</li>
+      <li>依你的要求：流量在 PDU 建好 500 ms 後才開始；UL/DL 預設改成每 UE 1 Mbps。</li>
+      <li>每個 socket 的接收緩衝加大到 8 MB，減少高速時在本機被丟掉的封包。</li>
+    </ul>
+
+    <h4>最後 code review 修掉的問題</h4>
+    <ul class="tight">
+      <li>DL 原本只看封包標頭認 UE，不檢查是從哪個隧道、哪個 gNB 回來的；UPF 把封包送錯隧道也會算成收到。現在 TEID 或 gNB 不對就記為 misrouted，不算收到（Run 頁只有不為 0 時才顯示）。</li>
+      <li>Stop 和 PDU Accept 同時發生時，可能在停止後又加入 UE；現在停止後不再加入。</li>
+    </ul>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>下一期：第 4 期，Stop 時釋放 PDU session 與反註冊。目前連續跑同一批 UE，free5GC 會出現 Duplicated PDU session ID，PDU 會逾時，要重開核網。</li>
+      <li>延遲是固定 500 ms；裝隧道比較慢的核網，每個 UE 開頭還是可能掉幾個 DL 封包。</li>
+      <li>N6 介面名稱沒有檢查是否存在。</li>
+      <li>重開核網時要先重開 NRF，再重開其他 NF，而且 SMF 要在 UPF 之後，不然 PFCP 關聯會斷，PDU 全部逾時。</li>
     </ul>
   </div>
 </section>
