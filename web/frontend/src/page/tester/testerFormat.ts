@@ -1,3 +1,5 @@
+import { apiBaseUrl } from '../../apiClient'
+
 // Shared number formatting for the tester pages.
 export function formatMs(ms: number): string {
   if (!ms) return '—'
@@ -40,8 +42,7 @@ export function formatLoss(rate: number): string {
 // takes the JWT as ?token= (checked by fru-lab's handleTesterStream),
 // mirroring dashboard/terminalSocket.ts.
 export function buildTesterStreamUrl(): string {
-  const httpBase = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8888`
-  const wsBase = httpBase.replace(/^http/, 'ws')
+  const wsBase = apiBaseUrl.replace(/^http/, 'ws')
   const token = localStorage.getItem('token') ?? ''
   return `${wsBase}/api/tester/run/stream?token=${encodeURIComponent(token)}`
 }
