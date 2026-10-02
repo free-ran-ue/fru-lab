@@ -24,7 +24,7 @@ type Controller interface {
 	Stop() (run.Snapshot, error)
 	Snapshot() run.Snapshot
 	Changed() <-chan struct{}
-	Report() (run.Report, error)
+	Reports() []run.Report
 }
 
 type MessageResponse struct {
@@ -64,13 +64,12 @@ func NewRouter(ctrl Controller, apiToken string) *gin.Engine {
 	g.POST("/run", handleStart(ctrl))
 	g.POST("/run/stop", handleStop(ctrl))
 	g.GET("/run/stream", handleStream(ctrl))
-	g.GET("/run/report", func(c *gin.Context) {
-		rep, err := ctrl.Report()
-		if errors.Is(err, run.ErrNoReport) {
-			c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
-			return
+	g.GET("/run/reports", func(c *gin.Context) {
+		reps := ctrl.Reports()
+		if reps == nil {
+			reps = []run.Report{} // always a list
 		}
-		c.JSON(http.StatusOK, rep)
+		c.JSON(http.StatusOK, reps)
 	})
 	return r
 }

@@ -26,7 +26,6 @@ import (
 var (
 	ErrRunActive  = errors.New("a run is already active; stop it first")
 	ErrNotRunning = errors.New("no active run to stop")
-	ErrNoReport   = errors.New("no finished run")
 )
 
 // Deps are the controller's side effects, injected so tests can fake them.
@@ -61,11 +60,17 @@ const dataplaneDrain = 200 * time.Millisecond
 // before that is dropped (seen as start-up loss against free5GC).
 const trafficStartDelay = 500 * time.Millisecond
 
+// keptReports is how many finished runs Reports returns. fru-lab polls
+// every few seconds; keeping several means a run that was followed at
+// once by the next is still picked up.
+const keptReports = 10
+
 type Controller struct {
 	deps Deps
 
 	mu      sync.Mutex
 	current *run
+	past    []*run        // finished runs before current, oldest first, at most keptReports
 	changed chan struct{} // closed and replaced on every state change
 }
 
@@ -163,6 +168,12 @@ func (c *Controller) Start(p profile.Profile) (Snapshot, error) {
 		c.mu.Unlock()
 		return Snapshot{}, ErrRunActive
 	}
+	if c.current != nil {
+		c.past = append(c.past, c.current)
+		if len(c.past) > keptReports {
+			c.past = c.past[len(c.past)-keptReports:]
+		}
+	}
 	c.current = r
 	c.mu.Unlock()
 
@@ -202,19 +213,25 @@ func (c *Controller) Snapshot() Snapshot {
 	return r.snapshot()
 }
 
-// Report returns the current run once it has finished (stopped or
-// failed), for fru-lab's history; ErrNoReport before that.
-func (c *Controller) Report() (Report, error) {
+// Reports returns the last keptReports finished (stopped or failed)
+// runs, oldest first, for fru-lab's history.
+func (c *Controller) Reports() []Report {
 	c.mu.Lock()
-	r := c.current
+	runs := append([]*run{}, c.past...)
+	if c.current != nil {
+		runs = append(runs, c.current)
+	}
 	c.mu.Unlock()
-	if r == nil {
-		return Report{}, ErrNoReport
+	out := []Report{}
+	for _, r := range runs {
+		if st := r.state(); st == StateStopped || st == StateFailed {
+			out = append(out, Report{Profile: r.profile, Snapshot: r.snapshot()})
+		}
 	}
-	if st := r.state(); st != StateStopped && st != StateFailed {
-		return Report{}, ErrNoReport
+	if len(out) > keptReports {
+		out = out[len(out)-keptReports:]
 	}
-	return Report{Profile: r.profile, Snapshot: r.snapshot()}, nil
+	return out
 }
 
 // Shutdown stops any active run and waits for teardown, for process exit.

@@ -3,6 +3,7 @@ package run
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/netip"
 	"sync"
 	"testing"
@@ -352,22 +353,46 @@ func TestMaxDurationStopsTheRun(t *testing.T) {
 	require.Equal(t, int64(10), snap.Deregistration.Accepted)
 }
 
-func TestReportOnlyForAFinishedRun(t *testing.T) {
+func TestReportsKeepFinishedRunsUntilFetched(t *testing.T) {
+	ids := []string{"r1", "r2"}
 	c, _ := newE2EController(amfDialer{amf: newFakeAMF(nil)})
-	_, err := c.Report()
-	require.ErrorIs(t, err, ErrNoReport)
+	c.deps.NewID = func() string { id := ids[0]; ids = ids[1:]; return id }
+	require.Empty(t, c.Reports())
 
 	p := e2eProfile()
+	_, err := c.Start(p)
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	require.Empty(t, c.Reports(), "a running run has no report")
+	stopAndWait(t, c)
+
+	// a second run starts before anyone fetched the first one's report
 	_, err = c.Start(p)
 	require.NoError(t, err)
 	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
-	_, err = c.Report()
-	require.ErrorIs(t, err, ErrNoReport, "still running")
-
 	stopAndWait(t, c)
-	rep, err := c.Report()
-	require.NoError(t, err)
-	require.Equal(t, p.Name, rep.Profile.Name)
-	require.Equal(t, StateStopped, rep.Snapshot.State)
-	require.Equal(t, "e2e", rep.Snapshot.RunID)
+
+	reps := c.Reports()
+	require.Len(t, reps, 2)
+	require.Equal(t, "r1", reps[0].Snapshot.RunID)
+	require.Equal(t, "r2", reps[1].Snapshot.RunID)
+	require.Equal(t, StateStopped, reps[0].Snapshot.State)
+	require.Equal(t, p.Name, reps[1].Profile.Name)
+}
+
+func TestReportsKeepOnlyTheLastFinishedRuns(t *testing.T) {
+	n := 0
+	c, _ := newE2EController(amfDialer{amf: newFakeAMF(nil)})
+	c.deps.NewID = func() string { n++; return fmt.Sprintf("r%02d", n) }
+	p := e2eProfile()
+	p.Scale = profile.Scale{GnbCount: 1, UeCount: 1}
+	for range keptReports + 2 {
+		_, err := c.Start(p)
+		require.NoError(t, err)
+		waitState(t, c, StateRunning)
+		stopAndWait(t, c)
+	}
+	reps := c.Reports()
+	require.Len(t, reps, keptReports)
+	require.Equal(t, "r03", reps[0].Snapshot.RunID)
 }

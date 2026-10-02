@@ -69,11 +69,12 @@ func TestWatcherStoresEachRunOnce(t *testing.T) {
 	var auth string
 	tester := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth = r.Header.Get("Authorization")
-		if r.URL.Path != "/api/run/report" {
+		if r.URL.Path != "/api/run/reports" {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte(sampleReport))
+		second := strings.Replace(sampleReport, "20261002-150405", "20261002-150410", 1)
+		_, _ = w.Write([]byte("[" + sampleReport + "," + second + "]"))
 	}))
 	defer tester.Close()
 	store := &memRuns{}
@@ -88,22 +89,25 @@ func TestWatcherStoresEachRunOnce(t *testing.T) {
 	if auth != "Bearer engine-token" {
 		t.Fatalf("auth %q", auth)
 	}
-	if len(store.ids) != 1 || store.ids[0] != "20261002-150405" {
-		t.Fatalf("stored %v; want the run once", store.ids)
+	// both runs, each once: the second one followed the first before a poll
+	if strings.Join(store.ids, ",") != "20261002-150405,20261002-150410" {
+		t.Fatalf("stored %v; want each run once", store.ids)
+	}
+	if string(store.runs["20261002-150405"]) != sampleReport {
+		t.Fatalf("stored %q; want the report as fru-tester sent it", store.runs["20261002-150405"])
 	}
 }
 
 func TestWatcherStoresNothingWhileNoRunFinished(t *testing.T) {
 	tester := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"message":"no finished run"}`))
+		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer tester.Close()
 	store := &memRuns{}
 	w := testLog()
 	w.url, w.token, w.client, w.store = tester.URL, "t", tester.Client(), store
 	if err := w.poll(context.Background()); err != nil {
-		t.Fatalf("404 is not an error: %v", err)
+		t.Fatalf("no finished run is not an error: %v", err)
 	}
 	if len(store.ids) != 0 {
 		t.Fatalf("stored %v", store.ids)

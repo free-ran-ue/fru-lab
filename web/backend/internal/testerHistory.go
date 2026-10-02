@@ -32,8 +32,8 @@ type testerRunStore interface {
 }
 
 // testerHistoryWatcher copies each finished run from fru-tester into
-// fru-lab's DB. fru-tester only keeps its latest run, so fru-lab polls it
-// and stores every run it has not seen yet.
+// fru-lab's DB. fru-tester keeps its last few finished runs; fru-lab polls
+// them and stores every one it has not seen yet.
 type testerHistoryWatcher struct {
 	url, token string
 	client     *http.Client
@@ -56,10 +56,9 @@ func (w *testerHistoryWatcher) run(ctx context.Context) {
 	}
 }
 
-// poll stores fru-tester's finished run if it is new. No finished run
-// (404) is not an error.
+// poll stores fru-tester's finished runs that are new.
 func (w *testerHistoryWatcher) poll(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(w.url, "/")+"/api/run/report", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(w.url, "/")+"/api/run/reports", nil)
 	if err != nil {
 		return err
 	}
@@ -69,30 +68,29 @@ func (w *testerHistoryWatcher) poll(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusNotFound {
-		return nil
-	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("report: %s", resp.Status)
+		return fmt.Errorf("reports: %s", resp.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if err != nil {
-		return err
+	var reports []json.RawMessage
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(&reports); err != nil {
+		return fmt.Errorf("reports: %w", err)
 	}
-	var head struct {
-		Snapshot struct {
-			RunID string `json:"runId"`
-		} `json:"snapshot"`
-	}
-	if err := json.Unmarshal(body, &head); err != nil || head.Snapshot.RunID == "" {
-		return errors.New("report without a run id")
-	}
-	saved, err := w.store.SaveTesterRun(head.Snapshot.RunID, body, testerHistoryKeep)
-	if err != nil {
-		return err
-	}
-	if saved {
-		w.log.Infof("Saved tester run %s to the history", head.Snapshot.RunID)
+	for _, raw := range reports {
+		var head struct {
+			Snapshot struct {
+				RunID string `json:"runId"`
+			} `json:"snapshot"`
+		}
+		if err := json.Unmarshal(raw, &head); err != nil || head.Snapshot.RunID == "" {
+			return errors.New("report without a run id")
+		}
+		saved, err := w.store.SaveTesterRun(head.Snapshot.RunID, raw, testerHistoryKeep)
+		if err != nil {
+			return err
+		}
+		if saved {
+			w.log.Infof("Saved tester run %s to the history", head.Snapshot.RunID)
+		}
 	}
 	return nil
 }
