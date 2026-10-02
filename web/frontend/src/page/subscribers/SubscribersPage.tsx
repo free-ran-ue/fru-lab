@@ -76,8 +76,10 @@ export default function SubscribersPage() {
   const shown = pageOf(filteredSubscribers, page, PAGE_SIZE)
   const keyOf = (s: Subscriber) => `${s.ueId}|${s.plmnID}`
   const selectedSubscribers = subscribers.filter((s) => selected.has(keyOf(s)))
-  const pageAllSelected = shown.items.length > 0 && shown.items.every((s) => selected.has(keyOf(s)))
+  // the header checkbox selects every subscriber matching the search, on
+  // every page, not just the page shown
   const allMatchingSelected = filteredSubscribers.length > 0 && filteredSubscribers.every((s) => selected.has(keyOf(s)))
+  const someMatchingSelected = filteredSubscribers.some((s) => selected.has(keyOf(s)))
   const isBulkDeleting = bulkProgress !== null
 
   function toggle(subscriber: Subscriber) {
@@ -163,11 +165,6 @@ export default function SubscribersPage() {
                 <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
                   {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
                 </Button>
-                {pageAllSelected && !allMatchingSelected && (
-                  <button type="button" className={styles.btnAdd} onClick={() => setMany(filteredSubscribers, true)} disabled={isBulkDeleting}>
-                    Select all {filteredSubscribers.length}{search.trim() ? ' matching' : ''}
-                  </button>
-                )}
                 <button type="button" className={styles.btnAdd} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
                   Clear selection
                 </button>
@@ -187,9 +184,11 @@ export default function SubscribersPage() {
                     <th>
                       <input
                         type="checkbox"
-                        aria-label="Select this page"
-                        checked={pageAllSelected}
-                        onChange={() => setMany(shown.items, !pageAllSelected)}
+                        aria-label={search.trim() ? 'Select all matching subscribers' : 'Select all subscribers'}
+                        title={`Select all ${filteredSubscribers.length}${search.trim() ? ' matching' : ''}, on every page`}
+                        checked={allMatchingSelected}
+                        ref={(el) => { if (el) el.indeterminate = someMatchingSelected && !allMatchingSelected }}
+                        onChange={() => setMany(filteredSubscribers, !allMatchingSelected)}
                         disabled={isBulkDeleting}
                       />
                     </th>
