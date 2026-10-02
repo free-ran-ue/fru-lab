@@ -8,6 +8,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import type { Subscriber } from '../../webconsoleApi'
 import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
+import { BULK_CONCURRENCY, PAGE_SIZE, pageOf, runLimited } from './bulk'
 import styles from './webconsole-style.module.css'
 
 export default function SubscribersPage() {
@@ -18,6 +19,10 @@ export default function SubscribersPage() {
   const [search, setSearch] = useState('')
   const [deletingUeId, setDeletingUeId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Subscriber | null>(null)
+  const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [isConfirmingBulk, setIsConfirmingBulk] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<number | null>(null) // deletions done, while running
   const [isAskingCount, setIsAskingCount] = useState(false)
   const [ueCount, setUeCount] = useState('1')
   const parsedCount = Number(ueCount)
@@ -53,14 +58,57 @@ export default function SubscribersPage() {
     refresh()
   }, [refresh])
 
+  // sorted by IMSI: the webconsole lists them in no fixed order, which
+  // would shuffle the pages
   const filteredSubscribers = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return subscribers
-    return subscribers.filter((subscriber) =>
+    const matching = !query ? subscribers : subscribers.filter((subscriber) =>
       subscriber.ueId.toLowerCase().includes(query) ||
       subscriber.plmnID.toLowerCase().includes(query) ||
       (subscriber.gpsi || '').toLowerCase().includes(query))
+    return [...matching].sort((a, b) => a.ueId.localeCompare(b.ueId) || a.plmnID.localeCompare(b.plmnID))
   }, [subscribers, search])
+
+  const shown = pageOf(filteredSubscribers, page, PAGE_SIZE)
+  const keyOf = (s: Subscriber) => `${s.ueId}|${s.plmnID}`
+  const selectedSubscribers = subscribers.filter((s) => selected.has(keyOf(s)))
+  const pageAllSelected = shown.items.length > 0 && shown.items.every((s) => selected.has(keyOf(s)))
+  const allMatchingSelected = filteredSubscribers.length > 0 && filteredSubscribers.every((s) => selected.has(keyOf(s)))
+  const isBulkDeleting = bulkProgress !== null
+
+  function toggle(subscriber: Subscriber) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(keyOf(subscriber))) next.delete(keyOf(subscriber))
+      else next.add(keyOf(subscriber))
+      return next
+    })
+  }
+
+  function setMany(list: Subscriber[], on: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      list.forEach((s) => (on ? next.add(keyOf(s)) : next.delete(keyOf(s))))
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const targets = selectedSubscribers
+    setIsConfirmingBulk(false)
+    setBulkProgress(0)
+    const failed = await runLimited(targets, BULK_CONCURRENCY,
+      (s) => webconsoleApi.deleteSubscriberByID(s.ueId, s.plmnID), setBulkProgress)
+    // keep the ones that failed selected, so they can be retried
+    setSelected(new Set(failed.map((f) => keyOf(f.item))))
+    setBulkProgress(null)
+    if (targets.length > failed.length) addSuccess(`Deleted ${targets.length - failed.length} subscriber${targets.length - failed.length === 1 ? '' : 's'}`)
+    if (failed.length > 0) {
+      const first = failed[0]
+      addError(`${failed.length} could not be deleted (still selected), e.g. ${first.item.ueId}: ${extractWebconsoleErrorMessage(first.error, 'Failed to delete')}`)
+    }
+    await refresh()
+  }
 
   async function handleConfirmDelete() {
     if (!confirmTarget) return
@@ -103,8 +151,24 @@ export default function SubscribersPage() {
               style={{ marginBottom: '1.25rem' }}
               placeholder={`Search Subscriber (${filteredSubscribers.length} / ${subscribers.length})`}
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => { setSearch(event.target.value); setPage(1) }}
             />
+
+            {selectedSubscribers.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
+                  {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
+                </Button>
+                {pageAllSelected && !allMatchingSelected && (
+                  <button type="button" className={styles.btnAdd} onClick={() => setMany(filteredSubscribers, true)} disabled={isBulkDeleting}>
+                    Select all {filteredSubscribers.length}{search.trim() ? ' matching' : ''}
+                  </button>
+                )}
+                <button type="button" className={styles.btnAdd} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
+                  Clear selection
+                </button>
+              </div>
+            )}
 
             {isLoading ? (
               <p className={styles.emptyState}>Loading subscribers…</p>
@@ -116,6 +180,15 @@ export default function SubscribersPage() {
               <table className={styles.table} style={{ marginBottom: '1.25rem' }}>
                 <thead>
                   <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label="Select this page"
+                        checked={pageAllSelected}
+                        onChange={() => setMany(shown.items, !pageAllSelected)}
+                        disabled={isBulkDeleting}
+                      />
+                    </th>
                     <th>PLMN</th>
                     <th>UE ID</th>
                     <th>GPSI</th>
@@ -125,8 +198,17 @@ export default function SubscribersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSubscribers.map((subscriber) => (
+                  {shown.items.map((subscriber) => (
                     <tr key={`${subscriber.ueId}-${subscriber.plmnID}`}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${subscriber.ueId}`}
+                          checked={selected.has(keyOf(subscriber))}
+                          onChange={() => toggle(subscriber)}
+                          disabled={isBulkDeleting}
+                        />
+                      </td>
                       <td>{subscriber.plmnID}</td>
                       <td>{subscriber.ueId}</td>
                       <td>{subscriber.gpsi || '—'}</td>
@@ -161,6 +243,21 @@ export default function SubscribersPage() {
               </table>
             )}
 
+            {!isLoading && !loadError && shown.pages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
+                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                  {shown.from}–{shown.to} of {filteredSubscribers.length}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Button variant="secondary" onClick={() => setPage(1)} disabled={shown.page === 1}>«</Button>
+                  <Button variant="secondary" onClick={() => setPage(shown.page - 1)} disabled={shown.page === 1}>‹ Prev</Button>
+                  <span style={{ fontSize: '0.85rem', minWidth: '6rem', textAlign: 'center' }}>Page {shown.page} / {shown.pages}</span>
+                  <Button variant="secondary" onClick={() => setPage(shown.page + 1)} disabled={shown.page === shown.pages}>Next ›</Button>
+                  <Button variant="secondary" onClick={() => setPage(shown.pages)} disabled={shown.page === shown.pages}>»</Button>
+                </div>
+              </div>
+            )}
+
             <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add Subscriber</Button>
           </section>
         </div>
@@ -173,6 +270,19 @@ export default function SubscribersPage() {
         onSubmit={handleConfirmDelete}
       >
         <p>Delete subscriber <strong>{confirmTarget?.ueId}</strong>? This cannot be undone.</p>
+      </Modal>
+
+      <Modal
+        isOpen={isConfirmingBulk}
+        onClose={() => setIsConfirmingBulk(false)}
+        title="Delete subscribers"
+        onSubmit={handleBulkDelete}
+      >
+        <p>
+          Delete <strong>{selectedSubscribers.length}</strong> subscriber{selectedSubscribers.length === 1 ? '' : 's'}
+          {selectedSubscribers.length > 0 && <> ({selectedSubscribers[0].ueId}{selectedSubscribers.length > 1 && <> … {selectedSubscribers[selectedSubscribers.length - 1].ueId}</>})</>}?
+          This cannot be undone.
+        </p>
       </Modal>
 
       <Modal

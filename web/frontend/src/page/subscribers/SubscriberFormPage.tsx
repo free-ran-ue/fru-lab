@@ -22,11 +22,8 @@ import {
   type SessionFormRow,
   type SubscriberFormState,
 } from './subscriberForm'
+import { BULK_CONCURRENCY, runLimited } from './bulk'
 import styles from './webconsole-style.module.css'
-
-// BULK_CONCURRENCY is how many create requests run at once when adding
-// many subscribers, so the webconsole is not flooded.
-const BULK_CONCURRENCY = 8
 
 interface BulkFailure {
   ueId: string
@@ -93,28 +90,13 @@ export default function SubscriberFormPage() {
 
   // createMany posts one subscription per IMSI: the form's subscription
   // with only ueId changed. It keeps going past failures and reports them.
-  async function createMany(ids: string[]) {
+  async function createMany(ids: string[]): Promise<BulkFailure[]> {
     const base = toSubscription(form)
-    const failures: BulkFailure[] = []
-    let next = 0
-    let done = 0
     setProgress(0)
     setBulkFailures([])
-    const worker = async () => {
-      while (next < ids.length) {
-        const ueId = ids[next++]
-        try {
-          await webconsoleApi.postSubscriberByID(ueId, base.plmnID, { ...base, ueId })
-        } catch (error) {
-          failures.push({ ueId, message: extractWebconsoleErrorMessage(error, 'Failed to create') })
-        }
-        done++
-        setProgress(done)
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, worker))
-    failures.sort((a, b) => a.ueId.localeCompare(b.ueId))
-    return failures
+    const failed = await runLimited(ids, BULK_CONCURRENCY,
+      (ueId) => webconsoleApi.postSubscriberByID(ueId, base.plmnID, { ...base, ueId }), setProgress)
+    return failed.map((f) => ({ ueId: f.item, message: extractWebconsoleErrorMessage(f.error, 'Failed to create') }))
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
