@@ -1,6 +1,7 @@
 package run
 
 import (
+	"encoding/json"
 	"errors"
 	"net/netip"
 	"testing"
@@ -156,4 +157,17 @@ func TestStopDuringRegistrationCancelsQueuedUes(t *testing.T) {
 	frozen := snap.Registration.TotalTimeMs
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, frozen, c.Snapshot().Registration.TotalTimeMs, "total time stops at the last finish")
+}
+
+// A run where every UE succeeds must still send "failedUes": [] — the
+// Run page reads failedUes.length, and null blanked it.
+func TestSnapshotJSONHasEmptyFailedUesNotNull(t *testing.T) {
+	c, _ := newE2EController(amfDialer{amf: newFakeAMF(nil)})
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	raw, err := json.Marshal(c.Snapshot())
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"failedUes":[]`)
+	stopAndWait(t, c)
 }

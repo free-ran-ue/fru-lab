@@ -300,7 +300,9 @@ func (r *run) snapshot() Snapshot {
 		N2: r.n2.Snapshot(), Registration: r.reg.Snapshot(), Pdu: r.pdu.Snapshot(),
 		Gnbs:      append([]GnbStatus(nil), r.gnbs...),
 		Ues:       r.summary,
-		FailedUes: append([]UeFailure(nil), r.failures...),
+		// copy into a non-nil slice: an empty list must encode as [] (the
+		// Run page reads failedUes.length; null blanked it)
+		FailedUes: append([]UeFailure{}, r.failures...),
 	}
 	started := r.startedAt
 	snap.StartedAt = &started
