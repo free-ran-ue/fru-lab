@@ -1,5 +1,7 @@
 github.com/Alonza0314/logger-go/v2 v2.1.0 h1:rkMG18sf5jESAzq5feB4VEHBZPZ/3PZ7krXXFZ/52XQ=
 github.com/Alonza0314/logger-go/v2 v2.1.0/go.mod h1:eblchUE/Dm4bDiHNhibtkyic8xIrzINbnBZgvQUgDq4=
+github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1 h1:+JkXLHME8vLJafGhOH4aoV2Iu8bR55nU6iKMVfYVLjY=
+github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1/go.mod h1:nuudZmJhzWtx2212z+pkuy7B6nkBqa+xwNXZHL1j8cg=
 github.com/bytedance/gopkg v0.1.3 h1:TPBSwH8RsouGCBcMBktLt1AymVo2TVsBVCY4b6TnZ/M=
 github.com/bytedance/gopkg v0.1.3/go.mod h1:576VvJ+eJgyCzdjS+c4+77QF3p7ubbtiKARP3TxducM=
 github.com/bytedance/sonic v1.15.0 h1:/PXeWFaR5ElNcVE84U0dOHjiMHQOwNIx3K4ymzh/uSE=
@@ -24,6 +26,8 @@ github.com/free5gc/openapi v1.3.0 h1:dVJ9FXM2qr8jesiHeTR9ZGZwYRmr7qcHx5Xgm/ip6s0
 github.com/free5gc/openapi v1.3.0/go.mod h1:ggzAcwqg4JotSSdUvFFFruK6M0Yyr6mhBOCFaDHZmdE=
 github.com/free5gc/sctp v1.2.0 h1:xzvFWZSMUdJkW7Q0Xo6YY77SbkNZwSw9Hl2rH1njSlo=
 github.com/free5gc/sctp v1.2.0/go.mod h1:wOvct9P1T6DGk1fxkleF7zeTHsU8ZKxKzewu2ciZh/4=
+github.com/free5gc/util v1.4.0 h1:vdjzRUgxEYtjIy6AYkO4JuIQHV8DqBb1paNqJiajeus=
+github.com/free5gc/util v1.4.0/go.mod h1:ihddsLLECOOIkYzAlgkK3CVXmQh9HTGEagaJT9Rv/+I=
 github.com/gabriel-vasile/mimetype v1.4.12 h1:e9hWvmLYvtp846tLHam2o++qitpguFiYCKbn0w9jyqw=
 github.com/gabriel-vasile/mimetype v1.4.12/go.mod h1:d+9Oxyo1wTzWdyVUPMmXFvp4F9tea18J8ufA774AB3s=
 github.com/gin-contrib/sse v1.1.0 h1:n0w2GMuUpWDVp7qSpvze6fAu9iRxJY4Hmj6AmBOU05w=
