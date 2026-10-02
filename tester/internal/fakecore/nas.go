@@ -30,7 +30,7 @@ type Subscriber struct {
 type Behavior struct {
 	RejectRegistration uint8 // 5GMM cause; 0 = accept
 	RejectPdu          uint8 // 5GSM cause; 0 = accept
-	SendConfigUpdate   bool  // send Configuration Update Command after Registration Complete
+	NoConfigUpdate     bool  // skip the Configuration Update Command free5GC sends after Registration Complete
 	IgnorePduRequest   bool  // never answer the PDU request (for timeouts)
 	BadAutn            bool  // corrupt AUTN so the UE's MAC check fails
 }
@@ -191,7 +191,7 @@ func (s *NasSession) onRegistrationComplete(b []byte) ([]Downlink, error) {
 		return nil, fmt.Errorf("expected registration complete, got %T", m)
 	}
 	s.state = "registered"
-	if !s.behavior.SendConfigUpdate {
+	if s.behavior.NoConfigUpdate {
 		return nil, nil
 	}
 	cmd, err := message.Marshal(&message.CfgUpdateCmd{}, s.secCtx, message.SecHdrTypeIntegrityProtectedAndCiphered)

@@ -48,6 +48,7 @@ const (
 	EventRegistrationRejected              // Registration/Authentication Reject; Cause set
 	EventPduEstablished                    // PDU Session Establishment Accept; UeIP set
 	EventPduRejected                       // PDU Session Establishment Reject or 5GMM cause; Cause set
+	EventConfigUpdate                      // Configuration Update Command: the AMF finished the registration
 )
 
 // Result is the outcome of handling one downlink NAS message.
@@ -173,9 +174,10 @@ func (u *UE) Handle(pdu []byte) (Result, error) {
 		return Result{Event: EventRegistrationRejected, Cause: "authentication reject"}, nil
 	case *message.DLNASTransport:
 		return u.onDownlinkTransport(m)
+	case *message.CfgUpdateCmd:
+		return Result{Event: EventConfigUpdate}, nil
 	default:
-		// Configuration Update Command, 5GMM Status, ...: nothing the
-		// tester's procedures wait for.
+		// 5GMM Status and the like: nothing the procedures wait for.
 		return Result{}, nil
 	}
 }

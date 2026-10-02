@@ -630,7 +630,11 @@ func (r *run) attemptRegistration(i int) bool {
 	if u.nas != nil {
 		u.link, out = procedure.Register(assoc, u.nas, time.Duration(rates.TimeoutMs)*time.Millisecond)
 	}
-	latency := r.deps.Now().Sub(u.regStart)
+	end := r.deps.Now()
+	if !out.DoneAt.IsZero() {
+		end = out.DoneAt // registration time stops at Registration Complete
+	}
+	latency := end.Sub(u.regStart)
 
 	if out.Result == metrics.Accepted {
 		r.reg.Finish(metrics.Accepted, latency, "")

@@ -43,11 +43,11 @@ func newUE(t *testing.T, msin string) *ue.UE {
 }
 
 func TestRegisterThenEstablishPdu(t *testing.T) {
-	assoc, amf, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{SendConfigUpdate: true} })
+	assoc, amf, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{} })
 	u := newUE(t, "0000000001")
 
 	link, out := Register(assoc, u, time.Second)
-	require.Equal(t, Outcome{Result: metrics.Accepted}, out)
+	require.Equal(t, metrics.Accepted, out.Result)
 	require.NotNil(t, link)
 
 	out = EstablishPdu(assoc, link, u, time.Second)
@@ -128,4 +128,32 @@ func TestManyUesInterleaveOnOneAssociation(t *testing.T) {
 		teids[r.DlTeid] = true
 	}
 	require.Len(t, teids, n, "every UE gets its own DL TEID")
+}
+
+// Like a real UE, the tester waits for free5GC's Configuration Update
+// Command after Registration Complete before asking for a PDU session.
+func TestRegisterHandsOverOnlyAfterConfigurationUpdate(t *testing.T) {
+	assoc, _, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{} })
+	u := newUE(t, "0000000001")
+	link, out := Register(assoc, u, time.Second)
+	require.Equal(t, metrics.Accepted, out.Result)
+	require.False(t, out.DoneAt.IsZero(), "registration time ends at Registration Complete")
+	select {
+	case d := <-link.Downlinks:
+		t.Fatalf("configuration update must be consumed by Register, got %+v", d)
+	default:
+	}
+}
+
+func TestRegisterDoesNotWaitForeverForConfigurationUpdate(t *testing.T) {
+	old := configUpdateWait
+	configUpdateWait = 50 * time.Millisecond
+	t.Cleanup(func() { configUpdateWait = old })
+	assoc, _, _ := setup(t, func(string) fakecore.Behavior { return fakecore.Behavior{NoConfigUpdate: true} })
+	u := newUE(t, "0000000001")
+	start := time.Now()
+	link, out := Register(assoc, u, 5*time.Second)
+	require.Equal(t, metrics.Accepted, out.Result)
+	require.Less(t, time.Since(start), time.Second)
+	require.Equal(t, metrics.Accepted, EstablishPdu(assoc, link, u, time.Second).Result)
 }

@@ -20,13 +20,23 @@ type Outcome struct {
 	Cause  string        // empty when Accepted
 	UeIP   netip.Addr    // PDU only
 	Pdu    *gnb.PduSetup // PDU only; nil if the accept came without a resource setup
+	DoneAt time.Time     // registration only: when Registration Complete was sent
 }
+
+// configUpdateWait bounds how long Register waits, after Registration
+// Complete, for the AMF's Configuration Update Command. free5GC sends it
+// once it has finished handling the registration; waiting for it before
+// the PDU request is what a real UE (and free-ran-ue) does. Cores that
+// never send it just cost this much once per UE.
+var configUpdateWait = time.Second
 
 var errTimeout = errors.New("timeout")
 
 // Register runs one initial registration attempt. On success the returned
 // link stays attached for the PDU session; on failure it is detached.
-// Timing: from sending Initial UE Message to sending Registration Complete.
+// Timing: from sending Initial UE Message to sending Registration Complete
+// (Outcome.DoneAt); Register then waits for the Configuration Update
+// Command before returning, so the PDU stage starts after the AMF is done.
 func Register(assoc *gnb.Association, u *ue.UE, timeout time.Duration) (*gnb.UeLink, Outcome) {
 	link, err := assoc.Attach()
 	if err != nil {
@@ -70,7 +80,9 @@ func register(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, deadline time.
 		}
 		switch r.Event {
 		case ue.EventRegistered:
-			return Outcome{Result: metrics.Accepted}
+			done := time.Now()
+			awaitConfigUpdate(link, u, minTime(done.Add(configUpdateWait), deadline))
+			return Outcome{Result: metrics.Accepted, DoneAt: done}
 		case ue.EventRegistrationRejected:
 			return Outcome{Result: metrics.Rejected, Cause: r.Cause}
 		}
@@ -118,6 +130,28 @@ func EstablishPdu(assoc *gnb.Association, link *gnb.UeLink, u *ue.UE, timeout ti
 			return Outcome{Result: metrics.Rejected, Cause: r.Cause}
 		}
 	}
+}
+
+// awaitConfigUpdate consumes downlinks until the Configuration Update
+// Command arrives or the deadline passes. Anything else that arrives in
+// that window (there should be nothing) is dropped.
+func awaitConfigUpdate(link *gnb.UeLink, u *ue.UE, deadline time.Time) {
+	for {
+		d, err := next(link, deadline)
+		if err != nil || d.Kind != gnb.DownlinkNas {
+			return
+		}
+		if r, err := u.Handle(d.Nas); err == nil && r.Event == ue.EventConfigUpdate {
+			return
+		}
+	}
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }
 
 func next(link *gnb.UeLink, deadline time.Time) (gnb.Downlink, error) {

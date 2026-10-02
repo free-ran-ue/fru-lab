@@ -60,16 +60,16 @@ func register(t *testing.T, u *UE, net *fakecore.NasSession) Result {
 func TestRegistrationAndPduSession(t *testing.T) {
 	u, err := New(testConfig())
 	require.NoError(t, err)
-	net := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{SendConfigUpdate: true}, netip.MustParseAddr("10.60.0.7"))
+	net := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{}, netip.MustParseAddr("10.60.0.7"))
 
 	r := register(t, u, net)
 	require.Equal(t, EventRegistered, r.Event)
 	require.NotNil(t, r.Reply, "registration complete must be sent")
 
-	// Registration Complete triggers a Configuration Update Command, which
-	// the UE ignores.
+	// Registration Complete triggers a Configuration Update Command: the
+	// AMF's signal that it has finished processing the registration.
 	results := exchange(t, u, net, r.Reply)
-	require.Equal(t, []Result{{}}, results)
+	require.Equal(t, []Result{{Event: EventConfigUpdate}}, results)
 
 	req, err := u.PduSessionRequest()
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestWrongKeyIsRejectedByNetwork(t *testing.T) {
 func TestPduSessionRejected(t *testing.T) {
 	u, err := New(testConfig())
 	require.NoError(t, err)
-	net := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{RejectPdu: 27}, netip.Addr{})
+	net := fakecore.NewNasSession(testSubscriber(), fakecore.Behavior{RejectPdu: 27, NoConfigUpdate: true}, netip.Addr{})
 	r := register(t, u, net)
 	require.Empty(t, exchange(t, u, net, r.Reply))
 	req, err := u.PduSessionRequest()
