@@ -13,10 +13,14 @@ Name | Type | Description | Notes
 **ueCount** | **number** |  | [default to undefined]
 **ueFirst** | **number** | 1-based index of the first UE on this gNB; 0 when it has none. | [default to undefined]
 **ueLast** | **number** |  | [default to undefined]
+**firstSupi** | **string** | SUPI of this gNB\&#39;s first UE; empty when it has none. | [default to undefined]
+**lastSupi** | **string** |  | [default to undefined]
 **state** | **string** | lost &#x3D; was up, then the AMF side dropped the association. | [default to undefined]
 **attempts** | **number** |  | [default to undefined]
 **latencyMs** | **number** |  | [default to undefined]
 **cause** | **string** |  | [default to undefined]
+**registered** | **number** |  | [default to undefined]
+**established** | **number** |  | [default to undefined]
 
 ## Example
 
@@ -32,10 +36,14 @@ const instance: TesterGnbStatus = {
     ueCount,
     ueFirst,
     ueLast,
+    firstSupi,
+    lastSupi,
     state,
     attempts,
     latencyMs,
     cause,
+    registered,
+    established,
 };
 ```
 

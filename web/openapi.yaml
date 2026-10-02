@@ -1120,7 +1120,7 @@ components:
             $ref: '#/components/schemas/ImageInfo'
     TesterProfile:
       type: object
-      required: [name, scale, gnb, network, rates]
+      required: [name, scale, gnb, ue, network, rates]
       properties:
         name:
           type: string
@@ -1163,6 +1163,8 @@ components:
               type: string
               description: Empty or 6 hex digits.
               example: '010203'
+        ue:
+          $ref: '#/components/schemas/TesterUeTemplate'
         network:
           type: object
           required: [n2, n3]
@@ -1207,10 +1209,67 @@ components:
                   example: 2152
         rates:
           type: object
-          required: [n2]
+          required: [n2, registration, pdu]
           properties:
             n2:
               $ref: '#/components/schemas/TesterStageRate'
+            registration:
+              $ref: '#/components/schemas/TesterProcedureRate'
+            pdu:
+              $ref: '#/components/schemas/TesterProcedureRate'
+    TesterUeTemplate:
+      type: object
+      description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
+      required: [msinStart, key, opc, amf, sqn, integrity, ciphering, dnn, sst, sd]
+      properties:
+        msinStart:
+          type: string
+          description: Decimal; incremented per UE, keeping its width.
+          example: '0000000001'
+        key:
+          type: string
+          example: 8baf473f2f8fd09487cccbd7097c6862
+        opc:
+          type: string
+          example: 8e27b6af0e692e750f32667a3b14605d
+        amf:
+          type: string
+          example: '8000'
+        sqn:
+          type: string
+          example: '000000000023'
+        integrity:
+          type: string
+          enum: [nia0, nia1, nia2, nia3]
+        ciphering:
+          type: string
+          enum: [nea0, nea1, nea2, nea3]
+        dnn:
+          type: string
+          example: internet
+        sst:
+          type: integer
+          example: 1
+        sd:
+          type: string
+          example: '010203'
+    TesterProcedureRate:
+      type: object
+      description: At most ratePerSec new attempts per second and at most maxInFlight at once; each attempt bounded by timeoutMs; a failed UE with retries left is requeued at the back.
+      required: [ratePerSec, maxInFlight, timeoutMs, retries]
+      properties:
+        ratePerSec:
+          type: integer
+          example: 50
+        maxInFlight:
+          type: integer
+          example: 200
+        timeoutMs:
+          type: integer
+          example: 10000
+        retries:
+          type: integer
+          example: 1
     TesterStageRate:
       type: object
       required: [timeoutMs, retries]
@@ -1232,7 +1291,7 @@ components:
           type: string
     TesterGnbSpec:
       type: object
-      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, ueFirst, ueLast]
+      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, ueFirst, ueLast, firstSupi, lastSupi]
       properties:
         index:
           type: integer
@@ -1251,6 +1310,12 @@ components:
           description: 1-based index of the first UE on this gNB; 0 when it has none.
         ueLast:
           type: integer
+        firstSupi:
+          type: string
+          description: SUPI of this gNB's first UE; empty when it has none.
+          example: imsi-208930000000001
+        lastSupi:
+          type: string
     TesterPlan:
       type: object
       required: [gnbs, uesPerGnb, n2Prefix, n3Prefix]
@@ -1302,7 +1367,7 @@ components:
     TesterStageSnapshot:
       type: object
       description: One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
-      required: [name, expected, attempted, retries, inFlight, accepted, rejected, timedOut, failed, done, totalTimeMs, avgMs, p50Ms, p95Ms, p99Ms, maxMs, causes]
+      required: [name, expected, attempted, retries, inFlight, accepted, rejected, timedOut, failed, skipped, done, totalTimeMs, avgMs, p50Ms, p95Ms, p99Ms, maxMs, causes]
       properties:
         name:
           type: string
@@ -1329,6 +1394,10 @@ components:
         failed:
           type: integer
           format: int64
+        skipped:
+          type: integer
+          format: int64
+          description: Never attempted (gNB down, earlier stage failed, or the run was stopped first).
         done:
           type: boolean
         totalTimeMs:
@@ -1351,7 +1420,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/TesterGnbSpec'
         - type: object
-          required: [state, attempts, latencyMs, cause]
+          required: [state, attempts, latencyMs, cause, registered, established]
           properties:
             state:
               type: string
@@ -1363,9 +1432,13 @@ components:
               type: number
             cause:
               type: string
+            registered:
+              type: integer
+            established:
+              type: integer
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, gnbs]
+      required: [runId, profileName, state, error, n2, registration, pdu, gnbs, ues, failedUes]
       properties:
         runId:
           type: string
@@ -1386,7 +1459,55 @@ components:
           nullable: true
         n2:
           $ref: '#/components/schemas/TesterStageSnapshot'
+        registration:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        pdu:
+          $ref: '#/components/schemas/TesterStageSnapshot'
         gnbs:
           type: array
           items:
             $ref: '#/components/schemas/TesterGnbStatus'
+        ues:
+          $ref: '#/components/schemas/TesterUeSummary'
+        failedUes:
+          type: array
+          description: The first 200 UEs that failed; ues.failed has the total.
+          items:
+            $ref: '#/components/schemas/TesterUeFailure'
+    TesterUeSummary:
+      type: object
+      description: UEs per pipeline state; the fields add up to the UE count.
+      required: [pending, registering, registered, establishing, established, failed, skipped, cancelled]
+      properties:
+        pending:
+          type: integer
+        registering:
+          type: integer
+        registered:
+          type: integer
+        establishing:
+          type: integer
+        established:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+        cancelled:
+          type: integer
+    TesterUeFailure:
+      type: object
+      required: [supi, gnb, stage, cause, attempts]
+      properties:
+        supi:
+          type: string
+        gnb:
+          type: string
+        stage:
+          type: string
+          enum: [registration, pdu]
+        cause:
+          type: string
+          example: 5gmm(62)
+        attempts:
+          type: integer

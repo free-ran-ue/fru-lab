@@ -15,6 +15,7 @@ Name | Type | Description | Notes
 **rejected** | **number** |  | [default to undefined]
 **timedOut** | **number** |  | [default to undefined]
 **failed** | **number** |  | [default to undefined]
+**skipped** | **number** | Never attempted (gNB down, earlier stage failed, or the run was stopped first). | [default to undefined]
 **done** | **boolean** |  | [default to undefined]
 **totalTimeMs** | **number** |  | [default to undefined]
 **avgMs** | **number** |  | [default to undefined]
@@ -39,6 +40,7 @@ const instance: TesterStageSnapshot = {
     rejected,
     timedOut,
     failed,
+    skipped,
     done,
     totalTimeMs,
     avgMs,

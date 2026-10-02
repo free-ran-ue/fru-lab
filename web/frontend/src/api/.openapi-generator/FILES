@@ -23,6 +23,7 @@ docs/TesterFieldError.md
 docs/TesterGnbSpec.md
 docs/TesterGnbStatus.md
 docs/TesterPlan.md
+docs/TesterProcedureRate.md
 docs/TesterProfile.md
 docs/TesterProfileGnb.md
 docs/TesterProfileNetwork.md
@@ -34,6 +35,9 @@ docs/TesterRunSnapshot.md
 docs/TesterStageRate.md
 docs/TesterStageSnapshot.md
 docs/TesterStartErrorResponse.md
+docs/TesterUeFailure.md
+docs/TesterUeSummary.md
+docs/TesterUeTemplate.md
 docs/TesterValidateResponse.md
 git_push.sh
 index.ts

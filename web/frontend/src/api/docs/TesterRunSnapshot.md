@@ -12,7 +12,11 @@ Name | Type | Description | Notes
 **startedAt** | **string** |  | [optional] [default to undefined]
 **stoppedAt** | **string** |  | [optional] [default to undefined]
 **n2** | [**TesterStageSnapshot**](TesterStageSnapshot.md) |  | [default to undefined]
+**registration** | [**TesterStageSnapshot**](TesterStageSnapshot.md) |  | [default to undefined]
+**pdu** | [**TesterStageSnapshot**](TesterStageSnapshot.md) |  | [default to undefined]
 **gnbs** | [**Array&lt;TesterGnbStatus&gt;**](TesterGnbStatus.md) |  | [default to undefined]
+**ues** | [**TesterUeSummary**](TesterUeSummary.md) |  | [default to undefined]
+**failedUes** | [**Array&lt;TesterUeFailure&gt;**](TesterUeFailure.md) | The first 200 UEs that failed; ues.failed has the total. | [default to undefined]
 
 ## Example
 
@@ -27,7 +31,11 @@ const instance: TesterRunSnapshot = {
     startedAt,
     stoppedAt,
     n2,
+    registration,
+    pdu,
     gnbs,
+    ues,
+    failedUes,
 };
 ```
 

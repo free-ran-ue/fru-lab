@@ -129,6 +129,11 @@ export interface TesterGnbSpec {
      */
     'ueFirst': number;
     'ueLast': number;
+    /**
+     * SUPI of this gNB\'s first UE; empty when it has none.
+     */
+    'firstSupi': string;
+    'lastSupi': string;
 }
 export interface TesterGnbStatus {
     'index': number;
@@ -143,12 +148,19 @@ export interface TesterGnbStatus {
     'ueFirst': number;
     'ueLast': number;
     /**
+     * SUPI of this gNB\'s first UE; empty when it has none.
+     */
+    'firstSupi': string;
+    'lastSupi': string;
+    /**
      * lost = was up, then the AMF side dropped the association.
      */
     'state': TesterGnbStatusStateEnum;
     'attempts': number;
     'latencyMs': number;
     'cause': string;
+    'registered': number;
+    'established': number;
 }
 
 export const TesterGnbStatusStateEnum = {
@@ -168,10 +180,20 @@ export interface TesterPlan {
     'n2Prefix': number;
     'n3Prefix': number;
 }
+/**
+ * At most ratePerSec new attempts per second and at most maxInFlight at once; each attempt bounded by timeoutMs; a failed UE with retries left is requeued at the back.
+ */
+export interface TesterProcedureRate {
+    'ratePerSec': number;
+    'maxInFlight': number;
+    'timeoutMs': number;
+    'retries': number;
+}
 export interface TesterProfile {
     'name': string;
     'scale': TesterProfileScale;
     'gnb': TesterProfileGnb;
+    'ue': TesterUeTemplate;
     'network': TesterProfileNetwork;
     'rates': TesterProfileRates;
 }
@@ -213,6 +235,8 @@ export interface TesterProfileNetworkN3 {
 }
 export interface TesterProfileRates {
     'n2': TesterStageRate;
+    'registration': TesterProcedureRate;
+    'pdu': TesterProcedureRate;
 }
 export interface TesterProfileScale {
     'gnbCount': number;
@@ -226,7 +250,14 @@ export interface TesterRunSnapshot {
     'startedAt'?: string | null;
     'stoppedAt'?: string | null;
     'n2': TesterStageSnapshot;
+    'registration': TesterStageSnapshot;
+    'pdu': TesterStageSnapshot;
     'gnbs': Array<TesterGnbStatus>;
+    'ues': TesterUeSummary;
+    /**
+     * The first 200 UEs that failed; ues.failed has the total.
+     */
+    'failedUes': Array<TesterUeFailure>;
 }
 
 export const TesterRunSnapshotStateEnum = {
@@ -258,6 +289,10 @@ export interface TesterStageSnapshot {
     'rejected': number;
     'timedOut': number;
     'failed': number;
+    /**
+     * Never attempted (gNB down, earlier stage failed, or the run was stopped first).
+     */
+    'skipped': number;
     'done': boolean;
     'totalTimeMs': number;
     'avgMs': number;
@@ -271,6 +306,70 @@ export interface TesterStartErrorResponse {
     'message': string;
     'errors': Array<TesterFieldError>;
 }
+export interface TesterUeFailure {
+    'supi': string;
+    'gnb': string;
+    'stage': TesterUeFailureStageEnum;
+    'cause': string;
+    'attempts': number;
+}
+
+export const TesterUeFailureStageEnum = {
+    Registration: 'registration',
+    Pdu: 'pdu',
+} as const;
+
+export type TesterUeFailureStageEnum = typeof TesterUeFailureStageEnum[keyof typeof TesterUeFailureStageEnum];
+
+/**
+ * UEs per pipeline state; the fields add up to the UE count.
+ */
+export interface TesterUeSummary {
+    'pending': number;
+    'registering': number;
+    'registered': number;
+    'establishing': number;
+    'established': number;
+    'failed': number;
+    'skipped': number;
+    'cancelled': number;
+}
+/**
+ * Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
+ */
+export interface TesterUeTemplate {
+    /**
+     * Decimal; incremented per UE, keeping its width.
+     */
+    'msinStart': string;
+    'key': string;
+    'opc': string;
+    'amf': string;
+    'sqn': string;
+    'integrity': TesterUeTemplateIntegrityEnum;
+    'ciphering': TesterUeTemplateCipheringEnum;
+    'dnn': string;
+    'sst': number;
+    'sd': string;
+}
+
+export const TesterUeTemplateIntegrityEnum = {
+    Nia0: 'nia0',
+    Nia1: 'nia1',
+    Nia2: 'nia2',
+    Nia3: 'nia3',
+} as const;
+
+export type TesterUeTemplateIntegrityEnum = typeof TesterUeTemplateIntegrityEnum[keyof typeof TesterUeTemplateIntegrityEnum];
+export const TesterUeTemplateCipheringEnum = {
+    Nea0: 'nea0',
+    Nea1: 'nea1',
+    Nea2: 'nea2',
+    Nea3: 'nea3',
+} as const;
+
+export type TesterUeTemplateCipheringEnum = typeof TesterUeTemplateCipheringEnum[keyof typeof TesterUeTemplateCipheringEnum];
+
 export interface TesterValidateResponse {
     'valid': boolean;
     'errors': Array<TesterFieldError>;

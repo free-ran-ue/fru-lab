@@ -13,6 +13,8 @@ Name | Type | Description | Notes
 **ueCount** | **number** |  | [default to undefined]
 **ueFirst** | **number** | 1-based index of the first UE on this gNB; 0 when it has none. | [default to undefined]
 **ueLast** | **number** |  | [default to undefined]
+**firstSupi** | **string** | SUPI of this gNB\&#39;s first UE; empty when it has none. | [default to undefined]
+**lastSupi** | **string** |  | [default to undefined]
 
 ## Example
 
@@ -28,6 +30,8 @@ const instance: TesterGnbSpec = {
     ueCount,
     ueFirst,
     ueLast,
+    firstSupi,
+    lastSupi,
 };
 ```
 
