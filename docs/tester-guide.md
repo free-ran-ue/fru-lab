@@ -9,7 +9,13 @@ A run does four things, with live statistics for each:
 3. Establishes one PDU session per registered UE.
 4. Starts fixed-rate uplink and downlink traffic for each UE 500 ms after its PDU session is up, and checks that it comes back through the UPF. The pause gives the UPF time to learn the gNB's downlink tunnel.
 
-Traffic runs until you press **Stop**, which halts it at once and then cleans up.
+Traffic runs until you press **Stop** (or the max run time is reached). Traffic halts at once, then the run cleans up:
+
+1. Every UE that registered deregisters. The core releases its PDU session as part of that; there is no separate PDU Session Release.
+2. Every gNB's SCTP association is closed.
+3. The IPs and route the run added are removed.
+
+Both cleanup steps appear as stage cards on the Run page. Pressing Stop again during cleanup (**Skip cleanup**) stops waiting for the remaining deregistrations; SCTP is still closed and the IPs removed. A new run can start once cleanup is over.
 
 The UEs never open a radio link: each gNB carries its UEs' NAS messages inside NGAP itself, over its single SCTP association.
 
@@ -49,11 +55,11 @@ For the run, the tester adds each gNB's N3 IP, the sink IP if the host doesn't h
 
 fru-lab's free5GC has no separate N6 network: the UPF sends decapsulated uplink out on `docker-cn-ran`. So the defaults use the host's own address there (`10.0.1.1`) as the sink, `10.0.1.5` as the UPF N6 IP, and `10.60.0.0/16` as the UE pool.
 
-Rates are per UE (uplink and downlink Mbps, 0 = off, default 1 each) with one packet size. The Setup page shows the total load for the run.
+Rates are per UE (uplink and downlink Mbps, 0 = off, default 1 each) with one packet size. **Max run time** (minutes, 0 = no limit) stops the run by itself, exactly like pressing Stop. The Setup page shows the total load for the run.
 
 ## Pacing
 
-Registration and PDU sessions each have four settings:
+Registration, PDU sessions and deregistration (on Stop) each have four settings:
 
 - **Starts per second**: how fast new attempts begin.
 - **Max in flight**: how many attempts may be waiting for the core at once.
@@ -84,11 +90,12 @@ make run-tester   # fru-tester on 127.0.0.1:9100 (sudo), reads tester.yaml
    - The plan preview shows the ID, name, N2 IP, N3 IP, UE range and SUPI range each gNB will get.
    - Any problem is shown under the field it belongs to.
 2. **Start run** saves the profile and opens **Run**. Only one run can be active at a time.
-3. **Stop** closes every N2 association and removes the gNB IPs.
+3. **Stop** stops the traffic, deregisters the UEs, closes every N2 association and removes the gNB IPs.
+4. **History** lists the last 50 finished runs (kept by fru-lab). Tick two runs to compare them side by side; **JSON** downloads the full report (profile and final numbers), **CSV** the throughput time series.
 
 ## What the stage cards mean
 
-There are three cards: N2 setup (per gNB), Registration (per UE) and PDU session (per UE). They share the same numbers:
+There are three cards: N2 setup (per gNB), Registration (per UE) and PDU session (per UE). After Stop, two cleanup cards appear above them: UE deregistration (per UE) and gNB SCTP close (per gNB). They all share the same numbers:
 
 | Number | Meaning |
 |---|---|
@@ -108,6 +115,10 @@ What each stage times:
 | N2 setup | SCTP connect | NG Setup Response |
 | Registration | Initial UE Message (Registration Request) sent | Registration Complete sent |
 | PDU session | PDU Session Establishment Request sent | Accept received (the gNB has already answered PDU Session Resource Setup) |
+| UE deregistration | Deregistration Request sent | Deregistration Accept received |
+| gNB SCTP close | close started | close returned (up to about 1 s: the socket lingers to deliver what is queued) |
+
+In the cleanup cards, *Not started* counts UEs that never registered, UEs and gNBs whose association was lost, and deregistrations skipped by a second Stop.
 
 If **every** PDU session of a run times out while registration succeeds, look at the core first. Check the SMF log for charging (CHF) timeouts; the usual cause is CHF billing (CGF) being on (see Known limitations).
 
@@ -122,7 +133,7 @@ The **Data plane** card shows, per direction:
 
 Uplink and downlink each have their own panel and chart. The chart always shows the whole run from 0 (time as h:mm:ss) and squeezes as the run goes on; after the first 10 minutes each point is the average of 2, then 4, 8 ... seconds, so the chart stays light however long the run is. the dashed orange line is sent (Tx), the solid green line is received (Rx). When they overlap, nothing is being lost. Hover over a chart to read both rates at that second. The gNB table adds the bytes received per gNB in each direction, with their loss.
 
-The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). It also lists the first 200 failed UEs with their SUPI, gNB, stage, cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
+The **UEs** card counts every UE by state: established, establishing, registered, registering, pending, failed, gNB down, and cancelled (stopped before it finished). After Stop it also counts deregistering and deregistered UEs. It also lists the first 200 failed UEs with their SUPI, gNB, stage (registration, PDU or deregistration), cause and attempt count. The gNB table shows how many of each gNB's UEs registered and how many got a PDU session.
 
 gNB states: `pending` → `connecting` → `up` or `failed`.
 - `lost` means the association was up and the AMF side dropped it, for example an AMF restart.
@@ -132,12 +143,12 @@ gNB states: `pending` → `connecting` → `up` or `failed`.
 
 - If fru-tester is killed with SIGKILL, the gNB IPs it added stay on the interface. Later runs skip them as host IPs; remove them with `ip addr del`.
 - Messages the AMF sends after NG Setup are read and ignored.
-- There is no run history yet.
-- Stop does not release PDU sessions or deregister UEs (that comes in a later phase), so the core keeps their sessions until the same SUPIs register again. free5GC then tears them down, which works.
+- fru-tester keeps its last 10 finished runs for fru-lab to collect; if fru-lab is down while more than 10 runs finish, the older ones never reach the History page.
 - free5GC's CHF stops answering charging requests after the first few UEs when its CDR delivery to the webconsole billing FTP (`chfcfg.yaml` → `cgf.enable`) is on. The SMF then waits 10 s per PDU session and the sessions time out (the SMF logs `Send Charging Data Request ... Failed`). fru-lab's free5GC templates therefore ship with `cgf.enable: false`. A core deployed by an older fru-lab, or any other core with CGF on, needs the same change and a CHF restart.
 - The SQN in the network's AUTN is accepted without a freshness check (as in free-ran-ue), so re-running the same UEs never needs a resynchronisation.
 - A UE that reached `established` on a gNB later marked `lost` still counts as established.
 - Traffic starts a fixed 500 ms after each PDU session. A core that takes longer to install the downlink tunnel in the UPF loses the first downlink packets of each UE. Against fru-lab's free5GC, 4 UEs at 1 Mbps ran with 0 loss in both directions.
 - The sender uses plain UDP sockets, and one socket sends about 80–90 k packets/s (~1 Gbps at 1400-byte packets). Uplink has one socket per gNB and downlink four, so on the test host one gNB's uplink and one UE's downlink each top out near 1 Gbps. 4 UEs reached 3 Gbps downlink with no loss.
 - High rates need the SMF's `urrThreshold` raised. At a few hundred bytes, the UPF sends a usage report every packet or two, PFCP starves, and downlink stops reaching the gNB. fru-lab's templates set it to 10 GB. A core deployed by an older fru-lab, or any other core, needs the same change.
-- Back-to-back runs with the same UEs can leave free5GC with duplicate PDU sessions (`Duplicated PDU session ID` in the AMF log), so their PDU sessions time out. Restart the core, or wait for the next phase, which releases sessions and deregisters UEs on Stop.
+- A run whose cleanup was skipped (second Stop, or fru-tester killed) leaves its UEs registered in the core. Running the same UEs again can then hit `Duplicated PDU session ID` in free5GC and time out; restart the core in that case.
+- When you restart free5GC's containers, restart the NRF first and the SMF after the UPF; otherwise the SMF loses its PFCP association and every PDU session times out.
