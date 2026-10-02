@@ -870,6 +870,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/tester/bench:
+    get:
+      summary: Latest data plane bench
+      description: Forwarded to fru-tester. State is `idle` before the first bench.
+      operationId: testerBenchGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterBenchResult'
+    post:
+      summary: Start a data plane bench
+      description: Measures how fast this host's fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+      operationId: testerBenchStart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterBenchSettings'
+      responses:
+        '202':
+          description: Bench started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterBenchResult'
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: A bench or a run is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/history:
     get:
       summary: Finished runs, newest first
@@ -1788,6 +1833,63 @@ components:
           format: int64
         dlLossRate:
           type: number
+    TesterBenchSettings:
+      type: object
+      required: [packetSize, stepSeconds]
+      properties:
+        packetSize:
+          type: integer
+          description: Inner IP packet bytes, 64..1400.
+          example: 1400
+        stepSeconds:
+          type: integer
+          description: Measuring time per sender count, 1..30.
+          example: 3
+    TesterBenchStep:
+      type: object
+      required: [senders, pps, bps, sendErrors]
+      properties:
+        senders:
+          type: integer
+        pps:
+          type: number
+        bps:
+          type: number
+          description: Inner IP bits per second.
+        sendErrors:
+          type: integer
+          format: int64
+    TesterBenchResult:
+      type: object
+      required: [state, error, cpus, kernel, settings, plannedSenders, steps]
+      properties:
+        state:
+          type: string
+          enum: [idle, running, done, failed]
+        error:
+          type: string
+        cpus:
+          type: integer
+        kernel:
+          type: string
+        settings:
+          $ref: '#/components/schemas/TesterBenchSettings'
+        plannedSenders:
+          type: array
+          items:
+            type: integer
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterBenchStep'
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
     TesterUeFailure:
       type: object
       required: [supi, gnb, stage, cause, attempts]

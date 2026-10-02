@@ -109,6 +109,46 @@ export interface ServiceStatus {
     'name': string;
     'status': string;
 }
+export interface TesterBenchResult {
+    'state': TesterBenchResultStateEnum;
+    'error': string;
+    'cpus': number;
+    'kernel': string;
+    'settings': TesterBenchSettings;
+    'plannedSenders': Array<number>;
+    'steps': Array<TesterBenchStep>;
+    'startedAt'?: string | null;
+    'finishedAt'?: string | null;
+}
+
+export const TesterBenchResultStateEnum = {
+    Idle: 'idle',
+    Running: 'running',
+    Done: 'done',
+    Failed: 'failed',
+} as const;
+
+export type TesterBenchResultStateEnum = typeof TesterBenchResultStateEnum[keyof typeof TesterBenchResultStateEnum];
+
+export interface TesterBenchSettings {
+    /**
+     * Inner IP packet bytes, 64..1400.
+     */
+    'packetSize': number;
+    /**
+     * Measuring time per sender count, 1..30.
+     */
+    'stepSeconds': number;
+}
+export interface TesterBenchStep {
+    'senders': number;
+    'pps': number;
+    /**
+     * Inner IP bits per second.
+     */
+    'bps': number;
+    'sendErrors': number;
+}
 export interface TesterCauseCount {
     'cause': string;
     'count': number;
@@ -1323,6 +1363,79 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Forwarded to fru-tester. State is `idle` before the first bench.
+         * @summary Latest data plane bench
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerBenchGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/tester/bench`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+         * @summary Start a data plane bench
+         * @param {TesterBenchSettings} testerBenchSettings 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerBenchStart: async (testerBenchSettings: TesterBenchSettings, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'testerBenchSettings' is not null or undefined
+            assertParamExists('testerBenchStart', 'testerBenchSettings', testerBenchSettings)
+            const localVarPath = `/api/tester/bench`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerBenchSettings, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON export)
          * @param {string} runId 
@@ -1940,6 +2053,31 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Forwarded to fru-tester. State is `idle` before the first bench.
+         * @summary Latest data plane bench
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerBenchGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterBenchResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerBenchGet(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerBenchGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+         * @summary Start a data plane bench
+         * @param {TesterBenchSettings} testerBenchSettings 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerBenchStart(testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterBenchResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerBenchStart(testerBenchSettings, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerBenchStart']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON export)
          * @param {string} runId 
@@ -2275,6 +2413,25 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.logout(options).then((request) => request(axios, basePath));
         },
         /**
+         * Forwarded to fru-tester. State is `idle` before the first bench.
+         * @summary Latest data plane bench
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerBenchGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterBenchResult> {
+            return localVarFp.testerBenchGet(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+         * @summary Start a data plane bench
+         * @param {TesterBenchSettings} testerBenchSettings 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerBenchStart(testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig): AxiosPromise<TesterBenchResult> {
+            return localVarFp.testerBenchStart(testerBenchSettings, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON export)
          * @param {string} runId 
@@ -2600,6 +2757,27 @@ export class DefaultApi extends BaseAPI {
      */
     public logout(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).logout(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to fru-tester. State is `idle` before the first bench.
+     * @summary Latest data plane bench
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerBenchGet(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerBenchGet(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+     * @summary Start a data plane bench
+     * @param {TesterBenchSettings} testerBenchSettings 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerBenchStart(testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerBenchStart(testerBenchSettings, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
