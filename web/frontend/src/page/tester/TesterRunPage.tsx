@@ -341,6 +341,12 @@ export default function TesterRunPage() {
             </div>
 
             <DataplaneCard dp={snapshot.dataplane} />
+            {(snapshot.vethGro.links.length > 0 || snapshot.vethGro.error) && (
+              <p className={styles.hint}>
+                {snapshot.vethGro.links.length > 0 && <>GRO for the UPF&apos;s veth: {snapshot.vethGro.links.join('; ')}. </>}
+                {snapshot.vethGro.error && <>Could not turn on veth GRO: {snapshot.vethGro.error}</>}
+              </p>
+            )}
 
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>UEs</h3>

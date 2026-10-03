@@ -318,7 +318,9 @@ type run struct {
 	failures   []UeFailure
 	added      []addedAddr  // in the order they were added
 	routes     []addedRoute // routes this run added
-	dp         Dataplane    // nil until the IPs are configured
+	tunings    []netcfg.VethTuning
+	vethGro    VethGroStatus
+	dp         Dataplane // nil until the IPs are configured
 }
 
 type addedRoute struct {
@@ -440,6 +442,10 @@ func (r *run) snapshot() Snapshot {
 		// Run page reads failedUes.length; null blanked it)
 		FailedUes: append([]UeFailure{}, r.failures...),
 		Dataplane: emptyDataplane(),
+		VethGro:   r.vethGro,
+	}
+	if snap.VethGro.Links == nil {
+		snap.VethGro.Links = []string{}
 	}
 	if r.dp != nil {
 		snap.Dataplane = r.dp.Snapshot()
@@ -575,9 +581,33 @@ func (r *run) configureIPs() error {
 		r.routes = append(r.routes, addedRoute{iface: nw.N6.Interface, dst: pool, gw: gw})
 		r.mu.Unlock()
 	}
+	if r.profile.Traffic.VethGro {
+		r.tuneVethGRO()
+	}
 	return nil
 }
 
+// tuneVethGRO turns on GRO for the UPF's veth on the N3 and N6
+// interfaces. It never fails the run: without it the tester still reads
+// every packet, one per message.
+func (r *run) tuneVethGRO() {
+	nw := r.profile.Network
+	upf := []netip.Addr{netip.MustParseAddr(nw.N3.UpfIP), netip.MustParseAddr(nw.N6.UpfIP)}
+	status := VethGroStatus{Links: []string{}}
+	for _, iface := range slices.Compact([]string{nw.N3.Interface, nw.N6.Interface}) {
+		t, err := r.deps.Addrs.TuneVethGRO(iface, upf)
+		if err != nil {
+			status.Error = err.Error()
+		}
+		r.mu.Lock()
+		r.tunings = append(r.tunings, t)
+		r.mu.Unlock()
+		status.Links = append(status.Links, t.Links...)
+	}
+	r.mu.Lock()
+	r.vethGro = status
+	r.mu.Unlock()
+}
 func (r *run) addAddr(iface string, prefix netip.Prefix) error {
 	if err := r.deps.Addrs.Add(iface, prefix); err != nil {
 		return err
@@ -637,10 +667,15 @@ func emptyDataplane() dataplane.Snapshot {
 // first would make the kernel drop the secondaries with it.
 func (r *run) removeIPs() {
 	r.mu.Lock()
-	added, routes := r.added, r.routes
-	r.added, r.routes = nil, nil
+	added, routes, tunings := r.added, r.routes, r.tunings
+	r.added, r.routes, r.tunings = nil, nil, nil
 	r.mu.Unlock()
 	var errs []error
+	for _, t := range tunings {
+		if err := t.Undo(); err != nil {
+			errs = append(errs, fmt.Errorf("restore veth offloads: %w", err))
+		}
+	}
 	for _, rt := range routes {
 		if err := r.deps.Addrs.RemoveRoute(rt.iface, rt.dst, rt.gw); err != nil {
 			errs = append(errs, err)

@@ -391,6 +391,7 @@ export interface TesterRunSnapshot {
      */
     'failedUes': Array<TesterUeFailure>;
     'dataplane': TesterDataplaneSnapshot;
+    'vethGro': TesterRunSnapshotVethGro;
 }
 
 export const TesterRunSnapshotStateEnum = {
@@ -412,6 +413,13 @@ export const TesterRunSnapshotStopReasonEnum = {
 
 export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReasonEnum[keyof typeof TesterRunSnapshotStopReasonEnum];
 
+/**
+ * What traffic.vethGro changed for the run. Empty links means it was off or the UPF is not on a veth here; error is why it could not be done (the run goes on).
+ */
+export interface TesterRunSnapshotVethGro {
+    'links': Array<string>;
+    'error': string;
+}
 export interface TesterStageRate {
     'timeoutMs': number;
     'retries': number;
@@ -482,6 +490,10 @@ export interface TesterTraffic {
      * Sockets that receive uplink at the sink, one reader each (0..1024). 0 = one per CPU.
      */
     'sinkSockets': number;
+    /**
+     * When the UPF is a container on a veth here, turn GRO on for its host-side port and TSO off inside the container for the run, so the tester reads its packets in batches. Restored afterwards.
+     */
+    'vethGro': boolean;
 }
 /**
  * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.

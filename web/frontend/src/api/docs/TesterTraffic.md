@@ -14,6 +14,7 @@ Name | Type | Description | Notes
 **dlBatchMs** | **number** | Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 &#x3D; one packet per UE in turn. Uplink needs no grouping. | [default to undefined]
 **senders** | **number** | Sender threads for downlink, and as many for uplink spread over the gNBs, each with its own socket (0..1024). 0 &#x3D; one per CPU. | [default to undefined]
 **sinkSockets** | **number** | Sockets that receive uplink at the sink, one reader each (0..1024). 0 &#x3D; one per CPU. | [default to undefined]
+**vethGro** | **boolean** | When the UPF is a container on a veth here, turn GRO on for its host-side port and TSO off inside the container for the run, so the tester reads its packets in batches. Restored afterwards. | [default to undefined]
 
 ## Example
 
@@ -29,6 +30,7 @@ const instance: TesterTraffic = {
     dlBatchMs,
     senders,
     sinkSockets,
+    vethGro,
 };
 ```
 

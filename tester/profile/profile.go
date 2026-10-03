@@ -43,6 +43,10 @@ type Traffic struct {
 	// many sockets receive uplink. 0 = one per CPU.
 	Senders     int `json:"senders"`
 	SinkSockets int `json:"sinkSockets"`
+	// VethGro, when the UPF reaches this host over a veth (a container on
+	// a bridge), turns GRO on for its port for the run so the tester reads
+	// its packets in batches (netcfg.TuneVethGRO).
+	VethGro bool `json:"vethGro"`
 }
 
 type Scale struct {

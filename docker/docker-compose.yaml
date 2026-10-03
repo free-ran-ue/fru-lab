@@ -34,7 +34,13 @@ services:
     # teardown closes every SCTP association (up to 1 s each, in parallel)
     # and removes the gNB IPs; give it time before docker sends SIGKILL
     stop_grace_period: 60s
+    # traffic.vethGro turns GRO on for the UPF container's veth and TSO off
+    # inside it: finding that container's network namespace needs the host's
+    # processes (pid: host), and entering it needs SYS_ADMIN. Without them
+    # the run goes on and the Run page says it could not.
+    pid: host
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
     volumes:
       - ./tester.yaml:/frutester/tester.yaml

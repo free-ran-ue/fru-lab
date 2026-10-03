@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -244,6 +245,41 @@ func TestGnbsHandOutSeveralN3IPsInTurn(t *testing.T) {
 	}
 	require.Len(t, used, 6, "both IPs of every gNB are used")
 	stopAndWait(t, c)
+}
+
+// traffic.vethGro tunes the UPF's veth on N3 and N6 for the run (once
+// when they are the same interface) and restores it during cleanup; it is
+// shown on the Run page.
+func TestVethGroIsTunedForTheRunAndRestored(t *testing.T) {
+	c, addrs, _ := newE2EControllerWithDataplane(amfDialer{amf: newFakeAMF(nil)}, nil)
+	p := e2eProfile()
+	p.Traffic.VethGro = true
+	_, err := c.Start(p)
+	require.NoError(t, err)
+	snap := waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	require.Equal(t, VethGroStatus{Links: []string{"veth-upf (GRO on) and eth0 in its container (TSO off)"}}, snap.VethGro)
+	stopAndWait(t, c)
+	_, log := addrs.snapshot()
+	var gro []string
+	for _, l := range log {
+		if strings.Contains(l, "gro ") {
+			gro = append(gro, l)
+		}
+	}
+	require.Equal(t, []string{"gro eth-n3", "gro eth-n6", "ungro eth-n3", "ungro eth-n6"}, gro)
+}
+
+func TestVethGroIsOffUnlessAsked(t *testing.T) {
+	c, addrs, _ := newE2EControllerWithDataplane(amfDialer{amf: newFakeAMF(nil)}, nil)
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	snap := waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+	require.Equal(t, VethGroStatus{Links: []string{}}, snap.VethGro)
+	stopAndWait(t, c)
+	_, log := addrs.snapshot()
+	for _, l := range log {
+		require.NotContains(t, l, "gro ")
+	}
 }
 
 func TestDataplaneStartFailureFailsTheRunAndRollsBack(t *testing.T) {

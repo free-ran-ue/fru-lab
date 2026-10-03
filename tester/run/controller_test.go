@@ -19,6 +19,7 @@ import (
 	"tester/dataplane"
 	"tester/gnb"
 	"tester/metrics"
+	"tester/netcfg"
 	"tester/profile"
 )
 
@@ -35,6 +36,24 @@ type fakeAddrs struct {
 }
 
 func (f *fakeAddrs) HostIPv4s() ([]netip.Addr, error) { return f.host, nil }
+
+// TuneVethGRO pretends the UPF is on a veth of eth-n3, and logs it and
+// its undo.
+func (f *fakeAddrs) TuneVethGRO(iface string, ips []netip.Addr) (netcfg.VethTuning, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.log = append(f.log, "gro "+iface)
+	t := netcfg.VethTuning{Undo: func() error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.log = append(f.log, "ungro "+iface)
+		return nil
+	}}
+	if iface == "eth-n3" {
+		t.Links = []string{"veth-upf (GRO on) and eth0 in its container (TSO off)"}
+	}
+	return t, nil
+}
 
 // MTU is 1500, or 9000 for an interface named jumbo.
 func (f *fakeAddrs) MTU(iface string) (int, error) {

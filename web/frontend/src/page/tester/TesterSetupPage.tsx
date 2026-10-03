@@ -32,7 +32,7 @@ function lastSupi(plan: TesterPlan): string {
 
 // Sets a value at a dotted path ("network.n2.cidr") on a deep copy, so
 // one onChange handler serves every field.
-function setPath(profile: TesterProfile, path: string, value: string | number): TesterProfile {
+function setPath(profile: TesterProfile, path: string, value: string | number | boolean): TesterProfile {
   const next = structuredClone(profile) as unknown as Record<string, unknown>
   const keys = path.split('.')
   let node = next
@@ -52,7 +52,7 @@ interface FieldProps {
   errors: TesterFieldError[]
   numeric?: boolean
   options?: string[] // render a select instead of an input
-  onChange: (path: string, value: string | number) => void
+  onChange: (path: string, value: string | number | boolean) => void
 }
 
 function Field({ label, path, profile, errors, numeric = false, options, onChange }: FieldProps) {
@@ -131,7 +131,7 @@ export default function TesterSetupPage() {
     return () => window.clearTimeout(timer)
   }, [profile, isLoading, addError])
 
-  function handleChange(path: string, value: string | number) {
+  function handleChange(path: string, value: string | number | boolean) {
     setProfile((prev) => setPath(prev, path, value))
   }
 
@@ -286,6 +286,14 @@ export default function TesterSetupPage() {
                 <Field label="Downlink batch (ms per UE, 0 = off)" path="traffic.dlBatchMs" numeric {...fieldProps} />
                 <Field label="Senders (0 = one per CPU)" path="traffic.senders" numeric {...fieldProps} />
                 <Field label="Uplink sink sockets (0 = one per CPU)" path="traffic.sinkSockets" numeric {...fieldProps} />
+                <div className={styles.field}>
+                  <label htmlFor="traffic.vethGro">GRO on the UPF&apos;s veth</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'normal' }}>
+                    <input id="traffic.vethGro" type="checkbox" checked={profile.traffic.vethGro}
+                      onChange={(e) => handleChange('traffic.vethGro', e.target.checked)} />
+                    On for the run
+                  </label>
+                </div>
               </div>
               <p className={styles.hint}>
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
@@ -299,6 +307,9 @@ export default function TesterSetupPage() {
                 {' '}Senders and sink sockets default to one per CPU. On a big host far fewer are enough for the tester (the
                 Bench page shows how much one sender sends), but when the UPF runs on the same host its packet work runs on
                 the senders&apos; CPUs, so fewer senders also give it fewer CPUs.
+                {' '}When the UPF is a container on a bridge here, <b>GRO on the UPF&apos;s veth</b> turns GRO on for its port
+                and TSO off inside the container (TCP only, GTP-U is unaffected) for the run, so the tester reads the
+                UPF&apos;s packets dozens at a time; both are put back afterwards.
               </p>
             </section>
 
