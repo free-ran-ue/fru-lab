@@ -2,6 +2,7 @@ package dataplane
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/netip"
 	"sync"
@@ -326,7 +327,9 @@ func TestUplinkIsReadOnSeveralSinkSockets(t *testing.T) {
 // Batched sends (sendmmsg) must still carry every packet, each with its
 // own sequence number, at a rate well above the 1 ms tick.
 func TestBatchedSendingLosesNothingAtAHighRate(t *testing.T) {
-	e, _ := startEngineWith(t, 40, 0, func(c *Config) { c.Senders = 2; c.Receivers = 2 }) // 4 UEs x 40 Mbps each way
+	// GRO off: under the race detector a reader's 64 KB GRO buffers make it
+	// ten times slower and the sink overflows (without -race it is as fast)
+	e, _ := startEngineWith(t, 40, 0, func(c *Config) { c.Senders = 2; c.Receivers = 2; c.NoGRO = true }) // 4 UEs x 40 Mbps each way
 	time.Sleep(time.Second)
 	e.Stop(200 * time.Millisecond)
 	s := e.Snapshot()
@@ -340,13 +343,13 @@ func TestBatchedSendingLosesNothingAtAHighRate(t *testing.T) {
 
 // gsoBatcher is an uplink batcher for gNB 127.0.0.11 with 3 UEs, sending
 // to a plain socket that stands in for the UPF.
-func gsoBatcher(t *testing.T, noOffload bool) (*batcher, []*flow, *net.UDPConn) {
+func gsoBatcher(t *testing.T, noGSO bool) (*batcher, []*flow, *net.UDPConn) {
 	t.Helper()
 	upf, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = upf.Close() })
 	e := New(Config{RunID: 9, UeCount: 3, GnbN3IPs: []netip.Addr{netip.MustParseAddr("127.0.0.11")},
-		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9200, PacketSize: 500, NoOffload: noOffload})
+		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9200, PacketSize: 500, NoGSO: noGSO})
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.11")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
@@ -401,7 +404,7 @@ func TestUplinkPacketsShareOneGSOMessage(t *testing.T) {
 	require.Equal(t, uint64(30), b.stats.packets.Load())
 }
 
-func TestNoOffloadSendsOnePacketPerMessage(t *testing.T) {
+func TestNoGSOSendsOnePacketPerMessage(t *testing.T) {
 	b, flows, upf := gsoBatcher(t, true)
 	require.Equal(t, 1, b.gso)
 	for range 5 {
@@ -454,4 +457,52 @@ func TestDownlinkBatchSendsEachUEARunOfPackets(t *testing.T) {
 	require.Greater(t, runs[10], total*8/10, "runs of 10 packets per UE: %v", runs)
 	s := e.Snapshot()
 	require.Equal(t, s.Dl.TxPackets, s.Dl.RxPackets)
+}
+
+// sendGSO sends n UL-sink payloads of seg bytes for UE 0 to the sink as
+// one UDP GSO message, which loopback delivers in one piece to a socket
+// with UDP_GRO.
+func sendGSO(t *testing.T, to netip.AddrPort, runID uint32, n, seg int) {
+	t.Helper()
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100")})
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+	require.NoError(t, setGSO(c, seg))
+	buf := make([]byte, n*seg)
+	for i := range n {
+		putHeader(buf[i*seg:], header{runID: runID, ue: 0, seq: uint32(i), txNanos: time.Now().UnixNano()})
+	}
+	_, err = c.WriteToUDPAddrPort(buf, to)
+	require.NoError(t, err)
+}
+
+// With UDP GRO a reader gets many packets in one message, with their
+// length in a control message, and splits them back into packets.
+func TestCoalescedUplinkIsSplitIntoPackets(t *testing.T) {
+	for _, noGRO := range []bool{false, true} {
+		t.Run(fmt.Sprintf("noGRO=%v", noGRO), func(t *testing.T) {
+			e, _ := startEngineWith(t, 0, 0, func(c *Config) { c.Receivers = 1; c.NoGRO = noGRO })
+			defer e.Stop(0)
+			sendGSO(t, netip.AddrPortFrom(e.cfg.SinkIP, e.cfg.Port), 42, 20, 472)
+			require.Eventually(t, func() bool { return e.Snapshot().Ul.RxPackets == 20 }, 2*time.Second, 10*time.Millisecond)
+			s := e.Snapshot().Ul
+			require.Equal(t, uint64(20*500), s.RxBytes)
+			require.Zero(t, s.OutOfOrder)
+		})
+	}
+}
+
+func TestGROSocketGetsOneMessageWithTheSegmentLength(t *testing.T) {
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+	require.NoError(t, setGRO(c), "this kernel supports UDP GRO")
+	sendGSO(t, c.LocalAddr().(*net.UDPAddr).AddrPort(), 1, 5, 300)
+	buf, oob := make([]byte, groBufLen), make([]byte, unix.CmsgSpace(4))
+	require.NoError(t, c.SetReadDeadline(time.Now().Add(2*time.Second)))
+	n, oobn, _, _, err := c.ReadMsgUDP(buf, oob)
+	require.NoError(t, err)
+	require.Equal(t, 5*300, n)
+	require.Equal(t, 300, groSegment(oob[:oobn]))
+	require.Zero(t, groSegment(nil))
 }

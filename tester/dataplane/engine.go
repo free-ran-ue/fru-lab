@@ -2,6 +2,7 @@ package dataplane
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -48,10 +49,10 @@ type Config struct {
 	// goes to each UE's own IP). 0 sends every UE one packet in turn.
 	// Uplink needs no grouping: all of a gNB's uplink goes to the UPF.
 	DlBatch time.Duration
-	// NoOffload turns off UDP GSO, as on a kernel without it (before
-	// 4.18); the Bench uses it to show what it adds.
-	NoOffload bool
-	Now       func() time.Time
+	// NoGSO and NoGRO turn off UDP GSO and GRO, as on a kernel without
+	// them (before 4.18 and 5.0); the Bench uses NoGSO to show what GSO adds.
+	NoGSO, NoGRO bool
+	Now          func() time.Time
 }
 
 // rcvBuf is the receive buffer asked for on every socket: at ~1 Gbps the
@@ -76,6 +77,13 @@ const (
 	maxReceivers   = 16
 	readBufLen     = 2048 // largest packet we read: 1400 inner + GTP-U + extensions
 )
+
+// With UDP GRO the kernel hands a reader up to 64 KB of one flow's
+// back-to-back packets in one message and says how long each is, so one
+// recvmmsg can bring in hundreds of packets. It coalesces what arrives
+// through GRO (a NIC, or veth with GRO on) and keeps a local GSO send in
+// one piece; anything else is still read one packet per message.
+const groBufLen = 1 << 16
 
 // historyPoints bounds Snapshot.Series, which covers the whole run.
 const historyPoints = 600
@@ -387,7 +395,7 @@ func (e *Engine) newBatcher(conn *net.UDPConn, dl bool, gnb int) *batcher {
 		b.seg = e.cfg.PacketSize - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
 	}
 	slots := batchSize
-	if !e.cfg.NoOffload && setGSO(conn, b.seg) == nil {
+	if !e.cfg.NoGSO && setGSO(conn, b.seg) == nil {
 		b.gso = min(gsoMaxSegments, maxDatagram/b.seg)
 		slots = max(slots, gsoArena/b.seg)
 		e.gsoOn.Add(1)
@@ -518,6 +526,7 @@ type reader struct {
 	e     *Engine
 	pc    *ipv4.PacketConn
 	msgs  []ipv4.Message
+	gro   bool // messages may hold several packets (UDP_GRO)
 	stats *workerStats
 	acc   accumulator
 	lat   []time.Duration // the batch's one-way delays
@@ -528,10 +537,50 @@ func (e *Engine) newReader(conn *net.UDPConn, d *dirStats) *reader {
 	r := &reader{e: e, pc: ipv4.NewPacketConn(conn), msgs: make([]ipv4.Message, batchSize),
 		stats: d.addReader(len(e.cfg.GnbN3IPs))}
 	r.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
+	bufLen := readBufLen
+	if !e.cfg.NoGRO && setGRO(conn) == nil {
+		r.gro, bufLen = true, groBufLen // pages a reader never fills are never touched
+	}
 	for i := range r.msgs {
-		r.msgs[i].Buffers = [][]byte{make([]byte, readBufLen)}
+		r.msgs[i].Buffers = [][]byte{make([]byte, bufLen)}
+		if r.gro {
+			r.msgs[i].OOB = make([]byte, unix.CmsgSpace(4))
+		}
 	}
 	return r
+}
+
+// setGRO asks the kernel to coalesce packets for conn (UDP_GRO).
+func setGRO(conn *net.UDPConn) error {
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	var serr error
+	if err := raw.Control(func(fd uintptr) {
+		serr = unix.SetsockoptInt(int(fd), unix.SOL_UDP, unix.UDP_GRO, 1)
+	}); err != nil {
+		return err
+	}
+	return serr
+}
+
+// groSegment is the packet length of a coalesced message, from its
+// UDP_GRO control message; 0 if the message is one packet.
+func groSegment(oob []byte) int {
+	if len(oob) == 0 {
+		return 0
+	}
+	msgs, err := unix.ParseSocketControlMessage(oob)
+	if err != nil {
+		return 0
+	}
+	for _, m := range msgs {
+		if m.Header.Level == unix.SOL_UDP && m.Header.Type == unix.UDP_GRO && len(m.Data) >= 4 {
+			return int(int32(binary.NativeEndian.Uint32(m.Data)))
+		}
+	}
+	return 0
 }
 
 // loop hands each packet to handle until the socket is closed.
@@ -547,7 +596,20 @@ func (r *reader) loop(handle func([]byte)) {
 		}
 		r.now = r.e.cfg.Now().UnixNano()
 		for _, m := range r.msgs[:n] {
-			handle(m.Buffers[0][:m.N])
+			b := m.Buffers[0][:m.N]
+			seg := 0
+			if r.gro {
+				seg = groSegment(m.OOB[:m.NN])
+			}
+			if seg <= 0 {
+				handle(b)
+				continue
+			}
+			for len(b) > 0 { // the last packet may be shorter
+				k := min(seg, len(b))
+				handle(b[:k])
+				b = b[k:]
+			}
 		}
 		r.stats.latency.RecordAll(r.lat)
 		r.lat = r.lat[:0]
