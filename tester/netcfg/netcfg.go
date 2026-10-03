@@ -31,6 +31,9 @@ type AddrManager interface {
 	RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) error
 	// MTU is iface's MTU.
 	MTU(iface string) (int, error)
+	// TuneVethGRO turns on GRO for the veth ports of iface whose container
+	// holds one of ips (see Netlink.TuneVethGRO); Undo restores them.
+	TuneVethGRO(iface string, ips []netip.Addr) (VethTuning, error)
 }
 
 // Netlink is the real AddrManager; it needs CAP_NET_ADMIN.

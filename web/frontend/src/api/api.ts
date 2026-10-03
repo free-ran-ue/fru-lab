@@ -184,6 +184,10 @@ export interface TesterGnbSpec {
     'gnbId': string;
     'n2Ip': string;
     'n3Ip': string;
+    /**
+     * All of the gNB\'s N3 IPs, n3Ip first.
+     */
+    'n3Ips': Array<string>;
     'ueCount': number;
     /**
      * 1-based index of the first UE on this gNB; 0 when it has none.
@@ -202,6 +206,10 @@ export interface TesterGnbStatus {
     'gnbId': string;
     'n2Ip': string;
     'n3Ip': string;
+    /**
+     * All of the gNB\'s N3 IPs, n3Ip first.
+     */
+    'n3Ips': Array<string>;
     'ueCount': number;
     /**
      * 1-based index of the first UE on this gNB; 0 when it has none.
@@ -332,6 +340,10 @@ export interface TesterProfileNetworkN3 {
     'startIp': string;
     'upfIp': string;
     'upfPort': number;
+    /**
+     * N3 IPs per gNB (1..64; 0 counts as 1). A gNB hands them out to its UEs\' PDU sessions in turn as downlink tunnel addresses, so its downlink is several connections that NICs, the kernel and the tester can spread over CPUs.
+     */
+    'ipsPerGnb': number;
 }
 /**
  * Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
@@ -379,6 +391,7 @@ export interface TesterRunSnapshot {
      */
     'failedUes': Array<TesterUeFailure>;
     'dataplane': TesterDataplaneSnapshot;
+    'vethGro': TesterRunSnapshotVethGro;
 }
 
 export const TesterRunSnapshotStateEnum = {
@@ -400,6 +413,13 @@ export const TesterRunSnapshotStopReasonEnum = {
 
 export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReasonEnum[keyof typeof TesterRunSnapshotStopReasonEnum];
 
+/**
+ * What traffic.vethGro changed for the run. Empty links means it was off or the UPF is not on a veth here; error is why it could not be done (the run goes on).
+ */
+export interface TesterRunSnapshotVethGro {
+    'links': Array<string>;
+    'error': string;
+}
 export interface TesterStageRate {
     'timeoutMs': number;
     'retries': number;
@@ -462,6 +482,18 @@ export interface TesterTraffic {
      * Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
      */
     'dlBatchMs': number;
+    /**
+     * Sender threads for downlink, and as many for uplink spread over the gNBs, each with its own socket (0..1024). 0 = one per CPU.
+     */
+    'senders': number;
+    /**
+     * Sockets that receive uplink at the sink, one reader each (0..1024). 0 = one per CPU.
+     */
+    'sinkSockets': number;
+    /**
+     * When the UPF is a container on a veth here, turn GRO on for its host-side port and TSO off inside the container for the run, so the tester reads its packets in batches. Restored afterwards.
+     */
+    'vethGro': boolean;
 }
 /**
  * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.

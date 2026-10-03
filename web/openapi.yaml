@@ -1303,7 +1303,7 @@ components:
                   example: 38412
             n3:
               type: object
-              required: [interface, cidr, startIp, upfIp, upfPort]
+              required: [interface, cidr, startIp, upfIp, upfPort, ipsPerGnb]
               properties:
                 interface:
                   type: string
@@ -1320,6 +1320,10 @@ components:
                 upfPort:
                   type: integer
                   example: 2152
+                ipsPerGnb:
+                  type: integer
+                  description: N3 IPs per gNB (1..64; 0 counts as 1). A gNB hands them out to its UEs' PDU sessions in turn as downlink tunnel addresses, so its downlink is several connections that NICs, the kernel and the tester can spread over CPUs.
+                  example: 1
             n6:
               type: object
               description: Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
@@ -1352,7 +1356,7 @@ components:
     TesterTraffic:
       type: object
       description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
-      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs]
+      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs, senders, sinkSockets, vethGro]
       properties:
         ulMbps:
           type: number
@@ -1378,6 +1382,18 @@ components:
           type: integer
           description: Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
           example: 1
+        senders:
+          type: integer
+          description: Sender threads for downlink, and as many for uplink spread over the gNBs, each with its own socket (0..1024). 0 = one per CPU.
+          example: 0
+        sinkSockets:
+          type: integer
+          description: Sockets that receive uplink at the sink, one reader each (0..1024). 0 = one per CPU.
+          example: 0
+        vethGro:
+          type: boolean
+          description: When the UPF is a container on a veth here, turn GRO on for its host-side port and TSO off inside the container for the run, so the tester reads its packets in batches. Restored afterwards.
+          example: true
     TesterUeTemplate:
       type: object
       description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
@@ -1452,7 +1468,7 @@ components:
           type: string
     TesterGnbSpec:
       type: object
-      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, ueFirst, ueLast, firstSupi, lastSupi]
+      required: [index, name, gnbId, n2Ip, n3Ip, n3Ips, ueCount, ueFirst, ueLast, firstSupi, lastSupi]
       properties:
         index:
           type: integer
@@ -1464,6 +1480,11 @@ components:
           type: string
         n3Ip:
           type: string
+        n3Ips:
+          type: array
+          description: All of the gNB's N3 IPs, n3Ip first.
+          items:
+            type: string
         ueCount:
           type: integer
         ueFirst:
@@ -1599,7 +1620,7 @@ components:
               type: integer
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane]
+      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane, vethGro]
       properties:
         runId:
           type: string
@@ -1645,6 +1666,17 @@ components:
             $ref: '#/components/schemas/TesterUeFailure'
         dataplane:
           $ref: '#/components/schemas/TesterDataplaneSnapshot'
+        vethGro:
+          type: object
+          description: What traffic.vethGro changed for the run. Empty links means it was off or the UPF is not on a veth here; error is why it could not be done (the run goes on).
+          required: [links, error]
+          properties:
+            links:
+              type: array
+              items:
+                type: string
+            error:
+              type: string
     TesterDataplaneSnapshot:
       type: object
       required: [activeUes, ul, dl, gnbs, series]

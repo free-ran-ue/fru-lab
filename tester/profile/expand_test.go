@@ -42,11 +42,11 @@ func TestExpandFillsGnbsInOrder(t *testing.T) {
 	require.Equal(t, 24, plan.N2Prefix)
 	require.Equal(t, []GnbSpec{
 		// .1 is the AMF, .3 is already on the host
-		{Index: 1, Name: "gNB-1", GnbID: "000314", N2IP: "10.0.1.2", N3IP: "10.0.2.2", UeCount: 4, UeFirst: 1, UeLast: 4,
+		{Index: 1, Name: "gNB-1", GnbID: "000314", N2IP: "10.0.1.2", N3IP: "10.0.2.2", N3IPs: []string{"10.0.2.2"}, UeCount: 4, UeFirst: 1, UeLast: 4,
 			FirstSupi: "imsi-208930000000001", LastSupi: "imsi-208930000000004"},
-		{Index: 2, Name: "gNB-2", GnbID: "000315", N2IP: "10.0.1.4", N3IP: "10.0.2.3", UeCount: 4, UeFirst: 5, UeLast: 8,
+		{Index: 2, Name: "gNB-2", GnbID: "000315", N2IP: "10.0.1.4", N3IP: "10.0.2.3", N3IPs: []string{"10.0.2.3"}, UeCount: 4, UeFirst: 5, UeLast: 8,
 			FirstSupi: "imsi-208930000000005", LastSupi: "imsi-208930000000008"},
-		{Index: 3, Name: "gNB-3", GnbID: "000316", N2IP: "10.0.1.5", N3IP: "10.0.2.4", UeCount: 2, UeFirst: 9, UeLast: 10,
+		{Index: 3, Name: "gNB-3", GnbID: "000316", N2IP: "10.0.1.5", N3IP: "10.0.2.4", N3IPs: []string{"10.0.2.4"}, UeCount: 2, UeFirst: 9, UeLast: 10,
 			FirstSupi: "imsi-208930000000009", LastSupi: "imsi-208930000000010"},
 	}, plan.Gnbs)
 	require.Len(t, plan.Ues, 10)
@@ -191,6 +191,24 @@ func TestExpandNeverAllocatesTheSinkOrUpfN6IP(t *testing.T) {
 	}
 }
 
+// With several N3 IPs per gNB, each gNB takes that many consecutive IPs;
+// the first is its main one.
+func TestExpandGivesEachGnbSeveralN3IPs(t *testing.T) {
+	p := sampleProfile()
+	p.Network.N3.IpsPerGnb = 3
+	plan, err := Expand(p, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"10.0.2.2", "10.0.2.3", "10.0.2.4"}, plan.Gnbs[0].N3IPs)
+	require.Equal(t, "10.0.2.2", plan.Gnbs[0].N3IP)
+	require.Equal(t, []string{"10.0.2.5", "10.0.2.6", "10.0.2.7"}, plan.Gnbs[1].N3IPs)
+
+	p.Network.N3.IpsPerGnb = 65
+	_, err = Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "network.n3.ipsPerGnb", Message: "must be between 1 and 64 (0 counts as 1)"}}, verr.Errors)
+}
+
 func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 	p := sampleProfile()
 	p.Traffic.MaxDurationMin = 10080 // 7 days is allowed
@@ -202,6 +220,7 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 		p.Rates.Deregistration.RatePerSec = 0
 		p.Traffic.MaxDurationMin = bad
 		p.Traffic.DlBatchMs = bad
+		p.Traffic.Senders, p.Traffic.SinkSockets = bad, bad
 		_, err := Expand(p, nil)
 		var verr *ValidationError
 		require.ErrorAs(t, err, &verr)
@@ -209,6 +228,8 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 			{Field: "rates.deregistration.ratePerSec", Message: "must be between 1 and 100000"},
 			{Field: "traffic.maxDurationMin", Message: "must be between 0 (no limit) and 10080 (7 days)"},
 			{Field: "traffic.dlBatchMs", Message: "must be between 0 (off) and 10"},
+			{Field: "traffic.senders", Message: "must be between 0 (one per CPU) and 1024"},
+			{Field: "traffic.sinkSockets", Message: "must be between 0 (one per CPU) and 1024"},
 		}, verr.Errors, "maxDurationMin %d", bad)
 	}
 }

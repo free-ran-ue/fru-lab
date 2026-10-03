@@ -28,7 +28,7 @@ func setup(t *testing.T, behavior func(string) fakecore.Behavior) (*gnb.Associat
 	id, err := gnb.NewIdentity(profile.GnbSpec{Name: "gNB-1", GnbID: "000314"},
 		profile.GnbTemplate{Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203"})
 	require.NoError(t, err)
-	assoc := gnb.NewAssociation(gnbEnd, id, netip.MustParseAddr("10.0.1.100"), &gnb.TeidAllocator{})
+	assoc := gnb.NewAssociation(gnbEnd, id, []netip.Addr{netip.MustParseAddr("10.0.1.100")}, &gnb.TeidAllocator{})
 	go func() { _ = assoc.Run() }()
 	t.Cleanup(func() { _ = gnbEnd.Close() })
 	return assoc, amf, amfEnd
@@ -171,7 +171,7 @@ func TestAssociationLostWhileWaiting(t *testing.T) {
 	id, err := gnb.NewIdentity(profile.GnbSpec{Name: "gNB-1", GnbID: "000314"},
 		profile.GnbTemplate{Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203"})
 	require.NoError(t, err)
-	assoc := gnb.NewAssociation(gnbEnd, id, netip.MustParseAddr("10.0.1.100"), &gnb.TeidAllocator{})
+	assoc := gnb.NewAssociation(gnbEnd, id, []netip.Addr{netip.MustParseAddr("10.0.1.100")}, &gnb.TeidAllocator{})
 	go func() { _ = assoc.Run() }()
 
 	start := time.Now()
@@ -186,7 +186,7 @@ func TestAssociationLostIsNotDroppedWithAFullBuffer(t *testing.T) {
 	id, err := gnb.NewIdentity(profile.GnbSpec{Name: "gNB-1", GnbID: "000314"},
 		profile.GnbTemplate{Mcc: "208", Mnc: "93", Tac: "000001", Sst: 1, Sd: "010203"})
 	require.NoError(t, err)
-	assoc := gnb.NewAssociation(gnbEnd, id, netip.MustParseAddr("10.0.1.100"), &gnb.TeidAllocator{})
+	assoc := gnb.NewAssociation(gnbEnd, id, []netip.Addr{netip.MustParseAddr("10.0.1.100")}, &gnb.TeidAllocator{})
 	link, err := assoc.Attach()
 	require.NoError(t, err)
 	for range cap(link.Downlinks) { // a UE that stopped reading

@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **startIp** | **string** |  | [default to undefined]
 **upfIp** | **string** |  | [default to undefined]
 **upfPort** | **number** |  | [default to undefined]
+**ipsPerGnb** | **number** | N3 IPs per gNB (1..64; 0 counts as 1). A gNB hands them out to its UEs\&#39; PDU sessions in turn as downlink tunnel addresses, so its downlink is several connections that NICs, the kernel and the tester can spread over CPUs. | [default to undefined]
 
 ## Example
 
@@ -22,6 +23,7 @@ const instance: TesterProfileNetworkN3 = {
     startIp,
     upfIp,
     upfPort,
+    ipsPerGnb,
 };
 ```
 

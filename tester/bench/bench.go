@@ -207,7 +207,7 @@ func measureSend(senders int, s Settings, warm, dur time.Duration) (Step, error)
 	defer e.Stop(0)
 	upf := blackhole.LocalAddr().(*net.UDPAddr).AddrPort()
 	for ue := range senders {
-		e.AddUE(ue, 0, benchUe(ue), uint32(ue+1), uint32(ue+1), upf)
+		e.AddUE(ue, 0, benchUe(ue), uint32(ue+1), uint32(ue+1), netip.Addr{}, upf)
 	}
 	time.Sleep(warm)
 	before, t0 := e.Snapshot().Ul, time.Now()
