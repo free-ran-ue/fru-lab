@@ -139,9 +139,12 @@ type Engine struct {
 	dlShards []*shard
 	ulPerGnb int
 	ul, dl   dirStats
-	active   atomic.Int64
-	stopped  atomic.Bool
-	gsoOn    atomic.Int64 // senders using UDP GSO
+	// ulSample and dlSample are masks on a packet's sequence number: its
+	// latency is recorded when seq&mask == 0 (see latencyMask).
+	ulSample, dlSample uint32
+	active             atomic.Int64
+	stopped            atomic.Bool
+	gsoOn              atomic.Int64 // senders using UDP GSO
 
 	cancel  context.CancelFunc
 	senders sync.WaitGroup
@@ -169,6 +172,8 @@ func New(cfg Config) *Engine {
 	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints)}
 	gnbs := max(1, len(cfg.GnbN3IPs))
 	e.ulPerGnb = max(1, (cfg.Senders+gnbs-1)/gnbs)
+	e.ulSample = latencyMask(cfg.UlBps, cfg)
+	e.dlSample = latencyMask(cfg.DlBps, cfg)
 	for range len(cfg.GnbN3IPs) * e.ulPerGnb {
 		e.ulShards = append(e.ulShards, newShard())
 	}
@@ -176,6 +181,24 @@ func New(cfg Config) *Engine {
 		e.dlShards = append(e.dlShards, newShard())
 	}
 	return e
+}
+
+// latencySamples is about how many packets a second, per direction, get
+// their latency recorded. Loss and order are still checked on every
+// packet; latency percentiles need far fewer samples than a busy run has
+// packets, and recording one costs a log2 and a histogram update.
+const latencySamples = 100_000
+
+// latencyMask is a power of two minus one, so that recording the packets
+// whose seq&mask == 0 samples every UE evenly at about latencySamples a
+// second in all; 0 (every packet) for light runs.
+func latencyMask(bpsPerUe float64, cfg Config) uint32 {
+	pps := bpsPerUe / float64(cfg.PacketSize*8) * float64(cfg.UeCount)
+	n := uint32(1)
+	for float64(n)*latencySamples < pps && n < 1<<16 {
+		n <<= 1
+	}
+	return n - 1
 }
 
 // listenReusePort binds addr with SO_REUSEPORT, so several sockets share
@@ -700,10 +723,12 @@ func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
 		return
 	}
 	r.acc.add(f.gnb, uint64(ipLen))
-	r.lat = append(r.lat, time.Duration(r.now-h.txNanos))
-	last := &f.ulLast
+	last, mask := &f.ulLast, e.ulSample
 	if dl {
-		last = &f.dlLast
+		last, mask = &f.dlLast, e.dlSample
+	}
+	if h.seq&mask == 0 {
+		r.lat = append(r.lat, time.Duration(r.now-h.txNanos))
 	}
 	for {
 		prev := last.Load()

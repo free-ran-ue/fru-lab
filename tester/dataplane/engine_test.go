@@ -344,6 +344,16 @@ func TestBatchedSendingLosesNothingAtAHighRate(t *testing.T) {
 	}
 }
 
+// Latency is recorded for every packet on a light run and for an even
+// sample of about 100 k packets a second on a busy one.
+func TestLatencyIsSampledOnBusyRuns(t *testing.T) {
+	light := Config{UeCount: 4, PacketSize: 500}
+	require.Zero(t, latencyMask(2e6, light), "2000 pps: every packet")
+	busy := Config{UeCount: 1000, PacketSize: 1400}
+	require.Equal(t, uint32(31), latencyMask(30e6, busy), "2.7 M pps: 1 in 32")
+	require.Zero(t, latencyMask(0, busy))
+}
+
 func TestWakeEveryFollowsTheRate(t *testing.T) {
 	pkt := 1400.0 * 8
 	require.Equal(t, time.Millisecond, wakeEvery(100e6, pkt), "8.9 packets per ms: every ms")

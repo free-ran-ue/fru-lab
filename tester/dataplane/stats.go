@@ -34,7 +34,7 @@ type DirSnapshot struct {
 	OutOfOrder uint64                  `json:"outOfOrder"`
 	Misrouted  uint64                  `json:"misrouted"` // arrived in another UE's tunnel or at another gNB
 	SendErrors uint64                  `json:"sendErrors"`
-	Latency    metrics.LatencySnapshot `json:"latency"` // one-way, same host clock
+	Latency    metrics.LatencySnapshot `json:"latency"` // one-way, same host clock; sampled on busy runs (Count is samples)
 }
 
 // GnbTraffic is one gNB's bytes so far, for the per-gNB table.
