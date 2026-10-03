@@ -1878,6 +1878,55 @@ ul.tight li { margin: 3px 0; }
       <li>下一步：在高效能機器上用 Bench 分頁量「每核心能送多少、加核心是否線性成長」，再用真實核網跑一次，看瓶頸是在 tester 的收包還是 UPF，再評估 40G。</li>
     </ul>
   </div>
+
+  <div class="faq">
+    <h3>Q5 · UL 和 DL 的處理方式差在哪裡？</h3>
+    <div class="short"><b>簡答：</b>UL 的 GTP-U 封包是 tester 自己組好送給 UPF，UPF 解封裝後送到 tester 的 sink；DL 是 tester 送一般 UDP 給 UE IP，由 UPF 封裝成 GTP-U 再送回 gNB。兩邊用的 socket、能不能分給多顆核心、GSO 能不能合併都不一樣，所以<b>UL 加 UE 就能往上長，DL 還要靠多個 gNB 才能分散</b>。</div>
+
+    <h4>逐項比較</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th></th><th>UL（上行）</th><th>DL（下行）</th></tr>
+        <tr><td>tester 送出什麼</td><td>完整的 G-PDU：GTP-U 標頭（UL TEID）＋ 內層 IP/UDP（UE IP → sink IP）＋ tester 標頭</td><td>一般 UDP（sink IP → UE IP:9200），內容是 tester 標頭加填充；IP/UDP 標頭由 kernel 加</td></tr>
+        <tr><td>從哪裡送、送到哪</td><td>gNB 的 N3 IP（系統分配的 port）→ UPF N3:2152</td><td>sink IP → UE IP，靠 run 期間加的路由「UE pool 經由 UPF N6 IP」送進 UPF</td></tr>
+        <tr><td>GTP-U 由誰處理</td><td>UPF 解封裝（gtp5g 在 :2152 收），再把內層封包轉到 N6</td><td>UPF 依 UE IP 找到 session，封裝成 GTP-U（DL TEID，gtp5g 另加 8 bytes 的 PDU Session Container）</td></tr>
+        <tr><td>NAT</td><td>fru-lab 的 UPF 做 MASQUERADE，到 sink 時來源被改成 UPF 的 IP</td><td>沒有 NAT</td></tr>
+        <tr><td>發送線</td><td>每個 gNB 分到 ⌈發送線數 ÷ gNB 數⌉ 條，各有自己的 socket（綁在該 gNB 的 N3 IP）；UE 依編號分到其中一條</td><td>共「發送線數」條（預設 = CPU 核心數），各有自己的 socket（綁在 sink IP），不分 gNB；UE 依編號分配</td></tr>
+        <tr><td>UDP GSO 合併</td><td>同一個 gNB 的封包目的地都是 UPF，<b>不同 UE 的封包也能接在一起</b>，一則訊息最多 64 個封包，不用設定</td><td>目的地是各 UE 的 IP，<b>只能合併同一個 UE 的封包</b>；靠 Downlink batch 讓一個 UE 連續送幾 ms 的量。每 UE 30 Mbps、1 ms 時一次只合 2 個</td></tr>
+        <tr><td>在哪裡收</td><td>sink IP:port，一組 SO_REUSEPORT socket（數量 = CPU 核心數），kernel 依連線分給各 socket，每個 socket 一條讀取線</td><td>每個 gNB 的 N3 IP:2152，<b>每個 gNB 只有一個 socket、一條讀取線</b></td></tr>
+        <tr><td>收到後怎麼認</td><td>來源被 NAT 改過，只能看 tester 標頭裡的 UE 編號；看不到 TEID</td><td>拆掉 GTP-U（略過擴充標頭）後看標頭；<b>還會檢查 TEID 和 gNB</b>，送錯隧道或送錯 gNB 記為 misrouted，不算收到</td></tr>
+        <tr><td>N3 上每個封包多多少</td><td>36 bytes（外層 IP 20 + UDP 8 + GTP-U 8）</td><td>44 bytes（再加 PDU Session Container 8）</td></tr>
+        <tr><td>吞吐、掉包、延遲怎麼算</td><td colspan="2">兩邊相同：都算內層 IP 封包的長度；每個 UE、每個方向各自有序號算亂序，用送出時間算單向延遲</td></tr>
+      </table>
+    </div>
+
+    <h4>對多顆核心的影響（為什麼 DL 比較難往上打）</h4>
+    <p>tester、UPF、網卡都是依「連線」（來源與目的的 IP、port）把封包分給不同核心，同一條連線的封包固定在同一顆核心處理。</p>
+    <ul class="tight">
+      <li><b>UL 天生分得開</b>：每個 gNB 有好幾個發送 socket，port 都不同，UPF 那邊看到的是很多條連線；解封裝後每個 UE 是自己的連線，sink 的多個 socket 又把它們分給多條讀取線。加 UE、加發送線，UL 就跟著長。</li>
+      <li><b>DL 每個 gNB 擠成一條</b>：同一個 gNB 的所有 DL，外層都是「UPF:2152 → gNB:2152」，對網卡和 kernel 來說是同一條連線，只會進同一個佇列，tester 也只有一條讀取線在收（開了 GRO 時一次可以讀一整塊，但 Docker 的 veth 預設不做 GRO）。所以 DL 要往上打，要增加 gNB 數，不是只加 UE。</li>
+      <li><b>DL 的發送比較吃 CPU</b>：每個 UE 速率低時，DL 的 GSO 幾乎合不起來，一次只送一兩個封包；UL 不管每個 UE 多少，同一個 gNB 都能合在一起。</li>
+      <li><b>UPF 單一 UE 的上限兩邊一樣</b>：同一個 UE 的封包在 UPF 也是同一條連線、同一顆核心，gtp5g 每核心約 30 萬 pps（1400 bytes 約 3.4 Gbps）。單一 UE 打很大，兩個方向都會先卡在這裡。</li>
+    </ul>
+
+    <h4>UPF 和 tester 在同一台時</h4>
+    <ul class="tight">
+      <li>封包經 veth 進 UPF container 後，bridge、gtp5g、NAT 的處理大多在<b>送出這個封包的那顆 CPU</b> 上做完（softirq）。所以 UL 的解封裝算在 tester 的 UL 發送線上，DL 的封裝算在 DL 發送線上（見 Q3）。</li>
+      <li>因此每條發送線分到的 UE 越平均，96 顆 CPU 的負載就越平均。UE 多、每個打少比較穩：1000 UE 分到 96 條 DL 發送線，每條 10 或 11 個（差約 10%）；400 UE 時每條 4 或 5 個（差 25%）。每個 UE 速率低，封包到達也比較平均，不容易一次塞滿某顆 CPU 的收包佇列（預設最多 1000 個，<code>net.core.netdev_max_backlog</code>），那種掉包是一陣一陣的。</li>
+      <li>實測（96 CPU 的機器，tester 與 free5GC 的 Docker UPF 在同一台）：10 gNB × 1000 UE × 每 UE 30 Mbps，上下行各 30 Gbps 打得到，96 顆 CPU 都在 90% 左右，比 UE 少、每個打大的配置穩定。</li>
+    </ul>
+
+    <h4>配置建議</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>情況</th><th>建議</th></tr>
+        <tr><td>tester 和 UPF 同一台</td><td>UE 多、每個打少（例如 1000–2000 UE × 15–30 Mbps）；Downlink batch 維持 1 ms 或更小，平均比省 CPU 重要；可把 <code>net.core.netdev_max_backlog</code> 調大到 10000</td></tr>
+        <tr><td>tester 和 UPF 分兩台</td><td>每 UE 50–100 Mbps、Downlink batch 1–2 ms，讓 DL 的 GSO 一次合多個封包；UE 數夠多，UPF 才分得到很多核心</td></tr>
+        <tr><td>DL 要更高</td><td>增加 gNB 數，讓每個 gNB 的 DL 約 2–3 Gbps 以內（一條讀取線收得了）</td></tr>
+        <tr><td>任何情況</td><td>每個 UE 單一方向不要超過約 3 Gbps（UPF 單核上限）；UPF 主機網卡的 UDP 分流要包含 port（<code>ethtool -N &lt;網卡&gt; rx-flow-hash udp4 sdfn</code>），否則同一個 gNB 的 UL 會全進同一個佇列</td></tr>
+      </table>
+    </div>
+  </div>
 </section>
 
 </div>
