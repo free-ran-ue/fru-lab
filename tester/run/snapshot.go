@@ -147,13 +147,4 @@ type Snapshot struct {
 	Ues        UeSummary          `json:"ues"`
 	FailedUes  []UeFailure        `json:"failedUes"` // first maxFailuresListed failures
 	Dataplane  dataplane.Snapshot `json:"dataplane"`
-	VethGro    VethGroStatus      `json:"vethGro"`
-}
-
-// VethGroStatus is what traffic.vethGro changed for the run: Links empty
-// means it was off, or the UPF is not on a veth here (a physical NIC does
-// GRO by itself). Error is why it could not be done; the run goes on.
-type VethGroStatus struct {
-	Links []string `json:"links"`
-	Error string   `json:"error"`
 }
