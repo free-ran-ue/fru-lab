@@ -2,14 +2,19 @@ package dataplane
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 // fakeUPF stands in for a UPF on loopback: uplink G-PDUs arriving on its
@@ -27,6 +32,7 @@ type fakeUPF struct {
 	wrongTeid bool                    // put downlink in a tunnel the gNB did not allocate
 	dlFrom    map[netip.AddrPort]bool // source of every downlink packet, under mu
 	ulFrom    map[netip.AddrPort]bool // source of every uplink G-PDU, under mu
+	dlOrder   []uint32                // UE of every downlink packet, in arrival order, under mu
 }
 
 type ueRoute struct {
@@ -96,6 +102,7 @@ func (u *fakeUPF) downlink() {
 			continue
 		}
 		u.mu.Lock()
+		u.dlOrder = append(u.dlOrder, h.ue)
 		r, ok := u.ues[h.ue]
 		wrong := u.wrongTeid
 		u.mu.Unlock()
@@ -316,21 +323,238 @@ func TestUplinkIsReadOnSeveralSinkSockets(t *testing.T) {
 		}
 		_ = c.Close()
 	}
-	require.Eventually(t, func() bool { return e.ul.rxPackets.Load() == uint64(sent) }, 2*time.Second, 10*time.Millisecond)
-	require.Zero(t, e.ul.outOfOrder.Load())
+	require.Eventually(t, func() bool { return e.Snapshot().Ul.RxPackets == uint64(sent) }, 2*time.Second, 10*time.Millisecond)
+	require.Zero(t, e.Snapshot().Ul.OutOfOrder)
 }
 
 // Batched sends (sendmmsg) must still carry every packet, each with its
 // own sequence number, at a rate well above the 1 ms tick.
 func TestBatchedSendingLosesNothingAtAHighRate(t *testing.T) {
-	e, _ := startEngineWith(t, 40, 0, func(c *Config) { c.Senders = 2; c.Receivers = 2 }) // 4 UEs x 40 Mbps each way
+	// GRO off: under the race detector a reader's 64 KB GRO buffers make it
+	// ten times slower and the sink overflows (without -race it is as fast)
+	e, upf := startEngineWith(t, 40, 0, func(c *Config) { c.Senders = 2; c.Receivers = 2; c.NoGRO = true }) // 4 UEs x 40 Mbps each way
 	time.Sleep(time.Second)
-	e.Stop(200 * time.Millisecond)
+	drops := stopCountingDrops(e, upf, 200*time.Millisecond)
 	s := e.Snapshot()
 	for name, d := range map[string]DirSnapshot{"ul": s.Ul, "dl": s.Dl} {
 		require.Greater(t, d.TxPackets, uint64(30000), name)
-		require.Equal(t, d.TxPackets, d.RxPackets, name)
+		require.Equal(t, d.TxPackets, d.RxPackets+drops[name], "%s: every packet arrives or the kernel dropped it for a full buffer", name)
 		require.Zero(t, d.OutOfOrder, name)
 		require.Zero(t, d.SendErrors, name)
 	}
+}
+
+// gsoBatcher is an uplink batcher for gNB 127.0.0.11 with 3 UEs, sending
+// to a plain socket that stands in for the UPF.
+func gsoBatcher(t *testing.T, noGSO bool) (*batcher, []*flow, *net.UDPConn) {
+	t.Helper()
+	upf, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100")})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = upf.Close() })
+	e := New(Config{RunID: 9, UeCount: 3, GnbN3IPs: []netip.Addr{netip.MustParseAddr("127.0.0.11")},
+		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9200, PacketSize: 500, NoGSO: noGSO})
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.11")})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	var flows []*flow
+	for ue := range 3 {
+		e.AddUE(ue, 0, netip.AddrFrom4([4]byte{10, 60, 0, byte(ue + 1)}), uint32(0x100+ue), 1, upf.LocalAddr().(*net.UDPAddr).AddrPort())
+		flows = append(flows, e.flows[ue].Load())
+	}
+	return e.newBatcher(conn, false, 0), flows, upf
+}
+
+// readUplink reads n G-PDUs and checks each is a whole, separate packet:
+// the UE's headers, its own sequence number, zeros after the tester header.
+func readUplink(t *testing.T, upf *net.UDPConn, n int) []header {
+	t.Helper()
+	var got []header
+	buf := make([]byte, 65536)
+	require.NoError(t, upf.SetReadDeadline(time.Now().Add(2*time.Second)))
+	for range n {
+		m, err := upf.Read(buf)
+		require.NoError(t, err)
+		require.Equal(t, 500+gtpHeaderLen, m, "one packet per datagram")
+		teid, inner, err := parseGpdu(buf[:m])
+		require.NoError(t, err)
+		payload, ok := udpPayload(inner)
+		require.True(t, ok)
+		h, ok := parseHeader(payload)
+		require.True(t, ok)
+		require.Equal(t, uint32(0x100)+h.ue, teid)
+		require.Equal(t, make([]byte, len(payload)-HeaderLen), payload[HeaderLen:])
+		got = append(got, h)
+	}
+	return got
+}
+
+// With UDP GSO, packets to the same UPF share one message (one send for
+// many packets, split by the kernel), whichever UE they belong to.
+func TestUplinkPacketsShareOneGSOMessage(t *testing.T) {
+	b, flows, upf := gsoBatcher(t, false)
+	require.Greater(t, b.gso, 1, "this kernel supports UDP GSO")
+	for i := range 30 {
+		b.add(flows[i%3])
+	}
+	require.Equal(t, 1, b.n)
+	require.Equal(t, 30, b.segs[0])
+	b.flush()
+	got := readUplink(t, upf, 30)
+	for i, h := range got {
+		require.Equal(t, uint32(i%3), h.ue)
+		require.Equal(t, uint32(i/3), h.seq)
+	}
+	require.Equal(t, uint64(30), b.stats.packets.Load())
+}
+
+func TestNoGSOSendsOnePacketPerMessage(t *testing.T) {
+	b, flows, upf := gsoBatcher(t, true)
+	require.Equal(t, 1, b.gso)
+	for range 5 {
+		b.add(flows[0])
+	}
+	require.Equal(t, 5, b.n)
+	b.flush()
+	readUplink(t, upf, 5)
+}
+
+// If the kernel refuses GSO (a device without checksum offload, or a
+// packet over the path MTU), the batch is resent one packet at a time and
+// GSO stays off.
+func TestRefusedGSOFallsBackToSinglePackets(t *testing.T) {
+	b, flows, upf := gsoBatcher(t, false)
+	for range 4 {
+		b.add(flows[1])
+	}
+	b.dropGSO(0)
+	b.n, b.used = 0, 0
+	b.acc.publish(b.stats)
+	require.Equal(t, 1, b.gso)
+	readUplink(t, upf, 4)
+	require.Equal(t, uint64(4), b.stats.packets.Load())
+	require.True(t, gsoRefused(&net.OpError{Err: unix.EIO}))
+}
+
+// DlBatch gives each UE a run of packets in a row, so downlink (one
+// destination per UE) can use GSO too.
+func TestDownlinkBatchSendsEachUEARunOfPackets(t *testing.T) {
+	// 40 Mbps of 500-byte packets is 10 per ms per UE
+	e, upf := startEngineWith(t, 40, 0, func(c *Config) { c.Senders = 1; c.DlBatch = time.Millisecond })
+	time.Sleep(300 * time.Millisecond)
+	drops := stopCountingDrops(e, upf, 100*time.Millisecond)
+	upf.mu.Lock()
+	defer upf.mu.Unlock()
+	runs := map[int]int{}
+	for i := 0; i < len(upf.dlOrder); {
+		j := i
+		for j < len(upf.dlOrder) && upf.dlOrder[j] == upf.dlOrder[i] {
+			j++
+		}
+		runs[j-i]++
+		i = j
+	}
+	total := 0
+	for _, c := range runs {
+		total += c
+	}
+	require.Greater(t, runs[10], total*8/10, "runs of 10 packets per UE: %v", runs)
+	s := e.Snapshot()
+	require.Equal(t, s.Dl.TxPackets, s.Dl.RxPackets+drops["dl"])
+}
+
+// stopCountingDrops stops e's senders, waits drain for packets on the way,
+// and returns, per direction, how many packets the kernel dropped on the
+// way because a receive buffer was full; then it stops e.
+//
+// Tests run without CAP_NET_ADMIN, so their sockets keep net.core.rmem_max
+// (often 208 KB) where fru-tester forces 8 MB. Under -race on a CI runner
+// with few CPUs, the fake UPF (one goroutine per direction) and the
+// engine's readers fall behind a burst, and a GSO send puts a whole burst
+// into a queue at once, so the kernel drops what does not fit. That is
+// this test host's limit, not a loss in the engine: a packet that is
+// neither received nor counted here still fails the test.
+func stopCountingDrops(e *Engine, upf *fakeUPF, drain time.Duration) map[string]uint64 {
+	e.cancel()
+	e.senders.Wait()
+	time.Sleep(drain)
+	ul := []netip.AddrPort{upf.n3Addr(), netip.AddrPortFrom(e.cfg.SinkIP, e.cfg.Port)}
+	dl := []netip.AddrPort{upf.n6Addr()}
+	for _, ip := range e.cfg.GnbN3IPs {
+		dl = append(dl, netip.AddrPortFrom(ip, GtpPort))
+	}
+	drops := map[string]uint64{"ul": bufferDrops(ul), "dl": bufferDrops(dl)}
+	e.Stop(0)
+	return drops
+}
+
+// bufferDrops sums the drops column of /proc/net/udp over the sockets
+// bound to any of addrs (an SO_REUSEPORT group has several).
+func bufferDrops(addrs []netip.AddrPort) uint64 {
+	want := map[string]bool{}
+	for _, a := range addrs {
+		ip := a.Addr().As4()
+		want[fmt.Sprintf("%08X:%04X", binary.NativeEndian.Uint32(ip[:]), a.Port())] = true
+	}
+	b, err := os.ReadFile("/proc/net/udp")
+	if err != nil {
+		return 0
+	}
+	var total uint64
+	for _, line := range strings.Split(string(b), "\n")[1:] {
+		f := strings.Fields(line)
+		if len(f) < 13 || !want[f[1]] {
+			continue
+		}
+		n, _ := strconv.ParseUint(f[len(f)-1], 10, 64)
+		total += n
+	}
+	return total
+}
+
+// sendGSO sends n UL-sink payloads of seg bytes for UE 0 to the sink as
+// one UDP GSO message, which loopback delivers in one piece to a socket
+// with UDP_GRO.
+func sendGSO(t *testing.T, to netip.AddrPort, runID uint32, n, seg int) {
+	t.Helper()
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100")})
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+	require.NoError(t, setGSO(c, seg))
+	buf := make([]byte, n*seg)
+	for i := range n {
+		putHeader(buf[i*seg:], header{runID: runID, ue: 0, seq: uint32(i), txNanos: time.Now().UnixNano()})
+	}
+	_, err = c.WriteToUDPAddrPort(buf, to)
+	require.NoError(t, err)
+}
+
+// With UDP GRO a reader gets many packets in one message, with their
+// length in a control message, and splits them back into packets.
+func TestCoalescedUplinkIsSplitIntoPackets(t *testing.T) {
+	for _, noGRO := range []bool{false, true} {
+		t.Run(fmt.Sprintf("noGRO=%v", noGRO), func(t *testing.T) {
+			e, _ := startEngineWith(t, 0, 0, func(c *Config) { c.Receivers = 1; c.NoGRO = noGRO })
+			defer e.Stop(0)
+			sendGSO(t, netip.AddrPortFrom(e.cfg.SinkIP, e.cfg.Port), 42, 20, 472)
+			require.Eventually(t, func() bool { return e.Snapshot().Ul.RxPackets == 20 }, 2*time.Second, 10*time.Millisecond)
+			s := e.Snapshot().Ul
+			require.Equal(t, uint64(20*500), s.RxBytes)
+			require.Zero(t, s.OutOfOrder)
+		})
+	}
+}
+
+func TestGROSocketGetsOneMessageWithTheSegmentLength(t *testing.T) {
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+	require.NoError(t, setGRO(c), "this kernel supports UDP GRO")
+	sendGSO(t, c.LocalAddr().(*net.UDPAddr).AddrPort(), 1, 5, 300)
+	buf, oob := make([]byte, groBufLen), make([]byte, unix.CmsgSpace(4))
+	require.NoError(t, c.SetReadDeadline(time.Now().Add(2*time.Second)))
+	n, oobn, _, _, err := c.ReadMsgUDP(buf, oob)
+	require.NoError(t, err)
+	require.Equal(t, 5*300, n)
+	require.Equal(t, 300, groSegment(oob[:oobn]))
+	require.Zero(t, groSegment(nil))
 }

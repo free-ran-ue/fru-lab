@@ -23,7 +23,8 @@ const (
 	ipv4HeaderLen = 20
 	udpHeaderLen  = 8
 	gtpHeaderLen  = 8
-	dlFlag        = 1 << 31 // high bit of the UE field marks downlink
+	ulHeadLen     = gtpHeaderLen + ipv4HeaderLen + udpHeaderLen // before the tester header in an uplink G-PDU
+	dlFlag        = 1 << 31                                     // high bit of the UE field marks downlink
 )
 
 var magic = [4]byte{'F', 'R', 'U', 'T'}

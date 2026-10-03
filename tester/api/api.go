@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
+	"tester/bench"
 	"tester/profile"
 	"tester/run"
 )
@@ -25,6 +26,13 @@ type Controller interface {
 	Snapshot() run.Snapshot
 	Changed() <-chan struct{}
 	Reports() []run.Report
+}
+
+// Bench is the slice of *bench.Runner the handlers use.
+type Bench interface {
+	Start(s bench.Settings) (bench.Result, error)
+	Result() bench.Result
+	Running() bool
 }
 
 type MessageResponse struct {
@@ -54,16 +62,18 @@ const (
 	minFrameGap    = 200 * time.Millisecond
 )
 
-func NewRouter(ctrl Controller, apiToken string) *gin.Engine {
+func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	g := r.Group("/api", requireToken(apiToken))
 	g.POST("/profile/validate", handleValidate(ctrl))
 	g.GET("/run", func(c *gin.Context) { c.JSON(http.StatusOK, ctrl.Snapshot()) })
-	g.POST("/run", handleStart(ctrl))
+	g.POST("/run", handleStart(ctrl, b))
 	g.POST("/run/stop", handleStop(ctrl))
 	g.GET("/run/stream", handleStream(ctrl))
+	g.GET("/bench", func(c *gin.Context) { c.JSON(http.StatusOK, b.Result()) })
+	g.POST("/bench", handleBenchStart(b))
 	g.GET("/run/reports", func(c *gin.Context) {
 		reps := ctrl.Reports()
 		if reps == nil {
@@ -116,8 +126,12 @@ func handleValidate(ctrl Controller) gin.HandlerFunc {
 	}
 }
 
-func handleStart(ctrl Controller) gin.HandlerFunc {
+func handleStart(ctrl Controller, b Bench) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if b.Running() { // a run and a bench would compete for the CPUs
+			c.JSON(http.StatusConflict, MessageResponse{Message: "a bench is running; start the run when it has finished"})
+			return
+		}
 		p, ok := bindProfile(c)
 		if !ok {
 			return
@@ -130,6 +144,27 @@ func handleStart(ctrl Controller) gin.HandlerFunc {
 		case errors.As(err, &verr):
 			c.JSON(http.StatusBadRequest, StartErrorResponse{Message: "profile is invalid", Errors: verr.Errors})
 		case errors.Is(err, run.ErrRunActive):
+			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+		}
+	}
+}
+
+func handleBenchStart(b Bench) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var s bench.Settings
+		if err := c.ShouldBindJSON(&s); err != nil {
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: "invalid bench settings: " + err.Error()})
+			return
+		}
+		res, err := b.Start(s)
+		switch {
+		case err == nil:
+			c.JSON(http.StatusAccepted, res)
+		case errors.Is(err, bench.ErrInvalidSettings):
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
+		case errors.Is(err, bench.ErrBenchRunning), errors.Is(err, bench.ErrRunActive):
 			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})

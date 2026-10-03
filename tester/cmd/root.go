@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"tester/api"
+	"tester/bench"
 	"tester/config"
 	"tester/gnb"
 	"tester/netcfg"
@@ -52,7 +53,8 @@ func serve(cmd *cobra.Command, _ []string) error {
 		Dialer: gnb.SCTPDialer{},
 		Log:    lg.WithTags("RUN"),
 	})
-	srv := &http.Server{Addr: cfg.Listen, Handler: api.NewRouter(ctrl, cfg.ApiToken)}
+	runner := bench.NewRunner(func() bool { return !ctrl.Snapshot().State.Finished() })
+	srv := &http.Server{Addr: cfg.Listen, Handler: api.NewRouter(ctrl, runner, cfg.ApiToken)}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()

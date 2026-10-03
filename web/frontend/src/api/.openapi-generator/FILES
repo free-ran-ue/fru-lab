@@ -18,6 +18,9 @@ docs/LoginResponse.md
 docs/MessageResponse.md
 docs/RequestDeployFree5gc.md
 docs/ServiceStatus.md
+docs/TesterBenchResult.md
+docs/TesterBenchSettings.md
+docs/TesterBenchStep.md
 docs/TesterCauseCount.md
 docs/TesterDataplaneSnapshot.md
 docs/TesterFieldError.md

@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
+	"tester/bench"
 	"tester/profile"
 	"tester/run"
 )
@@ -37,6 +38,21 @@ func (f *fakeCtrl) Snapshot() run.Snapshot                      { return f.snap 
 func (f *fakeCtrl) Changed() <-chan struct{}                    { return f.changed }
 func (f *fakeCtrl) Reports() []run.Report                       { return f.reports }
 
+// fakeBench stands in for *bench.Runner.
+type fakeBench struct {
+	running  bool
+	startErr error
+	result   bench.Result
+}
+
+func (f *fakeBench) Start(bench.Settings) (bench.Result, error) { return f.result, f.startErr }
+func (f *fakeBench) Result() bench.Result                       { return f.result }
+func (f *fakeBench) Running() bool                              { return f.running }
+
+func newTestRouter(ctrl Controller, token string) http.Handler {
+	return NewRouter(ctrl, &fakeBench{}, token)
+}
+
 func do(t *testing.T, h http.Handler, method, path, body, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -49,7 +65,7 @@ func do(t *testing.T, h http.Handler, method, path, body, token string) *httptes
 }
 
 func TestTokenRequired(t *testing.T) {
-	h := NewRouter(&fakeCtrl{}, "secret")
+	h := newTestRouter(&fakeCtrl{}, "secret")
 	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/run", "", "").Code)
 	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/run", "", "wrong").Code)
 	require.Equal(t, http.StatusOK, do(t, h, http.MethodGet, "/api/run", "", "secret").Code)
@@ -57,7 +73,7 @@ func TestTokenRequired(t *testing.T) {
 
 func TestValidateReturnsPlanOrFieldErrors(t *testing.T) {
 	ctrl := &fakeCtrl{}
-	h := NewRouter(ctrl, "t")
+	h := newTestRouter(ctrl, "t")
 
 	rec := do(t, h, http.MethodPost, "/api/profile/validate", `{"name":"x"}`, "t")
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -75,7 +91,7 @@ func TestValidateReturnsPlanOrFieldErrors(t *testing.T) {
 
 func TestStartAndStopStatusCodes(t *testing.T) {
 	ctrl := &fakeCtrl{snap: run.Snapshot{RunID: "r1", State: run.StateConfiguring}}
-	h := NewRouter(ctrl, "t")
+	h := newTestRouter(ctrl, "t")
 
 	require.Equal(t, http.StatusAccepted, do(t, h, http.MethodPost, "/api/run", `{}`, "t").Code)
 
@@ -94,7 +110,7 @@ func TestStartAndStopStatusCodes(t *testing.T) {
 
 func TestStreamSendsSnapshotOnConnectAndOnChange(t *testing.T) {
 	ctrl := &fakeCtrl{snap: run.Snapshot{RunID: "r1", State: run.StateN2}, changed: make(chan struct{})}
-	srv := httptest.NewServer(NewRouter(ctrl, "t"))
+	srv := httptest.NewServer(newTestRouter(ctrl, "t"))
 	defer srv.Close()
 
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/run/stream"
@@ -128,7 +144,7 @@ func TestSnapshotJSONShape(t *testing.T) {
 func TestStreamCoalescesBurstsOfChanges(t *testing.T) {
 	ctrl := &fakeCtrl{snap: run.Snapshot{State: run.StateRunning}, changed: make(chan struct{})}
 	close(ctrl.changed) // every frame sees "changed" at once, like a busy run
-	srv := httptest.NewServer(NewRouter(ctrl, "t"))
+	srv := httptest.NewServer(newTestRouter(ctrl, "t"))
 	defer srv.Close()
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/run/stream"
 	conn, _, err := websocket.DefaultDialer.Dial(url, http.Header{"Authorization": {"Bearer t"}})
@@ -145,7 +161,7 @@ func TestStreamCoalescesBurstsOfChanges(t *testing.T) {
 }
 
 func TestReportsIsAnEmptyListBeforeAnyRunFinished(t *testing.T) {
-	h := NewRouter(&fakeCtrl{}, "t")
+	h := newTestRouter(&fakeCtrl{}, "t")
 	rec := do(t, h, http.MethodGet, "/api/run/reports", "", "t")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `[]`, rec.Body.String())
@@ -153,9 +169,39 @@ func TestReportsIsAnEmptyListBeforeAnyRunFinished(t *testing.T) {
 
 func TestReportsCarryProfileAndSnapshot(t *testing.T) {
 	rep := run.Report{Profile: profile.Profile{Name: "basic"}, Snapshot: run.Snapshot{RunID: "r1", State: run.StateStopped}}
-	h := NewRouter(&fakeCtrl{reports: []run.Report{rep}}, "t")
+	h := newTestRouter(&fakeCtrl{reports: []run.Report{rep}}, "t")
 	rec := do(t, h, http.MethodGet, "/api/run/reports", "", "t")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `[{"profile":{"name":"basic"`)
 	require.Contains(t, rec.Body.String(), `"snapshot":{"runId":"r1"`)
+}
+
+func TestBenchStartAndResult(t *testing.T) {
+	b := &fakeBench{result: bench.Result{State: bench.StateRunning, Cpus: 6, PlannedSenders: []int{1, 2, 4, 6}, Steps: []bench.Step{}}}
+	h := NewRouter(&fakeCtrl{}, b, "t")
+	rec := do(t, h, http.MethodPost, "/api/bench", `{"packetSize":1400,"stepSeconds":3}`, "t")
+	require.Equal(t, http.StatusAccepted, rec.Code)
+	require.Contains(t, rec.Body.String(), `"plannedSenders":[1,2,4,6]`)
+	rec = do(t, h, http.MethodGet, "/api/bench", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"state":"running"`)
+}
+
+func TestBenchRejectsBadSettingsAndConflicts(t *testing.T) {
+	for err, code := range map[error]int{
+		bench.ErrInvalidSettings: http.StatusBadRequest,
+		bench.ErrBenchRunning:    http.StatusConflict,
+		bench.ErrRunActive:       http.StatusConflict,
+	} {
+		h := NewRouter(&fakeCtrl{}, &fakeBench{startErr: err}, "t")
+		rec := do(t, h, http.MethodPost, "/api/bench", `{"packetSize":1400,"stepSeconds":3}`, "t")
+		require.Equal(t, code, rec.Code, err.Error())
+	}
+}
+
+func TestARunCannotStartDuringABench(t *testing.T) {
+	h := NewRouter(&fakeCtrl{}, &fakeBench{running: true}, "t")
+	rec := do(t, h, http.MethodPost, "/api/run", `{}`, "t")
+	require.Equal(t, http.StatusConflict, rec.Code)
+	require.Contains(t, rec.Body.String(), "bench")
 }

@@ -171,7 +171,7 @@ func TestExpandValidatesTrafficAndN6(t *testing.T) {
 	require.ElementsMatch(t, []FieldError{
 		{Field: "traffic.ulMbps", Message: "must be between 0 and 10000"},
 		{Field: "traffic.dlMbps", Message: "must be between 0 and 10000"},
-		{Field: "traffic.packetSize", Message: "must be between 64 and 1400"},
+		{Field: "traffic.packetSize", Message: "must be between 64 and 9000"},
 		{Field: "traffic.port", Message: "must be between 1 and 65535"},
 		{Field: "network.n6.interface", Message: "must not be empty"},
 		{Field: "network.n6.sinkIp", Message: `"x" is not an IPv4 address`},
@@ -201,12 +201,14 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 		p := sampleProfile()
 		p.Rates.Deregistration.RatePerSec = 0
 		p.Traffic.MaxDurationMin = bad
+		p.Traffic.DlBatchMs = bad
 		_, err := Expand(p, nil)
 		var verr *ValidationError
 		require.ErrorAs(t, err, &verr)
 		require.ElementsMatch(t, []FieldError{
 			{Field: "rates.deregistration.ratePerSec", Message: "must be between 1 and 100000"},
 			{Field: "traffic.maxDurationMin", Message: "must be between 0 (no limit) and 10080 (7 days)"},
+			{Field: "traffic.dlBatchMs", Message: "must be between 0 (off) and 10"},
 		}, verr.Errors, "maxDurationMin %d", bad)
 	}
 }

@@ -26,6 +26,10 @@ func (b *backend) getTesterRoutes() util.Routes {
 			HandlerFunc: withLogging("TesterRunStart", b.TesterLog, b.handleTesterProxy)},
 		{Name: "TesterRunStop", Method: http.MethodPost, Pattern: "/tester/run/stop",
 			HandlerFunc: withLogging("TesterRunStop", b.TesterLog, b.handleTesterProxy)},
+		{Name: "TesterBenchGet", Method: http.MethodGet, Pattern: "/tester/bench",
+			HandlerFunc: b.handleTesterProxy}, // polled; not logged per request
+		{Name: "TesterBenchStart", Method: http.MethodPost, Pattern: "/tester/bench",
+			HandlerFunc: withLogging("TesterBenchStart", b.TesterLog, b.handleTesterProxy)},
 	}
 }
 

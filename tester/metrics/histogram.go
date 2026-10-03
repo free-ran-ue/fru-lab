@@ -71,3 +71,13 @@ func (h *histogram) mean() time.Duration {
 	}
 	return h.sum / time.Duration(h.total)
 }
+
+// merge adds o's samples to h.
+func (h *histogram) merge(o *histogram) {
+	for i, c := range o.counts {
+		h.counts[i] += c
+	}
+	h.total += o.total
+	h.sum += o.sum
+	h.max = max(h.max, o.max)
+}

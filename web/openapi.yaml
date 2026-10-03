@@ -870,6 +870,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/tester/bench:
+    get:
+      summary: Latest data plane bench
+      description: Forwarded to fru-tester. State is `idle` before the first bench.
+      operationId: testerBenchGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterBenchResult'
+    post:
+      summary: Start a data plane bench
+      description: Measures how fast this host's fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+      operationId: testerBenchStart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterBenchSettings'
+      responses:
+        '202':
+          description: Bench started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterBenchResult'
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: A bench or a run is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/history:
     get:
       summary: Finished runs, newest first
@@ -1307,7 +1352,7 @@ components:
     TesterTraffic:
       type: object
       description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
-      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin]
+      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs]
       properties:
         ulMbps:
           type: number
@@ -1319,6 +1364,7 @@ components:
           example: 5
         packetSize:
           type: integer
+          description: 64..9000, and at most the N3 interface's MTU minus 44 (GTP-U and its headers) and the N6 interface's MTU; 1456 on a 1500 MTU network.
           example: 1400
         port:
           type: integer
@@ -1328,6 +1374,10 @@ components:
           type: integer
           description: Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
           example: 0
+        dlBatchMs:
+          type: integer
+          description: Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
+          example: 1
     TesterUeTemplate:
       type: object
       description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
@@ -1788,6 +1838,70 @@ components:
           format: int64
         dlLossRate:
           type: number
+    TesterBenchSettings:
+      type: object
+      required: [packetSize, stepSeconds, gso]
+      properties:
+        packetSize:
+          type: integer
+          description: Inner IP packet bytes, 64..9000.
+          example: 1400
+        stepSeconds:
+          type: integer
+          description: Measuring time per sender count, 1..30.
+          example: 3
+        gso:
+          type: boolean
+          description: Send with UDP GSO, as runs do; off measures plain sendmmsg, as on a kernel without GSO.
+          example: true
+    TesterBenchStep:
+      type: object
+      required: [senders, pps, bps, sendErrors, gso]
+      properties:
+        senders:
+          type: integer
+        pps:
+          type: number
+        bps:
+          type: number
+          description: Inner IP bits per second.
+        sendErrors:
+          type: integer
+          format: int64
+        gso:
+          type: boolean
+          description: Whether the senders did use UDP GSO (false if the kernel refused it).
+    TesterBenchResult:
+      type: object
+      required: [state, error, cpus, kernel, settings, plannedSenders, steps]
+      properties:
+        state:
+          type: string
+          enum: [idle, running, done, failed]
+        error:
+          type: string
+        cpus:
+          type: integer
+        kernel:
+          type: string
+        settings:
+          $ref: '#/components/schemas/TesterBenchSettings'
+        plannedSenders:
+          type: array
+          items:
+            type: integer
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterBenchStep'
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
     TesterUeFailure:
       type: object
       required: [supi, gnb, stage, cause, attempts]

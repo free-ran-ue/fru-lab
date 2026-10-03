@@ -29,6 +29,8 @@ type AddrManager interface {
 	// RemoveRoute deletes a route EnsureRoute added; a missing route is
 	// not an error.
 	RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) error
+	// MTU is iface's MTU.
+	MTU(iface string) (int, error)
 }
 
 // Netlink is the real AddrManager; it needs CAP_NET_ADMIN.
@@ -58,6 +60,14 @@ func (Netlink) Interfaces() ([]string, error) {
 		names = append(names, l.Attrs().Name)
 	}
 	return names, nil
+}
+
+func (Netlink) MTU(iface string) (int, error) {
+	link, err := netlink.LinkByName(iface)
+	if err != nil {
+		return 0, fmt.Errorf("interface %q: %w", iface, err)
+	}
+	return link.Attrs().MTU, nil
 }
 
 func (Netlink) Add(iface string, addr netip.Prefix) error {

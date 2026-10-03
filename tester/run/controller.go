@@ -131,10 +131,43 @@ func (c *Controller) Validate(p profile.Profile) (*profile.Plan, error) {
 			verr.Errors = append(verr.Errors, profile.FieldError{Field: field, Message: fmt.Sprintf("no interface named %q on this host", name)})
 		}
 	}
+	if !hasField(verr, "traffic.packetSize") {
+		c.checkPacketFitsMTU(p, ifaces, verr)
+	}
 	if len(verr.Errors) > 0 {
 		return nil, verr
 	}
 	return plan, nil
+}
+
+// checkPacketFitsMTU checks the packet size against the N3 and N6
+// interfaces: downlink leaves the sink on N6 as the inner packet itself,
+// and on N3 every packet carries up to GtpOverhead more. On a 1500 MTU
+// network that allows 1456 bytes.
+func (c *Controller) checkPacketFitsMTU(p profile.Profile, ifaces []string, verr *profile.ValidationError) {
+	for _, f := range []struct {
+		field, name string
+		overhead    int
+	}{
+		{"network.n3.interface", p.Network.N3.Interface, profile.GtpOverhead},
+		{"network.n6.interface", p.Network.N6.Interface, 0},
+	} {
+		if !slices.Contains(ifaces, f.name) {
+			continue
+		}
+		mtu, err := c.deps.Addrs.MTU(f.name)
+		if err != nil || mtu <= 0 {
+			continue
+		}
+		if limit := mtu - f.overhead; p.Traffic.PacketSize > limit {
+			msg := fmt.Sprintf("must be at most %d here: %s has MTU %d", limit, f.name, mtu)
+			if f.overhead > 0 {
+				msg += fmt.Sprintf(" and GTP-U adds up to %d bytes", f.overhead)
+			}
+			verr.Errors = append(verr.Errors, profile.FieldError{Field: "traffic.packetSize", Message: msg})
+			return
+		}
+	}
 }
 
 func hasField(verr *profile.ValidationError, field string) bool {
@@ -558,6 +591,7 @@ func (r *run) startDataplane() error {
 		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3,
 		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
+		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
 	})
 	if err := dp.Start(); err != nil {
 		return fmt.Errorf("start data plane: %w", err)

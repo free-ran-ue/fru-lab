@@ -35,8 +35,16 @@ type fakeAddrs struct {
 }
 
 func (f *fakeAddrs) HostIPv4s() ([]netip.Addr, error) { return f.host, nil }
+
+// MTU is 1500, or 9000 for an interface named jumbo.
+func (f *fakeAddrs) MTU(iface string) (int, error) {
+	if iface == "jumbo" {
+		return 9000, nil
+	}
+	return 1500, nil
+}
 func (f *fakeAddrs) Interfaces() ([]string, error) {
-	return []string{"lo", "eth-n2", "eth-n3", "eth-n6"}, nil
+	return []string{"lo", "eth-n2", "eth-n3", "eth-n6", "jumbo"}, nil
 }
 
 func (f *fakeAddrs) EnsureRoute(iface string, dst netip.Prefix, gw netip.Addr) (bool, error) {
@@ -429,6 +437,33 @@ func TestValidateFlagsUnknownInterface(t *testing.T) {
 	_, err = c.Validate(p)
 	require.ErrorAs(t, err, &verr)
 	require.Len(t, verr.Errors, 2)
+}
+
+// The packet must fit the interfaces: on N3 with up to 44 bytes of
+// GTP-U around it, on N6 as it is.
+func TestValidateFitsThePacketToTheMTU(t *testing.T) {
+	c := newTestController(&fakeAddrs{}, newFakeDialer(nil))
+	p := testProfile()
+	p.Traffic.PacketSize = 1456
+	_, err := c.Validate(p)
+	require.NoError(t, err)
+
+	p.Traffic.PacketSize = 1457
+	_, err = c.Validate(p)
+	var verr *profile.ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []profile.FieldError{{Field: "traffic.packetSize",
+		Message: "must be at most 1456 here: eth-n3 has MTU 1500 and GTP-U adds up to 44 bytes"}}, verr.Errors)
+
+	p.Network.N3.Interface = "jumbo"
+	p.Traffic.PacketSize = 8000
+	_, err = c.Validate(p)
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []profile.FieldError{{Field: "traffic.packetSize", Message: "must be at most 1500 here: eth-n6 has MTU 1500"}}, verr.Errors)
+
+	p.Network.N6.Interface = "jumbo"
+	_, err = c.Validate(p)
+	require.NoError(t, err)
 }
 
 func TestStopWhileConfiguringSkipsN2(t *testing.T) {

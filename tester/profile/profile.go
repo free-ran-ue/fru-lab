@@ -14,6 +14,16 @@ type Profile struct {
 	Rates   Rates       `json:"rates"`
 }
 
+// MaxPacketSize is the largest inner packet a profile may ask for, for
+// jumbo-frame networks; the real limit is the interfaces' MTU minus
+// GtpOverhead, which the run checks against the host.
+const MaxPacketSize = 9000
+
+// GtpOverhead is what N3 adds to an inner packet: outer IPv4 (20), UDP
+// (8), GTP-U (8) and, on downlink from gtp5g, the optional fields and a
+// PDU Session Container (8).
+const GtpOverhead = 44
+
 // Traffic is what every established UE sends and receives, at a fixed
 // rate (design Q10). PacketSize is the inner IP packet's length; Port is
 // the UDP port used at the N6 sink and at the (simulated) UEs.
@@ -25,6 +35,9 @@ type Traffic struct {
 	// MaxDurationMin stops the run this many minutes after it started,
 	// exactly like pressing Stop; 0 = run until Stop (design N6).
 	MaxDurationMin int `json:"maxDurationMin"`
+	// DlBatchMs sends each UE this many milliseconds of downlink in a row,
+	// so UDP GSO can send them as one; 0 = one packet per UE in turn.
+	DlBatchMs int `json:"dlBatchMs"`
 }
 
 type Scale struct {
