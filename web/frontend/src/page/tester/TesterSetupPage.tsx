@@ -277,12 +277,15 @@ export default function TesterSetupPage() {
                 <Field label="Packet size (bytes, inner IP)" path="traffic.packetSize" numeric {...fieldProps} />
                 <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
                 <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />
+                <Field label="Downlink batch (ms per UE, 0 = off)" path="traffic.dlBatchMs" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
                 {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>,
                 downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>.
                 0 turns a direction off. With a max run time the run stops itself, exactly as if you pressed Stop.
+                {' '}Downlink batch sends each UE that many milliseconds of packets in a row, so the kernel can take them in one
+                send (UDP GSO); larger saves CPU but makes each UE&apos;s downlink burstier.
               </p>
             </section>
 

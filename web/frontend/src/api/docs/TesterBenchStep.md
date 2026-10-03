@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **pps** | **number** |  | [default to undefined]
 **bps** | **number** | Inner IP bits per second. | [default to undefined]
 **sendErrors** | **number** |  | [default to undefined]
+**gso** | **boolean** | Whether the senders did use UDP GSO (false if the kernel refused it). | [default to undefined]
 
 ## Example
 
@@ -20,6 +21,7 @@ const instance: TesterBenchStep = {
     pps,
     bps,
     sendErrors,
+    gso,
 };
 ```
 

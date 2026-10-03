@@ -30,6 +30,9 @@ var (
 type Settings struct {
 	PacketSize  int `json:"packetSize"`  // inner IP packet bytes, 64..1400 like a run
 	StepSeconds int `json:"stepSeconds"` // measuring time per sender count, 1..30
+	// Gso sends with UDP GSO, as runs do; off measures plain sendmmsg, as
+	// on a kernel without GSO.
+	Gso bool `json:"gso"`
 }
 
 func (s Settings) validate() error {
@@ -48,6 +51,7 @@ type Step struct {
 	Pps        float64 `json:"pps"`
 	Bps        float64 `json:"bps"` // inner IP bits per second, like a run's rates
 	SendErrors uint64  `json:"sendErrors"`
+	Gso        bool    `json:"gso"` // the senders did use UDP GSO
 }
 
 const (
@@ -194,7 +198,7 @@ func measureSend(senders int, s Settings, warm, dur time.Duration) (Step, error)
 	e := dataplane.New(dataplane.Config{
 		RunID: 1, UeCount: senders, GnbN3IPs: []netip.Addr{benchGnb},
 		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: sinkPort, PacketSize: s.PacketSize,
-		UlBps: 400e9, Senders: senders, Receivers: 1,
+		UlBps: 400e9, Senders: senders, Receivers: 1, NoOffload: !s.Gso,
 	})
 	if err := e.Start(); err != nil {
 		return Step{}, err
@@ -209,7 +213,8 @@ func measureSend(senders int, s Settings, warm, dur time.Duration) (Step, error)
 	time.Sleep(dur)
 	after, t1 := e.Snapshot().Ul, time.Now()
 	pps := float64(after.TxPackets-before.TxPackets) / t1.Sub(t0).Seconds()
-	return Step{Senders: senders, Pps: pps, Bps: pps * float64(s.PacketSize*8), SendErrors: after.SendErrors - before.SendErrors}, nil
+	return Step{Senders: senders, Pps: pps, Bps: pps * float64(s.PacketSize*8), SendErrors: after.SendErrors - before.SendErrors,
+		Gso: e.GSOSenders() == senders}, nil
 }
 
 func kernelRelease() string {

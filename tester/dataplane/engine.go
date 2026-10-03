@@ -42,6 +42,15 @@ type Config struct {
 	// Receivers is how many sink sockets (SO_REUSEPORT, one reader each)
 	// receive uplink; 0 = one per CPU, at most maxReceivers.
 	Receivers int
+	// DlBatch groups each UE's downlink: a sender sends one UE this much
+	// time's worth of packets in a row, so UDP GSO can hand them to the
+	// kernel in one piece (a GSO send has one destination, and downlink
+	// goes to each UE's own IP). 0 sends every UE one packet in turn.
+	// Uplink needs no grouping: all of a gNB's uplink goes to the UPF.
+	DlBatch time.Duration
+	// NoOffload turns off UDP GSO, as on a kernel without it (before
+	// 4.18); the Bench uses it to show what it adds.
+	NoOffload bool
 	Now       func() time.Time
 }
 
@@ -54,10 +63,18 @@ const rcvBuf = 8 << 20
 // socket, so senders sharing one top out at what a single thread sends.
 // Senders and readers move up to batchSize packets per system call
 // (sendmmsg / recvmmsg).
+//
+// With UDP GSO a message carries up to gsoMaxSegments packets to one
+// destination, which the kernel (or a NIC with USO) splits into packets,
+// so one sendmmsg moves hundreds of packets for one trip through the
+// socket and routing code.
 const (
-	batchSize    = 32
-	maxReceivers = 16
-	readBufLen   = 2048 // largest packet we read: 1400 inner + GTP-U + extensions
+	batchSize      = 32
+	gsoMaxSegments = 64      // the kernel's UDP_MAX_SEGMENTS
+	maxDatagram    = 65507   // the most UDP payload one IPv4 send carries
+	gsoArena       = 8 << 16 // bytes a GSO sender batches: 8 full messages
+	maxReceivers   = 16
+	readBufLen     = 2048 // largest packet we read: 1400 inner + GTP-U + extensions
 )
 
 // historyPoints bounds Snapshot.Series, which covers the whole run.
@@ -110,6 +127,7 @@ type Engine struct {
 	ul, dl   dirStats
 	active   atomic.Int64
 	stopped  atomic.Bool
+	gsoOn    atomic.Int64 // senders using UDP GSO
 
 	cancel  context.CancelFunc
 	senders sync.WaitGroup
@@ -287,16 +305,22 @@ func growReadBuffer(c *net.UDPConn) {
 
 // pace sends round-robin over a shard's flows at bps per flow, using a
 // token bucket refilled every millisecond and capped at 10 ms of burst.
-// Packets go out in batches through b (sendmmsg).
+// Downlink gives each flow DlBatch's worth of packets in a row. Packets go
+// out in batches through b (sendmmsg).
 func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	defer e.senders.Done()
 	pktBits := float64(e.cfg.PacketSize * 8)
+	run := 1 // packets a flow gets in a row
+	if b.dl {
+		run = max(1, int(bps*e.cfg.DlBatch.Seconds()/pktBits))
+	}
 	tick := time.NewTicker(time.Millisecond)
 	defer tick.Stop()
 	var flows []*flow
 	var version uint64
 	var budget float64
-	rr := 0
+	var cur *flow
+	rr, left := 0, 0
 	last := time.Now()
 	for {
 		select {
@@ -310,8 +334,12 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 			budget = min(budget+rate*now.Sub(last).Seconds(), rate*0.01+pktBits)
 			last = now
 			for budget >= pktBits && len(flows) > 0 {
-				b.add(flows[rr%len(flows)])
-				rr++
+				if left == 0 {
+					cur, left = flows[rr%len(flows)], run
+					rr++
+				}
+				b.add(cur)
+				left--
 				budget -= pktBits
 			}
 			b.flush()
@@ -326,6 +354,7 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 // packets to the same destination share a message.
 type batcher struct {
 	e     *Engine
+	conn  *net.UDPConn
 	pc    *ipv4.PacketConn
 	dl    bool
 	gnb   int // uplink: the gNB it sends for; downlink: -1 (each flow's own)
@@ -338,6 +367,7 @@ type batcher struct {
 	dst   []netip.AddrPort
 	gnbOf []int // per message: the gNB its bytes count for
 	n     int   // messages in use
+	gso   int   // packets one message may carry: >1 with UDP GSO
 	now   int64 // the batch's send time, taken once per batch
 	stats *workerStats
 	acc   accumulator
@@ -348,7 +378,7 @@ func (e *Engine) newBatcher(conn *net.UDPConn, dl bool, gnb int) *batcher {
 	if dl {
 		d = &e.dl
 	}
-	b := &batcher{e: e, pc: ipv4.NewPacketConn(conn), dl: dl, gnb: gnb,
+	b := &batcher{e: e, conn: conn, pc: ipv4.NewPacketConn(conn), dl: dl, gnb: gnb,
 		seg:  e.cfg.PacketSize + gtpHeaderLen, // uplink carries the G-PDU header
 		msgs: make([]ipv4.Message, batchSize), first: make([]int, batchSize), segs: make([]int, batchSize),
 		dst: make([]netip.AddrPort, batchSize), gnbOf: make([]int, batchSize),
@@ -356,7 +386,14 @@ func (e *Engine) newBatcher(conn *net.UDPConn, dl bool, gnb int) *batcher {
 	if dl {
 		b.seg = e.cfg.PacketSize - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
 	}
-	b.arena = make([]byte, batchSize*b.seg)
+	slots := batchSize
+	if !e.cfg.NoOffload && setGSO(conn, b.seg) == nil {
+		b.gso = min(gsoMaxSegments, maxDatagram/b.seg)
+		slots = max(slots, gsoArena/b.seg)
+		e.gsoOn.Add(1)
+	}
+	b.gso = max(b.gso, 1)
+	b.arena = make([]byte, slots*b.seg)
 	b.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
 	for i := range b.msgs {
 		b.msgs[i].Buffers = [][]byte{nil}
@@ -373,7 +410,7 @@ func (b *batcher) add(f *flow) {
 	if b.dl {
 		dst, addr, gnb = f.dlTo, f.dlAddr, f.gnb
 	}
-	newMsg := b.n == 0 || b.dst[b.n-1] != dst || b.segs[b.n-1] == b.maxSegs()
+	newMsg := b.n == 0 || b.dst[b.n-1] != dst || b.segs[b.n-1] == b.gso
 	if b.used == b.slots() || (newMsg && b.n == batchSize) {
 		b.flush()
 		newMsg = true
@@ -399,11 +436,47 @@ func (b *batcher) add(f *flow) {
 	b.segs[b.n-1]++
 }
 
-// maxSegs is how many packets one message may carry.
-func (b *batcher) maxSegs() int { return 1 }
+// setGSO makes the kernel split every send on conn into seg-byte UDP
+// packets (UDP_SEGMENT); a send of one seg is a plain packet.
+func setGSO(conn *net.UDPConn, seg int) error {
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	var serr error
+	if err := raw.Control(func(fd uintptr) {
+		serr = unix.SetsockoptInt(int(fd), unix.SOL_UDP, unix.UDP_SEGMENT, seg)
+	}); err != nil {
+		return err
+	}
+	return serr
+}
+
+// gsoRefused reports a send the kernel refused because of GSO: EIO when
+// the route's device cannot take it, EINVAL when a packet does not fit
+// the path MTU.
+func gsoRefused(err error) bool { return errors.Is(err, unix.EIO) || errors.Is(err, unix.EINVAL) }
+
+// dropGSO turns GSO off for good and sends messages from off on one
+// packet at a time.
+func (b *batcher) dropGSO(off int) {
+	b.gso = 1
+	b.e.gsoOn.Add(-1)
+	_ = setGSO(b.conn, 0)
+	for i := off; i < b.n; i++ {
+		for p := b.first[i]; p < b.first[i]+b.segs[i]; p++ {
+			if _, err := b.pc.WriteTo(b.arena[p*b.seg:(p+1)*b.seg], nil, b.msgs[i].Addr); err != nil {
+				b.acc.errors++
+				continue
+			}
+			b.acc.add(b.gnbOf[i], uint64(b.e.cfg.PacketSize))
+		}
+	}
+}
 
 // flush sends what is batched; a message the kernel refuses is counted as
-// a send error and the rest still go out. The batch's counts are then
+// a send error and the rest still go out; if the kernel refuses GSO, it is
+// turned off and the batch resent packet by packet. The batch's counts are then
 // published to the sender's own stats.
 func (b *batcher) flush() {
 	for i := range b.n {
@@ -415,6 +488,10 @@ func (b *batcher) flush() {
 			b.count(i)
 		}
 		off += sent
+		if err != nil && off < b.n && b.gso > 1 && gsoRefused(err) {
+			b.dropGSO(off)
+			break
+		}
 		if err != nil || sent == 0 {
 			if off < b.n {
 				b.acc.errors += uint64(b.segs[off])
@@ -535,6 +612,9 @@ func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
 		}
 	}
 }
+
+// GSOSenders is how many senders use UDP GSO.
+func (e *Engine) GSOSenders() int { return int(e.gsoOn.Load()) }
 
 // Stop halts the senders at once (design Q12), lets in-flight packets
 // arrive for drain, then closes the sockets.

@@ -87,11 +87,15 @@ func TestAFailedStepFailsTheBench(t *testing.T) {
 	require.Contains(t, r.Result().Error, "address already in use")
 }
 
-// The real measurement: one sender on loopback, briefly.
+// The real measurement: one sender on loopback, briefly, with and
+// without UDP GSO.
 func TestMeasureSendOnLoopback(t *testing.T) {
-	step, err := measureSend(1, Settings{PacketSize: 1400, StepSeconds: 1}, 100*time.Millisecond, 300*time.Millisecond)
-	require.NoError(t, err)
-	require.Equal(t, 1, step.Senders)
-	require.Greater(t, step.Pps, 1000.0)
-	require.InDelta(t, step.Pps*1400*8, step.Bps, 1)
+	for _, gso := range []bool{false, true} {
+		step, err := measureSend(1, Settings{PacketSize: 1400, StepSeconds: 1, Gso: gso}, 100*time.Millisecond, 300*time.Millisecond)
+		require.NoError(t, err)
+		require.Equal(t, 1, step.Senders)
+		require.Greater(t, step.Pps, 1000.0)
+		require.InDelta(t, step.Pps*1400*8, step.Bps, 1)
+		require.Equal(t, gso, step.Gso, "this kernel supports UDP GSO")
+	}
 }

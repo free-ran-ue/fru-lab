@@ -32,6 +32,7 @@ export default function TesterBenchPage() {
   const [result, setResult] = useState<TesterBenchResult | null>(null)
   const [packetSize, setPacketSize] = useState(1400)
   const [stepSeconds, setStepSeconds] = useState(3)
+  const [gso, setGso] = useState(true)
   const [isStarting, setIsStarting] = useState(false)
 
   const load = useCallback(async () => {
@@ -56,7 +57,7 @@ export default function TesterBenchPage() {
   async function handleStart() {
     setIsStarting(true)
     try {
-      const response = await api.testerBenchStart({ packetSize, stepSeconds })
+      const response = await api.testerBenchStart({ packetSize, stepSeconds, gso })
       setResult(response.data)
       addSuccess('Bench started')
     } catch (error) {
@@ -107,7 +108,18 @@ export default function TesterBenchPage() {
               <input id="bench-seconds" className={styles.input} type="number" min={1} max={30}
                 value={stepSeconds} onChange={(e) => setStepSeconds(e.target.valueAsNumber)} disabled={isRunning} />
             </div>
+            <div className={styles.field}>
+              <label htmlFor="bench-gso">UDP GSO</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'normal' }}>
+                <input id="bench-gso" type="checkbox" checked={gso} onChange={(e) => setGso(e.target.checked)} disabled={isRunning} />
+                On, as runs send
+              </label>
+            </div>
           </div>
+          <p className={styles.hint}>
+            UDP GSO hands the kernel up to 64 packets per send, which it (or a NIC with USO) splits; turn it off to see
+            plain sendmmsg, as on a kernel older than 4.18.
+          </p>
           <p className={styles.hint}>
             {result ? <>This host: <b>{result.cpus} CPUs</b>{result.kernel && <>, kernel <span className={styles.mono}>{result.kernel}</span></>}. </> : null}
             A bench takes about {Math.ceil(estimateSec)} s and cannot run while a test run is active (they would compete for the CPUs).
@@ -128,6 +140,7 @@ export default function TesterBenchPage() {
               <p className={styles.subtitle} style={{ maxWidth: 'none', marginBottom: '1rem' }}>
                 One sender (about one CPU): <b>{formatBps(first.bps)}</b> ({kpps(first.pps)} packets/s).
                 {' '}Best: <b>{formatBps(best.bps)}</b> with {best.senders} senders, {efficiency(best, first)} of linear scaling.
+                {' '}UDP GSO was <b>{result?.settings.gso ? (steps.every((s) => s.gso) ? 'on' : 'asked for but refused by the kernel') : 'off'}</b>.
                 {' '}Packets per second, not bytes, are the limit: bigger packets give more Gbps.
               </p>
             )}

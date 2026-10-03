@@ -235,6 +235,9 @@ func validateTraffic(p Profile, verr *ValidationError) {
 	if t.MaxDurationMin < 0 || t.MaxDurationMin > 7*24*60 {
 		verr.add("traffic.maxDurationMin", "must be between 0 (no limit) and 10080 (7 days)")
 	}
+	if t.DlBatchMs < 0 || t.DlBatchMs > 10 {
+		verr.add("traffic.dlBatchMs", "must be between 0 (off) and 10")
+	}
 	if strings.TrimSpace(n6.Interface) == "" {
 		verr.add("network.n6.interface", "must not be empty")
 	}

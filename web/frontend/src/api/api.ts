@@ -139,6 +139,10 @@ export interface TesterBenchSettings {
      * Measuring time per sender count, 1..30.
      */
     'stepSeconds': number;
+    /**
+     * Send with UDP GSO, as runs do; off measures plain sendmmsg, as on a kernel without GSO.
+     */
+    'gso': boolean;
 }
 export interface TesterBenchStep {
     'senders': number;
@@ -148,6 +152,10 @@ export interface TesterBenchStep {
      */
     'bps': number;
     'sendErrors': number;
+    /**
+     * Whether the senders did use UDP GSO (false if the kernel refused it).
+     */
+    'gso': boolean;
 }
 export interface TesterCauseCount {
     'cause': string;
@@ -447,6 +455,10 @@ export interface TesterTraffic {
      * Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
      */
     'maxDurationMin': number;
+    /**
+     * Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
+     */
+    'dlBatchMs': number;
 }
 /**
  * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.

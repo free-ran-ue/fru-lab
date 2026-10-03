@@ -25,6 +25,9 @@ type Traffic struct {
 	// MaxDurationMin stops the run this many minutes after it started,
 	// exactly like pressing Stop; 0 = run until Stop (design N6).
 	MaxDurationMin int `json:"maxDurationMin"`
+	// DlBatchMs sends each UE this many milliseconds of downlink in a row,
+	// so UDP GSO can send them as one; 0 = one packet per UE in turn.
+	DlBatchMs int `json:"dlBatchMs"`
 }
 
 type Scale struct {

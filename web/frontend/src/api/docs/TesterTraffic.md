@@ -11,6 +11,7 @@ Name | Type | Description | Notes
 **packetSize** | **number** |  | [default to undefined]
 **port** | **number** | UDP port at the N6 sink and at the UEs. | [default to undefined]
 **maxDurationMin** | **number** | Stop the run this many minutes after it started, exactly like pressing Stop. 0 &#x3D; run until Stop. | [default to undefined]
+**dlBatchMs** | **number** | Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 &#x3D; one packet per UE in turn. Uplink needs no grouping. | [default to undefined]
 
 ## Example
 
@@ -23,6 +24,7 @@ const instance: TesterTraffic = {
     packetSize,
     port,
     maxDurationMin,
+    dlBatchMs,
 };
 ```
 

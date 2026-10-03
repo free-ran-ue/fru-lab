@@ -201,12 +201,14 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 		p := sampleProfile()
 		p.Rates.Deregistration.RatePerSec = 0
 		p.Traffic.MaxDurationMin = bad
+		p.Traffic.DlBatchMs = bad
 		_, err := Expand(p, nil)
 		var verr *ValidationError
 		require.ErrorAs(t, err, &verr)
 		require.ElementsMatch(t, []FieldError{
 			{Field: "rates.deregistration.ratePerSec", Message: "must be between 1 and 100000"},
 			{Field: "traffic.maxDurationMin", Message: "must be between 0 (no limit) and 10080 (7 days)"},
+			{Field: "traffic.dlBatchMs", Message: "must be between 0 (off) and 10"},
 		}, verr.Errors, "maxDurationMin %d", bad)
 	}
 }
