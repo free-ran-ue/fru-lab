@@ -202,6 +202,7 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 		p.Rates.Deregistration.RatePerSec = 0
 		p.Traffic.MaxDurationMin = bad
 		p.Traffic.DlBatchMs = bad
+		p.Traffic.Senders, p.Traffic.SinkSockets = bad, bad
 		_, err := Expand(p, nil)
 		var verr *ValidationError
 		require.ErrorAs(t, err, &verr)
@@ -209,6 +210,8 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 			{Field: "rates.deregistration.ratePerSec", Message: "must be between 1 and 100000"},
 			{Field: "traffic.maxDurationMin", Message: "must be between 0 (no limit) and 10080 (7 days)"},
 			{Field: "traffic.dlBatchMs", Message: "must be between 0 (off) and 10"},
+			{Field: "traffic.senders", Message: "must be between 0 (one per CPU) and 1024"},
+			{Field: "traffic.sinkSockets", Message: "must be between 0 (one per CPU) and 1024"},
 		}, verr.Errors, "maxDurationMin %d", bad)
 	}
 }

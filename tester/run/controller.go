@@ -592,6 +592,7 @@ func (r *run) startDataplane() error {
 		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
+		Senders: t.Senders, Receivers: t.SinkSockets,
 	})
 	if err := dp.Start(); err != nil {
 		return fmt.Errorf("start data plane: %w", err)

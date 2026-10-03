@@ -38,6 +38,11 @@ type Traffic struct {
 	// DlBatchMs sends each UE this many milliseconds of downlink in a row,
 	// so UDP GSO can send them as one; 0 = one packet per UE in turn.
 	DlBatchMs int `json:"dlBatchMs"`
+	// Senders is how many sender threads (each with its own socket) send
+	// downlink, and as many uplink spread over the gNBs; SinkSockets is how
+	// many sockets receive uplink. 0 = one per CPU.
+	Senders     int `json:"senders"`
+	SinkSockets int `json:"sinkSockets"`
 }
 
 type Scale struct {

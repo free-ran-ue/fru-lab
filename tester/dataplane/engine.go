@@ -104,13 +104,20 @@ type shard struct {
 	mu      sync.Mutex
 	flows   []*flow
 	version atomic.Uint64
+	added   chan struct{} // signalled on add, so an idle sender can sleep until then
 }
+
+func newShard() *shard { return &shard{added: make(chan struct{}, 1)} }
 
 func (s *shard) add(f *flow) {
 	s.mu.Lock()
 	s.flows = append(s.flows, f)
 	s.mu.Unlock()
 	s.version.Add(1)
+	select {
+	case s.added <- struct{}{}:
+	default:
+	}
 }
 
 func (s *shard) load() []*flow {
@@ -163,10 +170,10 @@ func New(cfg Config) *Engine {
 	gnbs := max(1, len(cfg.GnbN3IPs))
 	e.ulPerGnb = max(1, (cfg.Senders+gnbs-1)/gnbs)
 	for range len(cfg.GnbN3IPs) * e.ulPerGnb {
-		e.ulShards = append(e.ulShards, &shard{})
+		e.ulShards = append(e.ulShards, newShard())
 	}
 	for range cfg.Senders {
-		e.dlShards = append(e.dlShards, &shard{})
+		e.dlShards = append(e.dlShards, newShard())
 	}
 	return e
 }
@@ -311,9 +318,15 @@ func growReadBuffer(c *net.UDPConn) {
 }
 
 // pace sends round-robin over a shard's flows at bps per flow, using a
-// token bucket refilled every millisecond and capped at 10 ms of burst.
-// Downlink gives each flow DlBatch's worth of packets in a row. Packets go
-// out in batches through b (sendmmsg).
+// token bucket capped at 10 ms of burst. Downlink gives each flow
+// DlBatch's worth of packets in a row. Packets go out in batches through b
+// (sendmmsg).
+//
+// A sender wakes every millisecond, or less often when its flows are so
+// slow that a millisecond holds under minWake packets (at most every
+// maxWakeEvery); a sender without flows sleeps until one is added. With a
+// sender per CPU on a big host, most senders of a light run would
+// otherwise wake a thousand times a second for nothing.
 func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	defer e.senders.Done()
 	pktBits := float64(e.cfg.PacketSize * 8)
@@ -321,26 +334,41 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	if b.dl {
 		run = max(1, int(bps*e.cfg.DlBatch.Seconds()/pktBits))
 	}
-	tick := time.NewTicker(time.Millisecond)
-	defer tick.Stop()
 	var flows []*flow
 	var version uint64
 	var budget float64
 	var cur *flow
 	rr, left := 0, 0
+	every := time.Millisecond
+	timer := time.NewTimer(every)
+	defer timer.Stop()
 	last := time.Now()
 	for {
+		if len(flows) == 0 { // idle: sleep until a flow arrives
+			select {
+			case <-ctx.Done():
+				return
+			case <-sh.added:
+			}
+			version, flows = sh.version.Load(), sh.load()
+			every = wakeEvery(bps*float64(len(flows)), pktBits)
+			timer.Reset(every)
+			last, budget = time.Now(), 0
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-tick.C:
+		case now := <-timer.C:
 			if v := sh.version.Load(); v != version {
 				version, flows = v, sh.load()
+				every = wakeEvery(bps*float64(len(flows)), pktBits)
 			}
+			timer.Reset(every)
 			rate := bps * float64(len(flows))
 			budget = min(budget+rate*now.Sub(last).Seconds(), rate*0.01+pktBits)
 			last = now
-			for budget >= pktBits && len(flows) > 0 {
+			for budget >= pktBits {
 				if left == 0 {
 					cur, left = flows[rr%len(flows)], run
 					rr++
@@ -352,6 +380,21 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 			b.flush()
 		}
 	}
+}
+
+const (
+	minWake      = 8 // packets a wake-up should have to send
+	maxWakeEvery = 4 * time.Millisecond
+)
+
+// wakeEvery is how often a sender at rate bits/s wakes: every millisecond,
+// or as long as minWake packets take, up to maxWakeEvery.
+func wakeEvery(rate, pktBits float64) time.Duration {
+	if rate <= 0 {
+		return maxWakeEvery
+	}
+	d := time.Duration(minWake * pktBits / rate * float64(time.Second))
+	return min(max(d, time.Millisecond), maxWakeEvery)
 }
 
 // batcher builds packets in place and sends them with one sendmmsg.

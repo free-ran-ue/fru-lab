@@ -278,6 +278,8 @@ export default function TesterSetupPage() {
                 <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
                 <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />
                 <Field label="Downlink batch (ms per UE, 0 = off)" path="traffic.dlBatchMs" numeric {...fieldProps} />
+                <Field label="Senders (0 = one per CPU)" path="traffic.senders" numeric {...fieldProps} />
+                <Field label="Uplink sink sockets (0 = one per CPU)" path="traffic.sinkSockets" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
@@ -288,6 +290,9 @@ export default function TesterSetupPage() {
                 {' '}With a max run time the run stops itself, exactly as if you pressed Stop.
                 {' '}Downlink batch sends each UE that many milliseconds of packets in a row, so the kernel can take them in one
                 send (UDP GSO); larger saves CPU but makes each UE&apos;s downlink burstier.
+                {' '}Senders and sink sockets default to one per CPU. On a big host far fewer are enough for the tester (the
+                Bench page shows how much one sender sends), but when the UPF runs on the same host its packet work runs on
+                the senders&apos; CPUs, so fewer senders also give it fewer CPUs.
               </p>
             </section>
 

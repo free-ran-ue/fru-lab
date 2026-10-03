@@ -462,6 +462,14 @@ export interface TesterTraffic {
      * Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
      */
     'dlBatchMs': number;
+    /**
+     * Sender threads for downlink, and as many for uplink spread over the gNBs, each with its own socket (0..1024). 0 = one per CPU.
+     */
+    'senders': number;
+    /**
+     * Sockets that receive uplink at the sink, one reader each (0..1024). 0 = one per CPU.
+     */
+    'sinkSockets': number;
 }
 /**
  * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.

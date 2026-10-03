@@ -1352,7 +1352,7 @@ components:
     TesterTraffic:
       type: object
       description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
-      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs]
+      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs, senders, sinkSockets]
       properties:
         ulMbps:
           type: number
@@ -1378,6 +1378,14 @@ components:
           type: integer
           description: Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
           example: 1
+        senders:
+          type: integer
+          description: Sender threads for downlink, and as many for uplink spread over the gNBs, each with its own socket (0..1024). 0 = one per CPU.
+          example: 0
+        sinkSockets:
+          type: integer
+          description: Sockets that receive uplink at the sink, one reader each (0..1024). 0 = one per CPU.
+          example: 0
     TesterUeTemplate:
       type: object
       description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.

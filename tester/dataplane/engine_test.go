@@ -344,6 +344,14 @@ func TestBatchedSendingLosesNothingAtAHighRate(t *testing.T) {
 	}
 }
 
+func TestWakeEveryFollowsTheRate(t *testing.T) {
+	pkt := 1400.0 * 8
+	require.Equal(t, time.Millisecond, wakeEvery(100e6, pkt), "8.9 packets per ms: every ms")
+	require.Equal(t, 2*time.Millisecond, wakeEvery(44.8e6, pkt).Round(time.Millisecond), "4 per ms: every 2 ms")
+	require.Equal(t, maxWakeEvery, wakeEvery(1e6, pkt), "slow: at most every 4 ms")
+	require.Equal(t, maxWakeEvery, wakeEvery(0, pkt))
+}
+
 // gsoBatcher is an uplink batcher for gNB 127.0.0.11 with 3 UEs, sending
 // to a plain socket that stands in for the UPF.
 func gsoBatcher(t *testing.T, noGSO bool) (*batcher, []*flow, *net.UDPConn) {
