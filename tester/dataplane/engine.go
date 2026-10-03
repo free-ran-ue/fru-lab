@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -65,11 +66,12 @@ const historyPoints = 600
 type flow struct {
 	ue             uint32
 	gnb            int
-	dlTeid         uint32 // the tunnel downlink must arrive in
-	upf            netip.AddrPort
-	dlTo           netip.AddrPort
-	ul             []byte       // G-PDU template, written only by its UL sender
-	dl             []byte       // UDP payload template, written only by its DL sender
+	dlTeid         uint32         // the tunnel downlink must arrive in
+	upf            netip.AddrPort // where its uplink goes
+	dlTo           netip.AddrPort // where its downlink goes
+	upfAddr        *net.UDPAddr   // upf and dlTo, made once: a send takes a net.Addr
+	dlAddr         *net.UDPAddr
+	ulHead         []byte       // its G-PDU, IP and UDP headers; the tester header and zeros follow
 	ulSeq, dlSeq   uint32       // sender-owned
 	ulLast, dlLast atomic.Int64 // last seq seen, -1 = none; several readers may see one UE
 }
@@ -243,12 +245,12 @@ func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN
 	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3}
 	f.ulLast.Store(-1)
 	f.dlLast.Store(-1)
-	f.ul = ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)
-	f.dl = make([]byte, e.cfg.PacketSize-ipv4HeaderLen-udpHeaderLen)
+	f.ulHead = slices.Clone(ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)[:ulHeadLen])
 	f.dlTo = netip.AddrPortFrom(ueIP, e.cfg.Port)
 	if e.cfg.DlTarget != nil {
 		f.dlTo = e.cfg.DlTarget(ueIP)
 	}
+	f.upfAddr, f.dlAddr = net.UDPAddrFromAddrPort(f.upf), net.UDPAddrFromAddrPort(f.dlTo)
 	if e.cfg.StartDelay <= 0 {
 		e.activate(f)
 		return
@@ -285,7 +287,7 @@ func growReadBuffer(c *net.UDPConn) {
 
 // pace sends round-robin over a shard's flows at bps per flow, using a
 // token bucket refilled every millisecond and capped at 10 ms of burst.
-// Packets go out batchSize at a time through b (sendmmsg).
+// Packets go out in batches through b (sendmmsg).
 func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	defer e.senders.Done()
 	pktBits := float64(e.cfg.PacketSize * 8)
@@ -311,26 +313,32 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 				b.add(flows[rr%len(flows)])
 				rr++
 				budget -= pktBits
-				if b.full() {
-					b.flush()
-				}
 			}
 			b.flush()
 		}
 	}
 }
 
-// batcher fills up to batchSize packets, each in its own buffer (the
-// per-UE templates stay read-only), and sends them with one sendmmsg.
+// batcher builds packets in place and sends them with one sendmmsg.
+// Packets are all seg bytes and sit back to back in one arena, so a
+// packet's slot always starts at a multiple of seg: only its headers are
+// ever written, and the rest of every slot stays zero. Consecutive
+// packets to the same destination share a message.
 type batcher struct {
 	e     *Engine
 	pc    *ipv4.PacketConn
 	dl    bool
 	gnb   int // uplink: the gNB it sends for; downlink: -1 (each flow's own)
+	seg   int // UDP payload bytes of one packet
+	arena []byte
+	used  int // packets in the arena
 	msgs  []ipv4.Message
-	flows []*flow
-	addrs []net.UDPAddr
-	n     int
+	first []int // per message: its first packet's slot
+	segs  []int // per message: how many packets
+	dst   []netip.AddrPort
+	gnbOf []int // per message: the gNB its bytes count for
+	n     int   // messages in use
+	now   int64 // the batch's send time, taken once per batch
 	stats *workerStats
 	acc   accumulator
 }
@@ -341,70 +349,90 @@ func (e *Engine) newBatcher(conn *net.UDPConn, dl bool, gnb int) *batcher {
 		d = &e.dl
 	}
 	b := &batcher{e: e, pc: ipv4.NewPacketConn(conn), dl: dl, gnb: gnb,
-		msgs: make([]ipv4.Message, batchSize), flows: make([]*flow, batchSize), addrs: make([]net.UDPAddr, batchSize),
+		seg:  e.cfg.PacketSize + gtpHeaderLen, // uplink carries the G-PDU header
+		msgs: make([]ipv4.Message, batchSize), first: make([]int, batchSize), segs: make([]int, batchSize),
+		dst: make([]netip.AddrPort, batchSize), gnbOf: make([]int, batchSize),
 		stats: d.addSender(len(e.cfg.GnbN3IPs))}
-	b.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
-	size := e.cfg.PacketSize + gtpHeaderLen // uplink carries the G-PDU header
 	if dl {
-		size = e.cfg.PacketSize - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
+		b.seg = e.cfg.PacketSize - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
 	}
+	b.arena = make([]byte, batchSize*b.seg)
+	b.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
 	for i := range b.msgs {
-		b.msgs[i].Buffers = [][]byte{make([]byte, size)}
+		b.msgs[i].Buffers = [][]byte{nil}
 	}
 	return b
 }
 
-func (b *batcher) full() bool { return b.n == batchSize }
+func (b *batcher) slots() int { return len(b.arena) / b.seg }
 
-// add copies f's template into the next slot and stamps its header.
+// add writes one packet of f into the next slot, flushing first if the
+// batch is full.
 func (b *batcher) add(f *flow) {
-	buf := b.msgs[b.n].Buffers[0]
-	now := b.e.cfg.Now().UnixNano()
+	dst, addr, gnb := f.upf, f.upfAddr, b.gnb
 	if b.dl {
-		copy(buf, f.dl)
-		putHeader(buf, header{runID: b.e.cfg.RunID, ue: f.ue, dl: true, seq: f.dlSeq, txNanos: now})
-		f.dlSeq++
-		b.addrs[b.n] = *net.UDPAddrFromAddrPort(f.dlTo)
-	} else {
-		copy(buf, f.ul)
-		putHeader(buf[gtpHeaderLen+ipv4HeaderLen+udpHeaderLen:], header{runID: b.e.cfg.RunID, ue: f.ue, seq: f.ulSeq, txNanos: now})
-		f.ulSeq++
-		b.addrs[b.n] = *net.UDPAddrFromAddrPort(f.upf)
+		dst, addr, gnb = f.dlTo, f.dlAddr, f.gnb
 	}
-	b.msgs[b.n].Addr = &b.addrs[b.n]
-	b.flows[b.n] = f
-	b.n++
+	newMsg := b.n == 0 || b.dst[b.n-1] != dst || b.segs[b.n-1] == b.maxSegs()
+	if b.used == b.slots() || (newMsg && b.n == batchSize) {
+		b.flush()
+		newMsg = true
+	}
+	if b.used == 0 {
+		b.now = b.e.cfg.Now().UnixNano()
+	}
+	if newMsg {
+		b.first[b.n], b.segs[b.n], b.dst[b.n], b.gnbOf[b.n] = b.used, 0, dst, gnb
+		b.msgs[b.n].Addr = addr
+		b.n++
+	}
+	slot := b.arena[b.used*b.seg : (b.used+1)*b.seg]
+	if b.dl {
+		putHeader(slot, header{runID: b.e.cfg.RunID, ue: f.ue, dl: true, seq: f.dlSeq, txNanos: b.now})
+		f.dlSeq++
+	} else {
+		copy(slot, f.ulHead)
+		putHeader(slot[ulHeadLen:], header{runID: b.e.cfg.RunID, ue: f.ue, seq: f.ulSeq, txNanos: b.now})
+		f.ulSeq++
+	}
+	b.used++
+	b.segs[b.n-1]++
 }
+
+// maxSegs is how many packets one message may carry.
+func (b *batcher) maxSegs() int { return 1 }
 
 // flush sends what is batched; a message the kernel refuses is counted as
 // a send error and the rest still go out. The batch's counts are then
 // published to the sender's own stats.
 func (b *batcher) flush() {
+	for i := range b.n {
+		b.msgs[i].Buffers[0] = b.arena[b.first[i]*b.seg : (b.first[i]+b.segs[i])*b.seg]
+	}
 	for off := 0; off < b.n; {
 		sent, err := b.pc.WriteBatch(b.msgs[off:b.n], 0)
-		for _, f := range b.flows[off : off+sent] {
-			b.count(f)
+		for i := off; i < off+sent; i++ {
+			b.count(i)
 		}
 		off += sent
-		if err != nil {
+		if err != nil || sent == 0 {
 			if off < b.n {
-				b.acc.errors++
+				b.acc.errors += uint64(b.segs[off])
 				off++ // skip the message that failed
 			} else {
 				break
 			}
 		}
 	}
-	b.n = 0
+	b.n, b.used = 0, 0
 	b.acc.publish(b.stats)
 }
 
-func (b *batcher) count(f *flow) {
-	g := b.gnb
-	if b.dl {
-		g = f.gnb
+// count counts message i as sent.
+func (b *batcher) count(i int) {
+	for range b.segs[i] {
+		b.acc.add(b.gnbOf[i], uint64(b.e.cfg.PacketSize))
 	}
-	b.acc.add(g, uint64(b.e.cfg.PacketSize))
 }
 
 // reader reads one socket batchSize packets at a time (recvmmsg) and
@@ -416,6 +444,7 @@ type reader struct {
 	stats *workerStats
 	acc   accumulator
 	lat   []time.Duration // the batch's one-way delays
+	now   int64           // when the batch was read, taken once per batch
 }
 
 func (e *Engine) newReader(conn *net.UDPConn, d *dirStats) *reader {
@@ -439,6 +468,7 @@ func (r *reader) loop(handle func([]byte)) {
 			}
 			continue
 		}
+		r.now = r.e.cfg.Now().UnixNano()
 		for _, m := range r.msgs[:n] {
 			handle(m.Buffers[0][:m.N])
 		}
@@ -489,7 +519,7 @@ func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
 		return
 	}
 	r.acc.add(f.gnb, uint64(ipLen))
-	r.lat = append(r.lat, time.Duration(e.cfg.Now().UnixNano()-h.txNanos))
+	r.lat = append(r.lat, time.Duration(r.now-h.txNanos))
 	last := &f.ulLast
 	if dl {
 		last = &f.dlLast
