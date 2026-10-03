@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"tester/dataplane"
+	"tester/profile"
 )
 
 var (
@@ -28,7 +29,7 @@ var (
 
 // Settings is what the Bench page sets.
 type Settings struct {
-	PacketSize  int `json:"packetSize"`  // inner IP packet bytes, 64..1400 like a run
+	PacketSize  int `json:"packetSize"`  // inner IP packet bytes, 64..9000 like a run
 	StepSeconds int `json:"stepSeconds"` // measuring time per sender count, 1..30
 	// Gso sends with UDP GSO, as runs do; off measures plain sendmmsg, as
 	// on a kernel without GSO.
@@ -36,8 +37,8 @@ type Settings struct {
 }
 
 func (s Settings) validate() error {
-	if s.PacketSize < 64 || s.PacketSize > 1400 {
-		return fmt.Errorf("%w: packetSize must be between 64 and 1400", ErrInvalidSettings)
+	if s.PacketSize < 64 || s.PacketSize > profile.MaxPacketSize {
+		return fmt.Errorf("%w: packetSize must be between 64 and %d", ErrInvalidSettings, profile.MaxPacketSize)
 	}
 	if s.StepSeconds < 1 || s.StepSeconds > 30 {
 		return fmt.Errorf("%w: stepSeconds must be between 1 and 30", ErrInvalidSettings)

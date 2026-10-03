@@ -171,7 +171,7 @@ func TestExpandValidatesTrafficAndN6(t *testing.T) {
 	require.ElementsMatch(t, []FieldError{
 		{Field: "traffic.ulMbps", Message: "must be between 0 and 10000"},
 		{Field: "traffic.dlMbps", Message: "must be between 0 and 10000"},
-		{Field: "traffic.packetSize", Message: "must be between 64 and 1400"},
+		{Field: "traffic.packetSize", Message: "must be between 64 and 9000"},
 		{Field: "traffic.port", Message: "must be between 1 and 65535"},
 		{Field: "network.n6.interface", Message: "must not be empty"},
 		{Field: "network.n6.sinkIp", Message: `"x" is not an IPv4 address`},

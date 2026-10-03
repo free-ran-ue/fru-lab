@@ -1364,6 +1364,7 @@ components:
           example: 5
         packetSize:
           type: integer
+          description: 64..9000, and at most the N3 interface's MTU minus 44 (GTP-U and its headers) and the N6 interface's MTU; 1456 on a 1500 MTU network.
           example: 1400
         port:
           type: integer
@@ -1843,7 +1844,7 @@ components:
       properties:
         packetSize:
           type: integer
-          description: Inner IP packet bytes, 64..1400.
+          description: Inner IP packet bytes, 64..9000.
           example: 1400
         stepSeconds:
           type: integer

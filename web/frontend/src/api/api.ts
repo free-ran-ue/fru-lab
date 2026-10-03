@@ -132,7 +132,7 @@ export type TesterBenchResultStateEnum = typeof TesterBenchResultStateEnum[keyof
 
 export interface TesterBenchSettings {
     /**
-     * Inner IP packet bytes, 64..1400.
+     * Inner IP packet bytes, 64..9000.
      */
     'packetSize': number;
     /**
@@ -446,6 +446,9 @@ export interface TesterTraffic {
      * Per UE; 0 disables downlink.
      */
     'dlMbps': number;
+    /**
+     * 64..9000, and at most the N3 interface\'s MTU minus 44 (GTP-U and its headers) and the N6 interface\'s MTU; 1456 on a 1500 MTU network.
+     */
     'packetSize': number;
     /**
      * UDP port at the N6 sink and at the UEs.

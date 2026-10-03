@@ -25,7 +25,7 @@ type Config struct {
 	GnbN3IPs   []netip.Addr // by gNB index; UL leaves from and DL arrives at <ip>:2152
 	SinkIP     netip.Addr   // N6 side: UL is addressed to it, DL is sent from it
 	Port       uint16       // UDP port of the sink and of the (simulated) UEs
-	PacketSize int          // inner IP packet bytes, MinPacketSize..1400
+	PacketSize int          // inner IP packet bytes, MinPacketSize..9000
 	UlBps      float64      // per UE; 0 disables uplink
 	DlBps      float64      // per UE; 0 disables downlink
 	// DlTarget is where a UE's downlink is sent. nil means the UE's own
@@ -71,10 +71,10 @@ const rcvBuf = 8 << 20
 // socket and routing code.
 const (
 	batchSize      = 32
-	gsoMaxSegments = 64      // the kernel's UDP_MAX_SEGMENTS
-	maxDatagram    = 65507   // the most UDP payload one IPv4 send carries
-	gsoArena       = 8 << 16 // bytes a GSO sender batches: 8 full messages
-	readBufLen     = 2048    // largest packet we read: 1400 inner + GTP-U + extensions
+	gsoMaxSegments = 64        // the kernel's UDP_MAX_SEGMENTS
+	maxDatagram    = 65507     // the most UDP payload one IPv4 send carries
+	gsoArena       = 8 << 16   // bytes a GSO sender batches: 8 full messages
+	readBufLen     = 9000 + 64 // largest packet we read: a profile's largest inner packet + GTP-U + extensions
 )
 
 // With UDP GRO the kernel hands a reader up to 64 KB of one flow's

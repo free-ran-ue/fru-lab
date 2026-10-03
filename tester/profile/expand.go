@@ -226,8 +226,8 @@ func validateTraffic(p Profile, verr *ValidationError) {
 			verr.add(field, "must be between 0 and 10000")
 		}
 	}
-	if t.PacketSize < 64 || t.PacketSize > 1400 {
-		verr.add("traffic.packetSize", "must be between 64 and 1400")
+	if t.PacketSize < 64 || t.PacketSize > MaxPacketSize {
+		verr.add("traffic.packetSize", fmt.Sprintf("must be between 64 and %d", MaxPacketSize))
 	}
 	if t.Port < 1 || t.Port > 65535 {
 		verr.add("traffic.port", "must be between 1 and 65535")

@@ -283,7 +283,9 @@ export default function TesterSetupPage() {
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
                 {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>,
                 downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>.
-                0 turns a direction off. With a max run time the run stops itself, exactly as if you pressed Stop.
+                0 turns a direction off. The packet size can go up to the network&apos;s MTU minus 44 bytes of GTP-U (1456 at
+                MTU 1500); bigger packets carry more for the same packets per second.
+                {' '}With a max run time the run stops itself, exactly as if you pressed Stop.
                 {' '}Downlink batch sends each UE that many milliseconds of packets in a row, so the kernel can take them in one
                 send (UDP GSO); larger saves CPU but makes each UE&apos;s downlink burstier.
               </p>

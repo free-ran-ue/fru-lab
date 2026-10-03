@@ -100,7 +100,7 @@ export default function TesterBenchPage() {
           <div className={styles.fieldGrid}>
             <div className={styles.field}>
               <label htmlFor="bench-size">Packet size (bytes, inner IP)</label>
-              <input id="bench-size" className={styles.input} type="number" min={64} max={1400}
+              <input id="bench-size" className={styles.input} type="number" min={64} max={9000}
                 value={packetSize} onChange={(e) => setPacketSize(e.target.valueAsNumber)} disabled={isRunning} />
             </div>
             <div className={styles.field}>

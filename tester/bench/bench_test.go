@@ -18,7 +18,7 @@ func TestSenderCountsDoubleUpToTheCPUs(t *testing.T) {
 
 func TestSettingsAreValidated(t *testing.T) {
 	r := NewRunner(func() bool { return false })
-	for _, bad := range []Settings{{PacketSize: 63, StepSeconds: 3}, {PacketSize: 1401, StepSeconds: 3}, {PacketSize: 1400, StepSeconds: 0}, {PacketSize: 1400, StepSeconds: 31}} {
+	for _, bad := range []Settings{{PacketSize: 63, StepSeconds: 3}, {PacketSize: 9001, StepSeconds: 3}, {PacketSize: 1400, StepSeconds: 0}, {PacketSize: 1400, StepSeconds: 31}} {
 		_, err := r.Start(bad)
 		require.ErrorIs(t, err, ErrInvalidSettings, "%+v", bad)
 	}

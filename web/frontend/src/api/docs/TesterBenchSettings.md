@@ -5,7 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**packetSize** | **number** | Inner IP packet bytes, 64..1400. | [default to undefined]
+**packetSize** | **number** | Inner IP packet bytes, 64..9000. | [default to undefined]
 **stepSeconds** | **number** | Measuring time per sender count, 1..30. | [default to undefined]
 **gso** | **boolean** | Send with UDP GSO, as runs do; off measures plain sendmmsg, as on a kernel without GSO. | [default to undefined]
 
