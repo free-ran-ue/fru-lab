@@ -41,7 +41,7 @@ type Config struct {
 	// uplink splits them over the gNBs, at least one per gNB.
 	Senders int
 	// Receivers is how many sink sockets (SO_REUSEPORT, one reader each)
-	// receive uplink; 0 = one per CPU, at most maxReceivers.
+	// receive uplink; 0 = one per CPU.
 	Receivers int
 	// DlBatch groups each UE's downlink: a sender sends one UE this much
 	// time's worth of packets in a row, so UDP GSO can hand them to the
@@ -74,8 +74,7 @@ const (
 	gsoMaxSegments = 64      // the kernel's UDP_MAX_SEGMENTS
 	maxDatagram    = 65507   // the most UDP payload one IPv4 send carries
 	gsoArena       = 8 << 16 // bytes a GSO sender batches: 8 full messages
-	maxReceivers   = 16
-	readBufLen     = 2048 // largest packet we read: 1400 inner + GTP-U + extensions
+	readBufLen     = 2048    // largest packet we read: 1400 inner + GTP-U + extensions
 )
 
 // With UDP GRO the kernel hands a reader up to 64 KB of one flow's
@@ -158,7 +157,7 @@ func New(cfg Config) *Engine {
 		cfg.Senders = runtime.NumCPU()
 	}
 	if cfg.Receivers <= 0 {
-		cfg.Receivers = min(runtime.NumCPU(), maxReceivers)
+		cfg.Receivers = runtime.NumCPU()
 	}
 	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints)}
 	gnbs := max(1, len(cfg.GnbN3IPs))
