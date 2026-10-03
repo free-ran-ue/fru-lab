@@ -106,14 +106,21 @@ type N2Network struct {
 }
 
 // N3Network gives each gNB its own N3 IP from Cidr (design N1); the data
-// plane sends uplink from it and the UPF sends downlink to it.
+// plane sends uplink from it and the UPF sends downlink to it. With
+// IpsPerGnb > 1 a gNB gets that many consecutive IPs and hands them out as
+// downlink tunnel addresses in turn, so its downlink is several
+// connections that can be spread over CPUs (0 counts as 1).
 type N3Network struct {
 	Interface string `json:"interface"`
 	Cidr      string `json:"cidr"`
 	StartIP   string `json:"startIp"`
 	UpfIP     string `json:"upfIp"`
 	UpfPort   int    `json:"upfPort"`
+	IpsPerGnb int    `json:"ipsPerGnb"`
 }
+
+// N3IPsPerGnb is IpsPerGnb, with 0 (a profile from before it existed) as 1.
+func (n N3Network) N3IPsPerGnb() int { return max(1, n.IpsPerGnb) }
 
 type Rates struct {
 	N2           StageRate     `json:"n2"`

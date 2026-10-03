@@ -23,6 +23,12 @@ type Config struct {
 	RunID      uint32
 	UeCount    int
 	GnbN3IPs   []netip.Addr // by gNB index; UL leaves from and DL arrives at <ip>:2152
+	// MoreN3IPs are, by gNB index, further N3 addresses the gNB hands out
+	// as downlink tunnel endpoints. All of one address's downlink comes
+	// from UPF:2152 to <ip>:2152, a single connection that a NIC queue,
+	// the kernel and one reader handle alone; several addresses per gNB
+	// spread it. Empty = GnbN3IPs only.
+	MoreN3IPs [][]netip.Addr
 	SinkIP     netip.Addr   // N6 side: UL is addressed to it, DL is sent from it
 	Port       uint16       // UDP port of the sink and of the (simulated) UEs
 	PacketSize int          // inner IP packet bytes, MinPacketSize..9000
@@ -91,6 +97,7 @@ type flow struct {
 	ue             uint32
 	gnb            int
 	dlTeid         uint32         // the tunnel downlink must arrive in
+	dlAt           netip.Addr     // the gNB address downlink must arrive at
 	upf            netip.AddrPort // where its uplink goes
 	dlTo           netip.AddrPort // where its downlink goes
 	upfAddr        *net.UDPAddr   // upf and dlTo, made once: a send takes a net.Addr
@@ -126,10 +133,17 @@ func (s *shard) load() []*flow {
 	return append([]*flow(nil), s.flows...)
 }
 
+// n3Socket receives the downlink sent to one of a gNB's N3 addresses.
+type n3Socket struct {
+	conn *net.UDPConn
+	gnb  int
+	ip   netip.Addr
+}
+
 // Engine runs one run's data plane.
 type Engine struct {
 	cfg   Config
-	n3    []*net.UDPConn // per gNB, :2152: receives downlink
+	n3    []n3Socket     // per gNB N3 address, :2152: receives downlink
 	ulOut []*net.UDPConn // per uplink shard, on its gNB's N3 IP
 	sinks []*net.UDPConn // SO_REUSEPORT group on the sink IP:port: receives uplink
 	dlOut []*net.UDPConn // per downlink shard, on the sink IP
@@ -223,14 +237,16 @@ func listenReusePort(addr netip.AddrPort) (*net.UDPConn, error) {
 // Start binds every socket and starts the receivers, senders and sampler.
 // It fails if a gNB N3 IP or the sink IP is not on this host.
 func (e *Engine) Start() error {
-	for i, ip := range e.cfg.GnbN3IPs {
-		c, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, GtpPort)))
-		if err != nil {
-			e.closeSockets()
-			return fmt.Errorf("bind gNB-%d N3 %s:%d: %w", i+1, ip, GtpPort, err)
+	for g, ips := range e.n3Addrs() {
+		for _, ip := range ips {
+			c, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, GtpPort)))
+			if err != nil {
+				e.closeSockets()
+				return fmt.Errorf("bind gNB-%d N3 %s:%d: %w", g+1, ip, GtpPort, err)
+			}
+			growReadBuffer(c)
+			e.n3 = append(e.n3, n3Socket{conn: c, gnb: g, ip: ip})
 		}
-		growReadBuffer(c)
-		e.n3 = append(e.n3, c)
 	}
 	for i := range e.ulShards {
 		ip := e.cfg.GnbN3IPs[i/e.ulPerGnb]
@@ -262,10 +278,10 @@ func (e *Engine) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
 	e.started = e.cfg.Now()
-	for g, conn := range e.n3 {
-		r := e.newReader(conn, &e.dl)
+	for _, s := range e.n3 {
+		r := e.newReader(s.conn, &e.dl)
 		e.readers.Add(1)
-		go r.readN3(g)
+		go r.readN3(s.gnb, s.ip)
 	}
 	for _, conn := range e.sinks {
 		r := e.newReader(conn, &e.ul)
@@ -291,13 +307,29 @@ func (e *Engine) Start() error {
 	return nil
 }
 
+// n3Addrs is every gNB's N3 addresses, its main one first.
+func (e *Engine) n3Addrs() [][]netip.Addr {
+	out := make([][]netip.Addr, len(e.cfg.GnbN3IPs))
+	for g, ip := range e.cfg.GnbN3IPs {
+		out[g] = []netip.Addr{ip}
+		if g < len(e.cfg.MoreN3IPs) {
+			out[g] = append(out[g], e.cfg.MoreN3IPs[g]...)
+		}
+	}
+	return out
+}
+
 // AddUE starts traffic for an established UE (design Q9: as soon as its
-// PDU session is up, without waiting for the others).
-func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort) {
+// PDU session is up, without waiting for the others). dlAt is the gNB
+// address its downlink tunnel ends at; invalid means the gNB's main one.
+func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, dlAt netip.Addr, upfN3 netip.AddrPort) {
 	if e.stopped.Load() {
 		return // a PDU accept that lands while the run is stopping
 	}
-	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3}
+	if !dlAt.IsValid() {
+		dlAt = e.cfg.GnbN3IPs[gnb]
+	}
+	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, dlAt: dlAt, upf: upfN3}
 	f.ulLast.Store(-1)
 	f.dlLast.Store(-1)
 	f.ulHead = slices.Clone(ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)[:ulHeadLen])
@@ -687,28 +719,29 @@ func (r *reader) loop(handle func([]byte)) {
 // masquerades), so the UE comes from the header.
 func (r *reader) readSink() {
 	r.loop(func(payload []byte) {
-		r.receive(payload, false, ipv4HeaderLen+udpHeaderLen+len(payload), -1, 0)
+		r.receive(payload, false, ipv4HeaderLen+udpHeaderLen+len(payload), -1, netip.Addr{}, 0)
 	})
 }
 
-// readN3 receives downlink G-PDUs addressed to one gNB's N3 IP.
-func (r *reader) readN3(g int) {
+// readN3 receives downlink G-PDUs addressed to N3 address at of gNB g.
+func (r *reader) readN3(g int, at netip.Addr) {
 	r.loop(func(b []byte) {
 		teid, inner, err := parseGpdu(b)
 		if err != nil {
 			return
 		}
 		if payload, ok := udpPayload(inner); ok {
-			r.receive(payload, true, len(inner), g, teid)
+			r.receive(payload, true, len(inner), g, at, teid)
 		}
 	})
 }
 
-// receive counts one packet that came back. For downlink, gnb and teid
-// are where it arrived; a UE's downlink in another tunnel or at another
-// gNB is a forwarding fault, counted as misrouted rather than received
-// (this also keeps each flow's dlLast owned by its own gNB's reader).
-func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
+// receive counts one packet that came back. For downlink, gnb, at and
+// teid are where it arrived; a UE's downlink in another tunnel, at another
+// gNB or at another of its gNB's addresses is a forwarding fault, counted
+// as misrouted rather than received (this also keeps each flow's dlLast
+// owned by one reader).
+func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, at netip.Addr, teid uint32) {
 	e := r.e
 	h, ok := parseHeader(payload)
 	if !ok || h.runID != e.cfg.RunID || h.dl != dl || int(h.ue) >= len(e.flows) {
@@ -718,7 +751,7 @@ func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
 	if f == nil {
 		return
 	}
-	if dl && (teid != f.dlTeid || gnb != f.gnb) {
+	if dl && (teid != f.dlTeid || gnb != f.gnb || at != f.dlAt) {
 		r.acc.misrouted++
 		return
 	}
@@ -761,8 +794,8 @@ func (e *Engine) Stop(drain time.Duration) {
 }
 
 func (e *Engine) closeSockets() {
-	for _, c := range e.n3 {
-		_ = c.Close()
+	for _, s := range e.n3 {
+		_ = s.conn.Close()
 	}
 	for _, group := range [][]*net.UDPConn{e.ulOut, e.sinks, e.dlOut} {
 		for _, c := range group {

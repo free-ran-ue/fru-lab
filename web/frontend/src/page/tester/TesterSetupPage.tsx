@@ -254,8 +254,14 @@ export default function TesterSetupPage() {
                 <Field label="First gNB IP" path="network.n3.startIp" {...fieldProps} />
                 <Field label="UPF IP" path="network.n3.upfIp" {...fieldProps} />
                 <Field label="UPF port" path="network.n3.upfPort" numeric {...fieldProps} />
+                <Field label="N3 IPs per gNB" path="network.n3.ipsPerGnb" numeric {...fieldProps} />
               </div>
-              <p className={styles.hint}>Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it.</p>
+              <p className={styles.hint}>
+                Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it. All of one IP&apos;s
+                downlink is a single connection (UPF:2152 to gNB:2152), which a NIC queue, the kernel and the tester each
+                handle on one CPU. With more IPs per gNB, the gNB hands them out to its UEs&apos; PDU sessions in turn, so
+                its downlink is spread over that many connections.
+              </p>
             </section>
 
             <section className={styles.card}>
@@ -348,7 +354,7 @@ export default function TesterSetupPage() {
                           <td>{g.name}</td>
                           <td className={styles.mono}>{g.gnbId}</td>
                           <td className={styles.mono}>{g.n2Ip}/{plan.n2Prefix}</td>
-                          <td className={styles.mono}>{g.n3Ip}/{plan.n3Prefix}</td>
+                          <td className={styles.mono}>{g.n3Ip}/{plan.n3Prefix}{g.n3Ips.length > 1 && ` +${g.n3Ips.length - 1}`}</td>
                           <td>{g.ueCount ? `${g.ueCount} (#${g.ueFirst}–${g.ueLast})` : '0'}</td>
                           <td className={styles.mono}>{g.ueCount ? `${g.firstSupi} … ${g.lastSupi.slice(-4)}` : '—'}</td>
                         </tr>

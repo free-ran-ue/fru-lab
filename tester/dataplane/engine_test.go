@@ -156,7 +156,7 @@ func startEngineWith(t *testing.T, mbps float64, dropEvery uint64, tune func(*Co
 		g := ue / 2
 		ueIP := netip.AddrFrom4([4]byte{10, 60, 0, byte(ue + 1)})
 		upf.route(ue, ueRoute{dlTeid: uint32(100 + ue), gnb: netip.AddrPortFrom(gnbs[g], GtpPort), ueIP: ueIP})
-		e.AddUE(ue, g, ueIP, uint32(0x1000+ue), uint32(100+ue), upf.n3Addr())
+		e.AddUE(ue, g, ueIP, uint32(0x1000+ue), uint32(100+ue), netip.Addr{}, upf.n3Addr())
 	}
 	return e, upf
 }
@@ -226,7 +226,7 @@ func TestTrafficStartsAfterTheStartDelay(t *testing.T) {
 	require.NoError(t, e.Start())
 	ueIP := netip.MustParseAddr("10.60.0.1")
 	upf.route(0, ueRoute{dlTeid: 100, gnb: netip.AddrPortFrom(gnbs[0], GtpPort), ueIP: ueIP})
-	e.AddUE(0, 0, ueIP, 0x1000, 100, upf.n3Addr())
+	e.AddUE(0, 0, ueIP, 0x1000, 100, netip.Addr{}, upf.n3Addr())
 
 	time.Sleep(150 * time.Millisecond)
 	s := e.Snapshot()
@@ -255,7 +255,7 @@ func TestDownlinkInTheWrongTunnelIsMisroutedNotReceived(t *testing.T) {
 	require.NoError(t, e.Start())
 	ueIP := netip.MustParseAddr("10.60.0.1")
 	upf.route(0, ueRoute{dlTeid: 100, gnb: netip.AddrPortFrom(gnbs[0], GtpPort), ueIP: ueIP})
-	e.AddUE(0, 0, ueIP, 0x1000, 100, upf.n3Addr())
+	e.AddUE(0, 0, ueIP, 0x1000, 100, netip.Addr{}, upf.n3Addr())
 	time.Sleep(300 * time.Millisecond)
 	e.Stop(50 * time.Millisecond)
 	s := e.Snapshot()
@@ -376,7 +376,7 @@ func gsoBatcher(t *testing.T, noGSO bool) (*batcher, []*flow, *net.UDPConn) {
 	t.Cleanup(func() { _ = conn.Close() })
 	var flows []*flow
 	for ue := range 3 {
-		e.AddUE(ue, 0, netip.AddrFrom4([4]byte{10, 60, 0, byte(ue + 1)}), uint32(0x100+ue), 1, upf.LocalAddr().(*net.UDPAddr).AddrPort())
+		e.AddUE(ue, 0, netip.AddrFrom4([4]byte{10, 60, 0, byte(ue + 1)}), uint32(0x100+ue), 1, netip.Addr{}, upf.LocalAddr().(*net.UDPAddr).AddrPort())
 		flows = append(flows, e.flows[ue].Load())
 	}
 	return e.newBatcher(conn, false, 0), flows, upf
@@ -575,4 +575,42 @@ func TestGROSocketGetsOneMessageWithTheSegmentLength(t *testing.T) {
 	require.Equal(t, 5*300, n)
 	require.Equal(t, 300, groSegment(oob[:oobn]))
 	require.Zero(t, groSegment(nil))
+}
+
+// A gNB with several N3 addresses gets each UE's downlink at the address
+// it handed out for that UE; downlink at another of its addresses is
+// misrouted, like downlink at another gNB.
+func TestDownlinkArrivesAtEachUEsOwnN3Address(t *testing.T) {
+	for _, wrongAddress := range []bool{false, true} {
+		t.Run(fmt.Sprintf("wrongAddress=%v", wrongAddress), func(t *testing.T) {
+			sink := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), freePort(t, "127.0.0.1"))
+			upf := newFakeUPF(t, sink, 0)
+			main, more := netip.MustParseAddr("127.0.0.11"), netip.MustParseAddr("127.0.0.13")
+			e := New(Config{RunID: 5, UeCount: 2, GnbN3IPs: []netip.Addr{main}, MoreN3IPs: [][]netip.Addr{{more}},
+				SinkIP: sink.Addr(), Port: sink.Port(), PacketSize: 500, DlBps: 1e6,
+				DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() }})
+			require.NoError(t, e.Start())
+			require.Len(t, e.n3, 2)
+			for ue, at := range []netip.Addr{main, more} {
+				ueIP := netip.AddrFrom4([4]byte{10, 60, 0, byte(ue + 1)})
+				sendTo := at
+				if wrongAddress {
+					sendTo = []netip.Addr{more, main}[ue]
+				}
+				upf.route(ue, ueRoute{dlTeid: uint32(100 + ue), gnb: netip.AddrPortFrom(sendTo, GtpPort), ueIP: ueIP})
+				e.AddUE(ue, 0, ueIP, uint32(0x1000+ue), uint32(100+ue), at, upf.n3Addr())
+			}
+			time.Sleep(300 * time.Millisecond)
+			e.Stop(50 * time.Millisecond)
+			s := e.Snapshot().Dl
+			require.Positive(t, s.TxPackets)
+			if wrongAddress {
+				require.Zero(t, s.RxPackets)
+				require.Equal(t, s.TxPackets, s.Misrouted)
+			} else {
+				require.Equal(t, s.TxPackets, s.RxPackets)
+				require.Zero(t, s.Misrouted)
+			}
+		})
+	}
 }

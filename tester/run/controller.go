@@ -45,7 +45,7 @@ type Deps struct {
 // Dataplane is the slice of *dataplane.Engine a run uses.
 type Dataplane interface {
 	Start() error
-	AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort)
+	AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, dlAt netip.Addr, upfN3 netip.AddrPort)
 	Stop(drain time.Duration)
 	Snapshot() dataplane.Snapshot
 }
@@ -536,10 +536,17 @@ func (r *run) skipUnfinished() {
 func (r *run) configureIPs() error {
 	nw := r.profile.Network
 	for _, g := range r.plan.Gnbs {
-		for _, a := range []struct {
+		addrs := []struct {
 			iface, ip string
 			bits      int
-		}{{nw.N2.Interface, g.N2IP, r.plan.N2Prefix}, {nw.N3.Interface, g.N3IP, r.plan.N3Prefix}} {
+		}{{nw.N2.Interface, g.N2IP, r.plan.N2Prefix}}
+		for _, ip := range g.N3IPs {
+			addrs = append(addrs, struct {
+				iface, ip string
+				bits      int
+			}{nw.N3.Interface, ip, r.plan.N3Prefix})
+		}
+		for _, a := range addrs {
 			if r.ctx.Err() != nil {
 				return nil // stopping; execute() skips N2 and removes what was added
 			}
@@ -584,11 +591,15 @@ func (r *run) addAddr(iface string, prefix netip.Prefix) error {
 func (r *run) startDataplane() error {
 	t, n6 := r.profile.Traffic, r.profile.Network.N6
 	n3 := make([]netip.Addr, len(r.plan.Gnbs))
+	more := make([][]netip.Addr, len(r.plan.Gnbs))
 	for i, g := range r.plan.Gnbs {
 		n3[i] = netip.MustParseAddr(g.N3IP)
+		for _, ip := range g.N3IPs[1:] {
+			more[i] = append(more[i], netip.MustParseAddr(ip))
+		}
 	}
 	dp := r.deps.NewDataplane(dataplane.Config{
-		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3,
+		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3, MoreN3IPs: more,
 		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
@@ -913,7 +924,10 @@ func (r *run) attemptN2(n *n2Round, i int) {
 // startGnb wraps an up gNB's association and releases its UEs into the
 // registration stage.
 func (r *run) startGnb(i int, conn gnb.Conn, id gnb.Identity) {
-	n3, _ := netip.ParseAddr(r.plan.Gnbs[i].N3IP)
+	var n3 []netip.Addr
+	for _, s := range r.plan.Gnbs[i].N3IPs {
+		n3 = append(n3, netip.MustParseAddr(s))
+	}
 	assoc := gnb.NewAssociation(conn, id, n3, &r.teids)
 	r.mu.Lock()
 	r.conns[i] = conn
@@ -1093,7 +1107,7 @@ func (r *run) startTraffic(dp Dataplane, i int, out procedure.Outcome) {
 	if !upf.IsValid() {
 		upf = netip.MustParseAddr(r.profile.Network.N3.UpfIP)
 	}
-	dp.AddUE(i, r.ues[i].spec.Gnb, out.UeIP, binary.BigEndian.Uint32(out.Pdu.UlTeid), out.Pdu.DlTeid,
+	dp.AddUE(i, r.ues[i].spec.Gnb, out.UeIP, binary.BigEndian.Uint32(out.Pdu.UlTeid), out.Pdu.DlTeid, out.Pdu.GnbN3IP,
 		netip.AddrPortFrom(upf, uint16(r.profile.Network.N3.UpfPort)))
 }
 

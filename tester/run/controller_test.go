@@ -74,14 +74,15 @@ type fakeFlow struct {
 	gnb            int
 	ueIP           netip.Addr
 	ulTeid, dlTeid uint32
+	dlAt           netip.Addr
 	upf            netip.AddrPort
 }
 
 func (d *fakeDataplane) Start() error { return d.startErr }
-func (d *fakeDataplane) AddUE(ue, gnb int, ueIP netip.Addr, ul, dl uint32, upf netip.AddrPort) {
+func (d *fakeDataplane) AddUE(ue, gnb int, ueIP netip.Addr, ul, dl uint32, dlAt netip.Addr, upf netip.AddrPort) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.ues[ue] = fakeFlow{gnb: gnb, ueIP: ueIP, ulTeid: ul, dlTeid: dl, upf: upf}
+	d.ues[ue] = fakeFlow{gnb: gnb, ueIP: ueIP, ulTeid: ul, dlTeid: dl, dlAt: dlAt, upf: upf}
 }
 func (d *fakeDataplane) Stop(time.Duration) { d.mu.Lock(); d.stopped = true; d.mu.Unlock() }
 func (d *fakeDataplane) Snapshot() dataplane.Snapshot {

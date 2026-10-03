@@ -216,6 +216,36 @@ func TestEstablishedUesStartTrafficWithTheirTunnel(t *testing.T) {
 	require.True(t, dp.stopped)
 }
 
+// A gNB with two N3 IPs adds both, hands them out to its UEs' PDU
+// sessions in turn, and the data plane expects each UE's downlink at the
+// one its session got.
+func TestGnbsHandOutSeveralN3IPsInTurn(t *testing.T) {
+	c, addrs, dp := newE2EControllerWithDataplane(amfDialer{amf: newFakeAMF(nil)}, nil)
+	p := e2eProfile()
+	p.Network.N3.IpsPerGnb = 2
+	plan, err := c.Validate(p)
+	require.NoError(t, err)
+	gnbs := plan.Gnbs
+	_, err = c.Start(p)
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+
+	require.Equal(t, [][]netip.Addr{{netip.MustParseAddr(gnbs[0].N3IPs[1])}, {netip.MustParseAddr(gnbs[1].N3IPs[1])}, {netip.MustParseAddr(gnbs[2].N3IPs[1])}}, dp.cfg.MoreN3IPs)
+	present, _ := addrs.snapshot()
+	for _, g := range gnbs {
+		for _, ip := range g.N3IPs {
+			require.Contains(t, present, netip.MustParsePrefix(ip+"/24"), "every N3 IP is on the host")
+		}
+	}
+	used := map[netip.Addr]int{}
+	for ue, f := range dp.flows() {
+		require.Contains(t, gnbs[f.gnb].N3IPs, f.dlAt.String(), "UE %d's downlink ends at one of its gNB's IPs", ue)
+		used[f.dlAt]++
+	}
+	require.Len(t, used, 6, "both IPs of every gNB are used")
+	stopAndWait(t, c)
+}
+
 func TestDataplaneStartFailureFailsTheRunAndRollsBack(t *testing.T) {
 	c, addrs, _ := newE2EControllerWithDataplane(amfDialer{amf: newFakeAMF(nil)}, errors.New("bind gNB-1 N3 10.0.2.10:2152: address already in use"))
 	_, err := c.Start(e2eProfile())

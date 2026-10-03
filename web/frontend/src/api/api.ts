@@ -184,6 +184,10 @@ export interface TesterGnbSpec {
     'gnbId': string;
     'n2Ip': string;
     'n3Ip': string;
+    /**
+     * All of the gNB\'s N3 IPs, n3Ip first.
+     */
+    'n3Ips': Array<string>;
     'ueCount': number;
     /**
      * 1-based index of the first UE on this gNB; 0 when it has none.
@@ -202,6 +206,10 @@ export interface TesterGnbStatus {
     'gnbId': string;
     'n2Ip': string;
     'n3Ip': string;
+    /**
+     * All of the gNB\'s N3 IPs, n3Ip first.
+     */
+    'n3Ips': Array<string>;
     'ueCount': number;
     /**
      * 1-based index of the first UE on this gNB; 0 when it has none.
@@ -332,6 +340,10 @@ export interface TesterProfileNetworkN3 {
     'startIp': string;
     'upfIp': string;
     'upfPort': number;
+    /**
+     * N3 IPs per gNB (1..64; 0 counts as 1). A gNB hands them out to its UEs\' PDU sessions in turn as downlink tunnel addresses, so its downlink is several connections that NICs, the kernel and the tester can spread over CPUs.
+     */
+    'ipsPerGnb': number;
 }
 /**
  * Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.

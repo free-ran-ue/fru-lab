@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **gnbId** | **string** |  | [default to undefined]
 **n2Ip** | **string** |  | [default to undefined]
 **n3Ip** | **string** |  | [default to undefined]
+**n3Ips** | **Array&lt;string&gt;** | All of the gNB\&#39;s N3 IPs, n3Ip first. | [default to undefined]
 **ueCount** | **number** |  | [default to undefined]
 **ueFirst** | **number** | 1-based index of the first UE on this gNB; 0 when it has none. | [default to undefined]
 **ueLast** | **number** |  | [default to undefined]
@@ -33,6 +34,7 @@ const instance: TesterGnbStatus = {
     gnbId,
     n2Ip,
     n3Ip,
+    n3Ips,
     ueCount,
     ueFirst,
     ueLast,
