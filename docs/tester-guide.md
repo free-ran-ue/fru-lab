@@ -57,12 +57,6 @@ fru-lab's free5GC has no separate N6 network: the UPF sends decapsulated uplink 
 
 Rates are per UE (uplink and downlink Mbps, 0 = off, default 1 each) with one packet size. The packet size (inner IP packet, default 1400) can go up to the N3 interface's MTU minus 44 bytes of GTP-U and its headers, and up to the N6 interface's MTU: 1456 on a 1500 MTU network. **Max run time** (minutes, 0 = no limit) stops the run by itself, exactly like pressing Stop. **Downlink batch** (ms, default 1, 0 = off) sends each UE that much time's worth of downlink packets in a row, so the kernel can take them in one send (UDP GSO); a larger value saves CPU but makes each UE's downlink burstier. Uplink needs no setting: all of a gNB's uplink goes to the UPF and is always sent this way. The Setup page shows the total load for the run.
 
-Three more settings matter on big hosts:
-
-- **Senders** and **Uplink sink sockets** (0 = one per CPU, the default) set how many sender threads and uplink receive sockets the data plane uses. The Bench page shows how much one sender sends; far fewer than one per CPU are often enough. When the UPF runs on the same host, though, its packet work runs on the senders' CPUs, so fewer senders also give the UPF fewer CPUs.
-- **N3 IPs per gNB** (default 1) gives each gNB that many consecutive N3 IPs; its UEs' PDU sessions take turns using them as the downlink tunnel address. All of one IP's downlink is a single connection (UPF:2152 to gNB:2152) that a NIC queue, the kernel and one tester reader each handle on one CPU, so more IPs spread downlink without adding gNBs.
-- **GRO on the UPF's veth** (on by default) helps when the UPF is a container on a bridge on this host. For the run, it turns GRO on for the host side of the UPF's veth and TSO off inside the container, then puts both back. Only the bridge port whose container holds the UPF's N3 or N6 IP is touched. TSO concerns TCP only, so the UPF's GTP-U path is unchanged. The tester then reads the UPF's packets dozens per message instead of one. The Run page shows what was changed, or why it could not be.
-
 ## Pacing
 
 Registration, PDU sessions and deregistration (on Stop) each have four settings:
@@ -86,7 +80,7 @@ make run-tester   # fru-tester on 127.0.0.1:9100 (sudo), reads tester.yaml
 
 ## Run with Docker Compose
 
-`docker/docker-compose.yaml` runs `fru-tester` on the host network with `NET_ADMIN`, and with `pid: host` and `SYS_ADMIN` so that **GRO on the UPF's veth** can find the UPF container's network namespace and change its interface. fru-lab reaches it at `http://host.docker.internal:9100`. Because the tester API then listens on every host interface, change `apiToken` from the default in **both** `docker/tester.yaml` and `docker/config.yaml`. Build both images with `make docker`.
+`docker/docker-compose.yaml` runs `fru-tester` on the host network with `NET_ADMIN`. fru-lab reaches it at `http://host.docker.internal:9100`. Because the tester API then listens on every host interface, change `apiToken` from the default in **both** `docker/tester.yaml` and `docker/config.yaml`. Build both images with `make docker`.
 
 ## Using it
 
@@ -156,7 +150,6 @@ gNB states: `pending` → `connecting` → `up` or `failed`.
 - Traffic starts a fixed 500 ms after each PDU session. A core that takes longer to install the downlink tunnel in the UPF loses the first downlink packets of each UE. Against fru-lab's free5GC, 4 UEs at 1 Mbps ran with 0 loss in both directions.
 - The data plane uses plain UDP sockets with UDP GSO and GRO, which any Linux kernel since 5.0 has (an older kernel falls back to one packet per message, 32 messages per system call). Downlink has one sender per CPU and uplink spreads as many over the gNBs, each with its own socket; uplink is received by one sink socket per CPU. The host's CPUs are the limit. Before GSO, on a 6-CPU test host, 10 gNBs × 40 UEs at 250 Mbps each way received 4.3 Gbps uplink and 2.2 Gbps downlink with under 0.3 % loss, with the CPUs fully busy (half of it the kernel's own packet handling, the UPF's included). With GSO one sender sends about 1.7 M packets/s (19 Gbps at 1400 bytes) on the same host, measured by the Bench page. The core network has not been measured again since GSO was added. The kernel still handles every packet on receive and in the UPF.
 - UDP GRO only helps when packets arrive already merged: from a NIC that does GRO, or sent locally with GSO. Docker's veth links do not do GRO by default, so on fru-lab's bridge the tester mostly still reads one packet per message (`ethtool -K <veth> gro on` turns it on).
-- One-way latency is sampled on busy runs: about 100 k packets per second per direction have their latency recorded (every packet on light runs). Loss and order are still checked on every packet.
 - **Bench** (Throughput Tester → Bench) measures how fast this host's fru-tester can send, with no core network: uplink over loopback with 1, 2, 4 … senders up to one per CPU. Its UDP GSO switch compares sending with and without GSO. It cannot run while a test run is active.
 - High rates need the SMF's `urrThreshold` raised. At a few hundred bytes, the UPF sends a usage report every packet or two, PFCP starves, and downlink stops reaching the gNB. fru-lab's templates set it to 10 GB. A core deployed by an older fru-lab, or any other core, needs the same change.
 - A run whose cleanup was skipped (second Stop, or fru-tester killed) leaves its UEs registered in the core. Running the same UEs again can then hit `Duplicated PDU session ID` in free5GC and time out; restart the core in that case.

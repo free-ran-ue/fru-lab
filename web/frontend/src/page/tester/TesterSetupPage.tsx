@@ -32,7 +32,7 @@ function lastSupi(plan: TesterPlan): string {
 
 // Sets a value at a dotted path ("network.n2.cidr") on a deep copy, so
 // one onChange handler serves every field.
-function setPath(profile: TesterProfile, path: string, value: string | number | boolean): TesterProfile {
+function setPath(profile: TesterProfile, path: string, value: string | number): TesterProfile {
   const next = structuredClone(profile) as unknown as Record<string, unknown>
   const keys = path.split('.')
   let node = next
@@ -52,7 +52,7 @@ interface FieldProps {
   errors: TesterFieldError[]
   numeric?: boolean
   options?: string[] // render a select instead of an input
-  onChange: (path: string, value: string | number | boolean) => void
+  onChange: (path: string, value: string | number) => void
 }
 
 function Field({ label, path, profile, errors, numeric = false, options, onChange }: FieldProps) {
@@ -131,7 +131,7 @@ export default function TesterSetupPage() {
     return () => window.clearTimeout(timer)
   }, [profile, isLoading, addError])
 
-  function handleChange(path: string, value: string | number | boolean) {
+  function handleChange(path: string, value: string | number) {
     setProfile((prev) => setPath(prev, path, value))
   }
 
@@ -254,14 +254,8 @@ export default function TesterSetupPage() {
                 <Field label="First gNB IP" path="network.n3.startIp" {...fieldProps} />
                 <Field label="UPF IP" path="network.n3.upfIp" {...fieldProps} />
                 <Field label="UPF port" path="network.n3.upfPort" numeric {...fieldProps} />
-                <Field label="N3 IPs per gNB" path="network.n3.ipsPerGnb" numeric {...fieldProps} />
               </div>
-              <p className={styles.hint}>
-                Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it. All of one IP&apos;s
-                downlink is a single connection (UPF:2152 to gNB:2152), which a NIC queue, the kernel and the tester each
-                handle on one CPU. With more IPs per gNB, the gNB hands them out to its UEs&apos; PDU sessions in turn, so
-                its downlink is spread over that many connections.
-              </p>
+              <p className={styles.hint}>Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it.</p>
             </section>
 
             <section className={styles.card}>
@@ -284,16 +278,6 @@ export default function TesterSetupPage() {
                 <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
                 <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />
                 <Field label="Downlink batch (ms per UE, 0 = off)" path="traffic.dlBatchMs" numeric {...fieldProps} />
-                <Field label="Senders (0 = one per CPU)" path="traffic.senders" numeric {...fieldProps} />
-                <Field label="Uplink sink sockets (0 = one per CPU)" path="traffic.sinkSockets" numeric {...fieldProps} />
-                <div className={styles.field}>
-                  <label htmlFor="traffic.vethGro">GRO on the UPF&apos;s veth</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'normal' }}>
-                    <input id="traffic.vethGro" type="checkbox" checked={profile.traffic.vethGro}
-                      onChange={(e) => handleChange('traffic.vethGro', e.target.checked)} />
-                    On for the run
-                  </label>
-                </div>
               </div>
               <p className={styles.hint}>
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
@@ -304,12 +288,6 @@ export default function TesterSetupPage() {
                 {' '}With a max run time the run stops itself, exactly as if you pressed Stop.
                 {' '}Downlink batch sends each UE that many milliseconds of packets in a row, so the kernel can take them in one
                 send (UDP GSO); larger saves CPU but makes each UE&apos;s downlink burstier.
-                {' '}Senders and sink sockets default to one per CPU. On a big host far fewer are enough for the tester (the
-                Bench page shows how much one sender sends), but when the UPF runs on the same host its packet work runs on
-                the senders&apos; CPUs, so fewer senders also give it fewer CPUs.
-                {' '}When the UPF is a container on a bridge here, <b>GRO on the UPF&apos;s veth</b> turns GRO on for its port
-                and TSO off inside the container (TCP only, GTP-U is unaffected) for the run, so the tester reads the
-                UPF&apos;s packets dozens at a time; both are put back afterwards.
               </p>
             </section>
 
@@ -365,7 +343,7 @@ export default function TesterSetupPage() {
                           <td>{g.name}</td>
                           <td className={styles.mono}>{g.gnbId}</td>
                           <td className={styles.mono}>{g.n2Ip}/{plan.n2Prefix}</td>
-                          <td className={styles.mono}>{g.n3Ip}/{plan.n3Prefix}{g.n3Ips.length > 1 && ` +${g.n3Ips.length - 1}`}</td>
+                          <td className={styles.mono}>{g.n3Ip}/{plan.n3Prefix}</td>
                           <td>{g.ueCount ? `${g.ueCount} (#${g.ueFirst}–${g.ueLast})` : '0'}</td>
                           <td className={styles.mono}>{g.ueCount ? `${g.firstSupi} … ${g.lastSupi.slice(-4)}` : '—'}</td>
                         </tr>

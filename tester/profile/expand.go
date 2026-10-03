@@ -16,8 +16,7 @@ type GnbSpec struct {
 	Name      string `json:"name"`
 	GnbID     string `json:"gnbId"`
 	N2IP      string `json:"n2Ip"`
-	N3IP      string   `json:"n3Ip"`
-	N3IPs     []string `json:"n3Ips"` // N3IP first, then any further downlink tunnel addresses
+	N3IP      string `json:"n3Ip"`
 	UeCount   int    `json:"ueCount"`
 	UeFirst   int    `json:"ueFirst"`
 	UeLast    int    `json:"ueLast"`
@@ -82,8 +81,7 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 	}
 	// ...and N3 must never get an IP already given to a gNB's N2.
 	n3Exclude := append(append([]netip.Addr{}, exclude...), n2IPs...)
-	perGnbN3 := p.Network.N3.N3IPsPerGnb()
-	n3IPs, err := AllocateIPs(p.Network.N3.Cidr, p.Network.N3.StartIP, count*perGnbN3, n3Exclude)
+	n3IPs, err := AllocateIPs(p.Network.N3.Cidr, p.Network.N3.StartIP, count, n3Exclude)
 	if err != nil {
 		verr.add("network.n3.cidr", err.Error())
 	}
@@ -114,11 +112,8 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 			Name:    RenderName(p.Gnb.NamePattern, i+1),
 			GnbID:   strings.ToLower(id),
 			N2IP:    n2IPs[i].String(),
-			N3IP:    n3IPs[i*perGnbN3].String(),
+			N3IP:    n3IPs[i].String(),
 			UeCount: ues,
-		}
-		for _, ip := range n3IPs[i*perGnbN3 : (i+1)*perGnbN3] {
-			spec.N3IPs = append(spec.N3IPs, ip.String())
 		}
 		for range ues {
 			msin, _ := IncrementDecimal(p.Ue.MsinStart, nextUe-1)
@@ -175,9 +170,6 @@ func validateFields(p Profile, verr *ValidationError) {
 	validateTraffic(p, verr)
 	validateEndpoint(verr, "network.n2", p.Network.N2.Interface, p.Network.N2.Cidr, p.Network.N2.StartIP, "amfIp", p.Network.N2.AmfIP, "amfPort", p.Network.N2.AmfPort)
 	validateEndpoint(verr, "network.n3", p.Network.N3.Interface, p.Network.N3.Cidr, p.Network.N3.StartIP, "upfIp", p.Network.N3.UpfIP, "upfPort", p.Network.N3.UpfPort)
-	if n := p.Network.N3.IpsPerGnb; n < 0 || n > 64 {
-		verr.add("network.n3.ipsPerGnb", "must be between 1 and 64 (0 counts as 1)")
-	}
 	// The upper bound keeps Stop prompt: in-flight attempts finish within
 	// their timeout before teardown can start.
 	if p.Rates.N2.TimeoutMs < 1 || p.Rates.N2.TimeoutMs > 60000 {
@@ -242,11 +234,6 @@ func validateTraffic(p Profile, verr *ValidationError) {
 	}
 	if t.MaxDurationMin < 0 || t.MaxDurationMin > 7*24*60 {
 		verr.add("traffic.maxDurationMin", "must be between 0 (no limit) and 10080 (7 days)")
-	}
-	for field, v := range map[string]int{"traffic.senders": t.Senders, "traffic.sinkSockets": t.SinkSockets} {
-		if v < 0 || v > 1024 {
-			verr.add(field, "must be between 0 (one per CPU) and 1024")
-		}
 	}
 	if t.DlBatchMs < 0 || t.DlBatchMs > 10 {
 		verr.add("traffic.dlBatchMs", "must be between 0 (off) and 10")

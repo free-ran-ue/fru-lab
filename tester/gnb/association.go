@@ -24,11 +24,10 @@ const (
 // PduSetup is what the gNB learned and allocated in a PDU Session
 // Resource Setup; the data plane (phase 3) needs all of it.
 type PduSetup struct {
-	UlTeid  []byte     // UPF side
-	UpfIP   netip.Addr // UPF N3 address from the transfer
-	DlTeid  uint32     // allocated by the tester
-	GnbN3IP netip.Addr // the gNB address the downlink tunnel ends at
-	Qfi     int64
+	UlTeid []byte     // UPF side
+	UpfIP  netip.Addr // UPF N3 address from the transfer
+	DlTeid uint32     // allocated by the tester
+	Qfi    int64
 }
 
 // Downlink is one event for a UE, delivered in arrival order.
@@ -58,8 +57,7 @@ func (t *TeidAllocator) Allocate() uint32 { return t.next.Add(1) }
 type Association struct {
 	conn  Conn
 	id    Identity
-	n3IPs []netip.Addr // downlink tunnel addresses, handed out in turn
-	nextN3 atomic.Uint32
+	n3IP  netip.Addr
 	teids *TeidAllocator
 
 	writeMu sync.Mutex
@@ -71,10 +69,8 @@ type Association struct {
 	lostCh chan struct{} // closed once when the association fails
 }
 
-// NewAssociation hands out n3IPs as downlink tunnel addresses, one PDU
-// session after another in turn (most gNBs have just one).
-func NewAssociation(conn Conn, id Identity, n3IPs []netip.Addr, teids *TeidAllocator) *Association {
-	return &Association{conn: conn, id: id, n3IPs: n3IPs, teids: teids, ues: map[int64]*UeLink{}, lostCh: make(chan struct{})}
+func NewAssociation(conn Conn, id Identity, n3IP netip.Addr, teids *TeidAllocator) *Association {
+	return &Association{conn: conn, id: id, n3IP: n3IP, teids: teids, ues: map[int64]*UeLink{}, lostCh: make(chan struct{})}
 }
 
 // Lost is closed when the association fails. Unlike the DownlinkLost
@@ -249,7 +245,7 @@ func (a *Association) onPduSessionResourceSetup(m *message.PDUSessionResourceSet
 		if item.PDUSessionID == nil {
 			continue
 		}
-		setup := &PduSetup{Qfi: 1, DlTeid: a.teids.Allocate(), GnbN3IP: a.n3IPs[(a.nextN3.Add(1)-1)%uint32(len(a.n3IPs))]}
+		setup := &PduSetup{Qfi: 1, DlTeid: a.teids.Allocate()}
 		if item.PDUSessionResourceSetupRequestTransfer != nil {
 			var transfer ie.PDUSessionResourceSetupRequestTransfer
 			if err := ie.UnmarshalBinary(*item.PDUSessionResourceSetupRequestTransfer, &transfer); err == nil && transfer.ProtocolIEs != nil {
@@ -272,7 +268,7 @@ func (a *Association) onPduSessionResourceSetup(m *message.PDUSessionResourceSet
 			}
 		}
 		if rsp, err := pduSessionResourceSetupResponse(m.AMFUENGAPID.Value, m.RANUENGAPID.Value,
-			item.PDUSessionID.Value, setup.DlTeid, setup.GnbN3IP, setup.Qfi); err == nil {
+			item.PDUSessionID.Value, setup.DlTeid, a.n3IP, setup.Qfi); err == nil {
 			_ = a.write(rsp)
 		}
 		var nas []byte

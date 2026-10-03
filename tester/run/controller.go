@@ -45,7 +45,7 @@ type Deps struct {
 // Dataplane is the slice of *dataplane.Engine a run uses.
 type Dataplane interface {
 	Start() error
-	AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, dlAt netip.Addr, upfN3 netip.AddrPort)
+	AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort)
 	Stop(drain time.Duration)
 	Snapshot() dataplane.Snapshot
 }
@@ -318,9 +318,7 @@ type run struct {
 	failures   []UeFailure
 	added      []addedAddr  // in the order they were added
 	routes     []addedRoute // routes this run added
-	tunings    []netcfg.VethTuning
-	vethGro    VethGroStatus
-	dp         Dataplane // nil until the IPs are configured
+	dp         Dataplane    // nil until the IPs are configured
 }
 
 type addedRoute struct {
@@ -442,10 +440,6 @@ func (r *run) snapshot() Snapshot {
 		// Run page reads failedUes.length; null blanked it)
 		FailedUes: append([]UeFailure{}, r.failures...),
 		Dataplane: emptyDataplane(),
-		VethGro:   r.vethGro,
-	}
-	if snap.VethGro.Links == nil {
-		snap.VethGro.Links = []string{}
 	}
 	if r.dp != nil {
 		snap.Dataplane = r.dp.Snapshot()
@@ -542,17 +536,10 @@ func (r *run) skipUnfinished() {
 func (r *run) configureIPs() error {
 	nw := r.profile.Network
 	for _, g := range r.plan.Gnbs {
-		addrs := []struct {
+		for _, a := range []struct {
 			iface, ip string
 			bits      int
-		}{{nw.N2.Interface, g.N2IP, r.plan.N2Prefix}}
-		for _, ip := range g.N3IPs {
-			addrs = append(addrs, struct {
-				iface, ip string
-				bits      int
-			}{nw.N3.Interface, ip, r.plan.N3Prefix})
-		}
-		for _, a := range addrs {
+		}{{nw.N2.Interface, g.N2IP, r.plan.N2Prefix}, {nw.N3.Interface, g.N3IP, r.plan.N3Prefix}} {
 			if r.ctx.Err() != nil {
 				return nil // stopping; execute() skips N2 and removes what was added
 			}
@@ -581,33 +568,9 @@ func (r *run) configureIPs() error {
 		r.routes = append(r.routes, addedRoute{iface: nw.N6.Interface, dst: pool, gw: gw})
 		r.mu.Unlock()
 	}
-	if r.profile.Traffic.VethGro {
-		r.tuneVethGRO()
-	}
 	return nil
 }
 
-// tuneVethGRO turns on GRO for the UPF's veth on the N3 and N6
-// interfaces. It never fails the run: without it the tester still reads
-// every packet, one per message.
-func (r *run) tuneVethGRO() {
-	nw := r.profile.Network
-	upf := []netip.Addr{netip.MustParseAddr(nw.N3.UpfIP), netip.MustParseAddr(nw.N6.UpfIP)}
-	status := VethGroStatus{Links: []string{}}
-	for _, iface := range slices.Compact([]string{nw.N3.Interface, nw.N6.Interface}) {
-		t, err := r.deps.Addrs.TuneVethGRO(iface, upf)
-		if err != nil {
-			status.Error = err.Error()
-		}
-		r.mu.Lock()
-		r.tunings = append(r.tunings, t)
-		r.mu.Unlock()
-		status.Links = append(status.Links, t.Links...)
-	}
-	r.mu.Lock()
-	r.vethGro = status
-	r.mu.Unlock()
-}
 func (r *run) addAddr(iface string, prefix netip.Prefix) error {
 	if err := r.deps.Addrs.Add(iface, prefix); err != nil {
 		return err
@@ -621,19 +584,14 @@ func (r *run) addAddr(iface string, prefix netip.Prefix) error {
 func (r *run) startDataplane() error {
 	t, n6 := r.profile.Traffic, r.profile.Network.N6
 	n3 := make([]netip.Addr, len(r.plan.Gnbs))
-	more := make([][]netip.Addr, len(r.plan.Gnbs))
 	for i, g := range r.plan.Gnbs {
 		n3[i] = netip.MustParseAddr(g.N3IP)
-		for _, ip := range g.N3IPs[1:] {
-			more[i] = append(more[i], netip.MustParseAddr(ip))
-		}
 	}
 	dp := r.deps.NewDataplane(dataplane.Config{
-		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3, MoreN3IPs: more,
+		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3,
 		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
-		Senders: t.Senders, Receivers: t.SinkSockets,
 	})
 	if err := dp.Start(); err != nil {
 		return fmt.Errorf("start data plane: %w", err)
@@ -667,15 +625,10 @@ func emptyDataplane() dataplane.Snapshot {
 // first would make the kernel drop the secondaries with it.
 func (r *run) removeIPs() {
 	r.mu.Lock()
-	added, routes, tunings := r.added, r.routes, r.tunings
-	r.added, r.routes, r.tunings = nil, nil, nil
+	added, routes := r.added, r.routes
+	r.added, r.routes = nil, nil
 	r.mu.Unlock()
 	var errs []error
-	for _, t := range tunings {
-		if err := t.Undo(); err != nil {
-			errs = append(errs, fmt.Errorf("restore veth offloads: %w", err))
-		}
-	}
 	for _, rt := range routes {
 		if err := r.deps.Addrs.RemoveRoute(rt.iface, rt.dst, rt.gw); err != nil {
 			errs = append(errs, err)
@@ -959,10 +912,7 @@ func (r *run) attemptN2(n *n2Round, i int) {
 // startGnb wraps an up gNB's association and releases its UEs into the
 // registration stage.
 func (r *run) startGnb(i int, conn gnb.Conn, id gnb.Identity) {
-	var n3 []netip.Addr
-	for _, s := range r.plan.Gnbs[i].N3IPs {
-		n3 = append(n3, netip.MustParseAddr(s))
-	}
+	n3, _ := netip.ParseAddr(r.plan.Gnbs[i].N3IP)
 	assoc := gnb.NewAssociation(conn, id, n3, &r.teids)
 	r.mu.Lock()
 	r.conns[i] = conn
@@ -1142,7 +1092,7 @@ func (r *run) startTraffic(dp Dataplane, i int, out procedure.Outcome) {
 	if !upf.IsValid() {
 		upf = netip.MustParseAddr(r.profile.Network.N3.UpfIP)
 	}
-	dp.AddUE(i, r.ues[i].spec.Gnb, out.UeIP, binary.BigEndian.Uint32(out.Pdu.UlTeid), out.Pdu.DlTeid, out.Pdu.GnbN3IP,
+	dp.AddUE(i, r.ues[i].spec.Gnb, out.UeIP, binary.BigEndian.Uint32(out.Pdu.UlTeid), out.Pdu.DlTeid,
 		netip.AddrPortFrom(upf, uint16(r.profile.Network.N3.UpfPort)))
 }
 

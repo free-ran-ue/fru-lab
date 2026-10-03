@@ -23,12 +23,6 @@ type Config struct {
 	RunID      uint32
 	UeCount    int
 	GnbN3IPs   []netip.Addr // by gNB index; UL leaves from and DL arrives at <ip>:2152
-	// MoreN3IPs are, by gNB index, further N3 addresses the gNB hands out
-	// as downlink tunnel endpoints. All of one address's downlink comes
-	// from UPF:2152 to <ip>:2152, a single connection that a NIC queue,
-	// the kernel and one reader handle alone; several addresses per gNB
-	// spread it. Empty = GnbN3IPs only.
-	MoreN3IPs [][]netip.Addr
 	SinkIP     netip.Addr   // N6 side: UL is addressed to it, DL is sent from it
 	Port       uint16       // UDP port of the sink and of the (simulated) UEs
 	PacketSize int          // inner IP packet bytes, MinPacketSize..9000
@@ -97,7 +91,6 @@ type flow struct {
 	ue             uint32
 	gnb            int
 	dlTeid         uint32         // the tunnel downlink must arrive in
-	dlAt           netip.Addr     // the gNB address downlink must arrive at
 	upf            netip.AddrPort // where its uplink goes
 	dlTo           netip.AddrPort // where its downlink goes
 	upfAddr        *net.UDPAddr   // upf and dlTo, made once: a send takes a net.Addr
@@ -111,20 +104,13 @@ type shard struct {
 	mu      sync.Mutex
 	flows   []*flow
 	version atomic.Uint64
-	added   chan struct{} // signalled on add, so an idle sender can sleep until then
 }
-
-func newShard() *shard { return &shard{added: make(chan struct{}, 1)} }
 
 func (s *shard) add(f *flow) {
 	s.mu.Lock()
 	s.flows = append(s.flows, f)
 	s.mu.Unlock()
 	s.version.Add(1)
-	select {
-	case s.added <- struct{}{}:
-	default:
-	}
 }
 
 func (s *shard) load() []*flow {
@@ -133,17 +119,10 @@ func (s *shard) load() []*flow {
 	return append([]*flow(nil), s.flows...)
 }
 
-// n3Socket receives the downlink sent to one of a gNB's N3 addresses.
-type n3Socket struct {
-	conn *net.UDPConn
-	gnb  int
-	ip   netip.Addr
-}
-
 // Engine runs one run's data plane.
 type Engine struct {
 	cfg   Config
-	n3    []n3Socket     // per gNB N3 address, :2152: receives downlink
+	n3    []*net.UDPConn // per gNB, :2152: receives downlink
 	ulOut []*net.UDPConn // per uplink shard, on its gNB's N3 IP
 	sinks []*net.UDPConn // SO_REUSEPORT group on the sink IP:port: receives uplink
 	dlOut []*net.UDPConn // per downlink shard, on the sink IP
@@ -153,12 +132,9 @@ type Engine struct {
 	dlShards []*shard
 	ulPerGnb int
 	ul, dl   dirStats
-	// ulSample and dlSample are masks on a packet's sequence number: its
-	// latency is recorded when seq&mask == 0 (see latencyMask).
-	ulSample, dlSample uint32
-	active             atomic.Int64
-	stopped            atomic.Bool
-	gsoOn              atomic.Int64 // senders using UDP GSO
+	active   atomic.Int64
+	stopped  atomic.Bool
+	gsoOn    atomic.Int64 // senders using UDP GSO
 
 	cancel  context.CancelFunc
 	senders sync.WaitGroup
@@ -186,33 +162,13 @@ func New(cfg Config) *Engine {
 	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints)}
 	gnbs := max(1, len(cfg.GnbN3IPs))
 	e.ulPerGnb = max(1, (cfg.Senders+gnbs-1)/gnbs)
-	e.ulSample = latencyMask(cfg.UlBps, cfg)
-	e.dlSample = latencyMask(cfg.DlBps, cfg)
 	for range len(cfg.GnbN3IPs) * e.ulPerGnb {
-		e.ulShards = append(e.ulShards, newShard())
+		e.ulShards = append(e.ulShards, &shard{})
 	}
 	for range cfg.Senders {
-		e.dlShards = append(e.dlShards, newShard())
+		e.dlShards = append(e.dlShards, &shard{})
 	}
 	return e
-}
-
-// latencySamples is about how many packets a second, per direction, get
-// their latency recorded. Loss and order are still checked on every
-// packet; latency percentiles need far fewer samples than a busy run has
-// packets, and recording one costs a log2 and a histogram update.
-const latencySamples = 100_000
-
-// latencyMask is a power of two minus one, so that recording the packets
-// whose seq&mask == 0 samples every UE evenly at about latencySamples a
-// second in all; 0 (every packet) for light runs.
-func latencyMask(bpsPerUe float64, cfg Config) uint32 {
-	pps := bpsPerUe / float64(cfg.PacketSize*8) * float64(cfg.UeCount)
-	n := uint32(1)
-	for float64(n)*latencySamples < pps && n < 1<<16 {
-		n <<= 1
-	}
-	return n - 1
 }
 
 // listenReusePort binds addr with SO_REUSEPORT, so several sockets share
@@ -237,16 +193,14 @@ func listenReusePort(addr netip.AddrPort) (*net.UDPConn, error) {
 // Start binds every socket and starts the receivers, senders and sampler.
 // It fails if a gNB N3 IP or the sink IP is not on this host.
 func (e *Engine) Start() error {
-	for g, ips := range e.n3Addrs() {
-		for _, ip := range ips {
-			c, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, GtpPort)))
-			if err != nil {
-				e.closeSockets()
-				return fmt.Errorf("bind gNB-%d N3 %s:%d: %w", g+1, ip, GtpPort, err)
-			}
-			growReadBuffer(c)
-			e.n3 = append(e.n3, n3Socket{conn: c, gnb: g, ip: ip})
+	for i, ip := range e.cfg.GnbN3IPs {
+		c, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, GtpPort)))
+		if err != nil {
+			e.closeSockets()
+			return fmt.Errorf("bind gNB-%d N3 %s:%d: %w", i+1, ip, GtpPort, err)
 		}
+		growReadBuffer(c)
+		e.n3 = append(e.n3, c)
 	}
 	for i := range e.ulShards {
 		ip := e.cfg.GnbN3IPs[i/e.ulPerGnb]
@@ -278,10 +232,10 @@ func (e *Engine) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
 	e.started = e.cfg.Now()
-	for _, s := range e.n3 {
-		r := e.newReader(s.conn, &e.dl)
+	for g, conn := range e.n3 {
+		r := e.newReader(conn, &e.dl)
 		e.readers.Add(1)
-		go r.readN3(s.gnb, s.ip)
+		go r.readN3(g)
 	}
 	for _, conn := range e.sinks {
 		r := e.newReader(conn, &e.ul)
@@ -307,29 +261,13 @@ func (e *Engine) Start() error {
 	return nil
 }
 
-// n3Addrs is every gNB's N3 addresses, its main one first.
-func (e *Engine) n3Addrs() [][]netip.Addr {
-	out := make([][]netip.Addr, len(e.cfg.GnbN3IPs))
-	for g, ip := range e.cfg.GnbN3IPs {
-		out[g] = []netip.Addr{ip}
-		if g < len(e.cfg.MoreN3IPs) {
-			out[g] = append(out[g], e.cfg.MoreN3IPs[g]...)
-		}
-	}
-	return out
-}
-
 // AddUE starts traffic for an established UE (design Q9: as soon as its
-// PDU session is up, without waiting for the others). dlAt is the gNB
-// address its downlink tunnel ends at; invalid means the gNB's main one.
-func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, dlAt netip.Addr, upfN3 netip.AddrPort) {
+// PDU session is up, without waiting for the others).
+func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort) {
 	if e.stopped.Load() {
 		return // a PDU accept that lands while the run is stopping
 	}
-	if !dlAt.IsValid() {
-		dlAt = e.cfg.GnbN3IPs[gnb]
-	}
-	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, dlAt: dlAt, upf: upfN3}
+	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3}
 	f.ulLast.Store(-1)
 	f.dlLast.Store(-1)
 	f.ulHead = slices.Clone(ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)[:ulHeadLen])
@@ -373,15 +311,9 @@ func growReadBuffer(c *net.UDPConn) {
 }
 
 // pace sends round-robin over a shard's flows at bps per flow, using a
-// token bucket capped at 10 ms of burst. Downlink gives each flow
-// DlBatch's worth of packets in a row. Packets go out in batches through b
-// (sendmmsg).
-//
-// A sender wakes every millisecond, or less often when its flows are so
-// slow that a millisecond holds under minWake packets (at most every
-// maxWakeEvery); a sender without flows sleeps until one is added. With a
-// sender per CPU on a big host, most senders of a light run would
-// otherwise wake a thousand times a second for nothing.
+// token bucket refilled every millisecond and capped at 10 ms of burst.
+// Downlink gives each flow DlBatch's worth of packets in a row. Packets go
+// out in batches through b (sendmmsg).
 func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	defer e.senders.Done()
 	pktBits := float64(e.cfg.PacketSize * 8)
@@ -389,41 +321,26 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	if b.dl {
 		run = max(1, int(bps*e.cfg.DlBatch.Seconds()/pktBits))
 	}
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
 	var flows []*flow
 	var version uint64
 	var budget float64
 	var cur *flow
 	rr, left := 0, 0
-	every := time.Millisecond
-	timer := time.NewTimer(every)
-	defer timer.Stop()
 	last := time.Now()
 	for {
-		if len(flows) == 0 { // idle: sleep until a flow arrives
-			select {
-			case <-ctx.Done():
-				return
-			case <-sh.added:
-			}
-			version, flows = sh.version.Load(), sh.load()
-			every = wakeEvery(bps*float64(len(flows)), pktBits)
-			timer.Reset(every)
-			last, budget = time.Now(), 0
-			continue
-		}
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-timer.C:
+		case now := <-tick.C:
 			if v := sh.version.Load(); v != version {
 				version, flows = v, sh.load()
-				every = wakeEvery(bps*float64(len(flows)), pktBits)
 			}
-			timer.Reset(every)
 			rate := bps * float64(len(flows))
 			budget = min(budget+rate*now.Sub(last).Seconds(), rate*0.01+pktBits)
 			last = now
-			for budget >= pktBits {
+			for budget >= pktBits && len(flows) > 0 {
 				if left == 0 {
 					cur, left = flows[rr%len(flows)], run
 					rr++
@@ -435,21 +352,6 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 			b.flush()
 		}
 	}
-}
-
-const (
-	minWake      = 8 // packets a wake-up should have to send
-	maxWakeEvery = 4 * time.Millisecond
-)
-
-// wakeEvery is how often a sender at rate bits/s wakes: every millisecond,
-// or as long as minWake packets take, up to maxWakeEvery.
-func wakeEvery(rate, pktBits float64) time.Duration {
-	if rate <= 0 {
-		return maxWakeEvery
-	}
-	d := time.Duration(minWake * pktBits / rate * float64(time.Second))
-	return min(max(d, time.Millisecond), maxWakeEvery)
 }
 
 // batcher builds packets in place and sends them with one sendmmsg.
@@ -719,29 +621,28 @@ func (r *reader) loop(handle func([]byte)) {
 // masquerades), so the UE comes from the header.
 func (r *reader) readSink() {
 	r.loop(func(payload []byte) {
-		r.receive(payload, false, ipv4HeaderLen+udpHeaderLen+len(payload), -1, netip.Addr{}, 0)
+		r.receive(payload, false, ipv4HeaderLen+udpHeaderLen+len(payload), -1, 0)
 	})
 }
 
-// readN3 receives downlink G-PDUs addressed to N3 address at of gNB g.
-func (r *reader) readN3(g int, at netip.Addr) {
+// readN3 receives downlink G-PDUs addressed to one gNB's N3 IP.
+func (r *reader) readN3(g int) {
 	r.loop(func(b []byte) {
 		teid, inner, err := parseGpdu(b)
 		if err != nil {
 			return
 		}
 		if payload, ok := udpPayload(inner); ok {
-			r.receive(payload, true, len(inner), g, at, teid)
+			r.receive(payload, true, len(inner), g, teid)
 		}
 	})
 }
 
-// receive counts one packet that came back. For downlink, gnb, at and
-// teid are where it arrived; a UE's downlink in another tunnel, at another
-// gNB or at another of its gNB's addresses is a forwarding fault, counted
-// as misrouted rather than received (this also keeps each flow's dlLast
-// owned by one reader).
-func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, at netip.Addr, teid uint32) {
+// receive counts one packet that came back. For downlink, gnb and teid
+// are where it arrived; a UE's downlink in another tunnel or at another
+// gNB is a forwarding fault, counted as misrouted rather than received
+// (this also keeps each flow's dlLast owned by its own gNB's reader).
+func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
 	e := r.e
 	h, ok := parseHeader(payload)
 	if !ok || h.runID != e.cfg.RunID || h.dl != dl || int(h.ue) >= len(e.flows) {
@@ -751,17 +652,15 @@ func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, at netip.Addr,
 	if f == nil {
 		return
 	}
-	if dl && (teid != f.dlTeid || gnb != f.gnb || at != f.dlAt) {
+	if dl && (teid != f.dlTeid || gnb != f.gnb) {
 		r.acc.misrouted++
 		return
 	}
 	r.acc.add(f.gnb, uint64(ipLen))
-	last, mask := &f.ulLast, e.ulSample
+	r.lat = append(r.lat, time.Duration(r.now-h.txNanos))
+	last := &f.ulLast
 	if dl {
-		last, mask = &f.dlLast, e.dlSample
-	}
-	if h.seq&mask == 0 {
-		r.lat = append(r.lat, time.Duration(r.now-h.txNanos))
+		last = &f.dlLast
 	}
 	for {
 		prev := last.Load()
@@ -794,8 +693,8 @@ func (e *Engine) Stop(drain time.Duration) {
 }
 
 func (e *Engine) closeSockets() {
-	for _, s := range e.n3 {
-		_ = s.conn.Close()
+	for _, c := range e.n3 {
+		_ = c.Close()
 	}
 	for _, group := range [][]*net.UDPConn{e.ulOut, e.sinks, e.dlOut} {
 		for _, c := range group {

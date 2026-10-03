@@ -38,15 +38,6 @@ type Traffic struct {
 	// DlBatchMs sends each UE this many milliseconds of downlink in a row,
 	// so UDP GSO can send them as one; 0 = one packet per UE in turn.
 	DlBatchMs int `json:"dlBatchMs"`
-	// Senders is how many sender threads (each with its own socket) send
-	// downlink, and as many uplink spread over the gNBs; SinkSockets is how
-	// many sockets receive uplink. 0 = one per CPU.
-	Senders     int `json:"senders"`
-	SinkSockets int `json:"sinkSockets"`
-	// VethGro, when the UPF reaches this host over a veth (a container on
-	// a bridge), turns GRO on for its port for the run so the tester reads
-	// its packets in batches (netcfg.TuneVethGRO).
-	VethGro bool `json:"vethGro"`
 }
 
 type Scale struct {
@@ -110,21 +101,14 @@ type N2Network struct {
 }
 
 // N3Network gives each gNB its own N3 IP from Cidr (design N1); the data
-// plane sends uplink from it and the UPF sends downlink to it. With
-// IpsPerGnb > 1 a gNB gets that many consecutive IPs and hands them out as
-// downlink tunnel addresses in turn, so its downlink is several
-// connections that can be spread over CPUs (0 counts as 1).
+// plane sends uplink from it and the UPF sends downlink to it.
 type N3Network struct {
 	Interface string `json:"interface"`
 	Cidr      string `json:"cidr"`
 	StartIP   string `json:"startIp"`
 	UpfIP     string `json:"upfIp"`
 	UpfPort   int    `json:"upfPort"`
-	IpsPerGnb int    `json:"ipsPerGnb"`
 }
-
-// N3IPsPerGnb is IpsPerGnb, with 0 (a profile from before it existed) as 1.
-func (n N3Network) N3IPsPerGnb() int { return max(1, n.IpsPerGnb) }
 
 type Rates struct {
 	N2           StageRate     `json:"n2"`

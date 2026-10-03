@@ -1644,51 +1644,6 @@ ul.tight li { margin: 3px 0; }
       <li>UPF 本身的上限（gtp5g 約每核心 30 萬 pps）不受這次改動影響；同一台跑時 UPF 與 veth／bridge 仍佔約 4 成 CPU（Q3）。</li>
       <li>CPU 綁核仍未做。</li>
     </ul>
-
-    <div class="log-head"><h3>資料面效能優化 · 第二輪（96 CPU 同機實測之後）</h3><span class="pill ok">已完成</span></div>
-    <div class="log-meta">
-      <span>2026-10-03</span>
-      <span>分支 refactor/dp-performance（尚未合併）</span>
-      <span>commit 16ca9a4 … 3827d86，一項一個</span>
-    </div>
-    <p>起因：在 96 CPU 的機器上，tester 與 free5GC 的 Docker UPF 同一台，10 gNB × 1000 UE × 每 UE 30 Mbps 上下行各打到 30 Gbps，但 96 顆 CPU 都在 90% 左右。整理出 6 個 tester 端能改的方向，做了 4 個。</p>
-
-    <h4>交付內容</h4>
-    <div class="tbl-wrap">
-      <table>
-        <tr><th>改法</th><th>程式裡怎麼做</th><th>設定</th></tr>
-        <tr><td>一個 gNB 多個 N3 IP</td><td>每個 gNB 拿連續的 K 個 N3 IP，PDU session 輪流用它們當 DL 隧道位址（PDU Session Resource Setup Response 裡回給核網的位址）；資料面每個 IP 一個 socket、一條讀取線，並檢查每個 UE 的 DL 是到它自己那個 IP，到別的 IP 記為 misrouted</td><td>N3 卡片「N3 IPs per gNB」（<code>network.n3.ipsPerGnb</code>，1–64，預設 1）</td></tr>
-        <tr><td>發送線、接收 socket 數可設定；不必要的喚醒拿掉</td><td>原本兩者固定等於 CPU 數。沒有 UE 的發送線改成睡到有 UE 加入才醒；速率低的發送線不再每 ms 醒，改成「至少有 8 個封包要送」才醒（最多每 4 ms）</td><td>Traffic 卡片「Senders」「Uplink sink sockets」（<code>traffic.senders</code>、<code>traffic.sinkSockets</code>，0 = 每核心一個，和以前一樣）</td></tr>
-        <tr><td>延遲改成抽樣</td><td>掉包、亂序仍然每個封包都算；延遲只記序號是 2 的冪次倍數的封包，倍數讓每個方向每秒約 10 萬筆（輕量的 run 仍然每個都記）。1000 UE × 30 Mbps 時是 32 個記 1 個</td><td>自動</td></tr>
-        <tr><td>UPF 的 veth 開 GRO</td><td>run 開始時在 N3、N6 介面上找出「容器裡有 UPF N3 或 N6 IP」的 bridge 埠，host 這側開 GRO、容器那側關 TSO，收尾時還原。Run 頁顯示改了哪些，或為什麼沒改成</td><td>Traffic 卡片「GRO on the UPF's veth」（<code>traffic.vethGro</code>，Console 預設開）</td></tr>
-      </table>
-    </div>
-
-    <h4>驗證結果</h4>
-    <ul class="tight">
-      <li><b>veth GRO</b>（在 network namespace 模擬「容器內核心轉送出來」的流量，像 gtp5g 那樣在 kernel 裡切成一個個封包再送）：只開 host 側 GRO 時完全沒有合併（每則訊息 1 個封包）；容器側關 TSO 後每則訊息 40 個封包，同一個 socket 2 秒收到 225 萬個封包，原本 119 萬。</li>
-      <li><b>閒置發送線</b>：96 條發送線、只有 4 個 1 Mbps 的 UE 時，tester 用掉的 CPU 從一顆核心的 79% 降到 12%。</li>
-      <li><b>Bench 沒有退步</b>：1 條線 1,742 k pps、6 條線 7,578 k pps（之前 1,699 k、7,260 k）。</li>
-      <li><b>自動測試</b>：全部套件在 -race 下通過；新增多個 N3 IP 的分配、輪流、DL 到錯的 IP 記為 misrouted、延遲抽樣、喚醒間隔、veth GRO 的設定與還原等測試；veth GRO 另有一個要 root 的測試（建 bridge、兩個 namespace，只有 UPF 那個埠被改、還原後恢復原狀），在測試機上用 sudo 跑過；golangci-lint 0 issues；前端 build 成功。</li>
-      <li><span class="pill draft">尚未做</span> <b>真實核網實測</b>：請在 96 CPU 那台用同一份設定再跑一次，比較 CPU 和吞吐（見 FAQ Q4「第二輪改進」的建議設定）。</li>
-    </ul>
-
-    <h4>和設計不同的地方、實作時做的決定</h4>
-    <ul class="tight">
-      <li><b>veth GRO 要改兩邊</b>：只開 host 側的 GRO 沒有用。kernel 只對「送出那一側不能做 TSO」的轉送封包走 veth 的 GRO，所以容器那側要關 TSO。TSO 只跟 TCP 有關，UPF 的 GTP-U 路徑不受影響，只有它的 TCP（例如 SBI）少了一個卸載。</li>
-      <li><b>只改 UPF 那個埠</b>：用容器裡的 IP 認出 UPF，bridge 上其他容器（AMF、SMF…）不動。</li>
-      <li><b>Docker Compose 要多給權限</b>：要找到 UPF 容器的 network namespace 需要看得到 host 的 process（<code>pid: host</code>），進去改設定需要 <code>SYS_ADMIN</code>，compose 檔已加上。沒有這些權限時 run 照跑，Run 頁會說明原因。</li>
-      <li><b>發送線數預設不變</b>：UPF 在同一台時，它的封包處理跟著發送線所在的 CPU 跑，發送線少了 UPF 也只能用到較少的 CPU，所以預設仍是每核心一條，改成可設定。</li>
-      <li><b>沒有做的兩項</b>：依 TEID 分配 DL socket 的 eBPF（第 1 項做到同樣的事而且效果更好，eBPF 還要 BPF 權限）；MSG_ZEROCOPY（只在 tester 與 UPF 分兩台時有用，這裡量不到效果，而且送出的緩衝要等 kernel 通知用完才能重用，做錯會送出序號錯誤的封包）。</li>
-      <li><b>延遲直方圖沒改成位元運算</b>：抽樣後每秒只算約 10 萬次，改了也省不到什麼。</li>
-    </ul>
-
-    <h4>留到之後處理</h4>
-    <ul class="tight">
-      <li>真實核網實測（見上）。</li>
-      <li>多個 N3 IP 對 DL 的效果要在實體網卡上量（網卡依連線分佇列），同一台的 Docker 環境裡主要是 tester 多了讀取線。</li>
-      <li>CPU 綁核仍未做。</li>
-    </ul>
   </div>
 </section>
 
@@ -1916,77 +1871,12 @@ ul.tight li { margin: 3px 0; }
       <li><span class="pill ok">已完成</span> 6 項都做完（2026-10-03，實際順序 1 → 4 → 2 → 3 → 5 → 6），每一步都用 Bench 量了前後數字，細節與決定記在第 13 節。Bench 分頁可以關掉 GSO，直接比較前後。</li>
       <li><span class="pill draft">尚未做</span> 真實核網實測：這次測試機上沒有開核網，以上都是 loopback 的發送端數字。</li>
     </ol>
-    <h4>第二輪改進（96 CPU 同機實測之後，2026-10-03）</h4>
-    <p>在 96 CPU 的機器上，tester 與 free5GC 的 Docker UPF 同一台，10 gNB × 1000 UE × 每 UE 30 Mbps 上下行各打到 30 Gbps，96 顆 CPU 都在 90% 左右。這時的 CPU 大部分花在 UPF（gtp5g、NAT）與 Docker 網路，tester 端能改的有下面 6 項，做了 4 項（細節與數字在第 13 節）。</p>
-    <div class="tbl-wrap">
-      <table>
-        <tr><th>#</th><th>改法</th><th>為什麼</th><th>結果</th></tr>
-        <tr><td>1</td><td><b>一個 gNB 多個 N3 IP</b>（N3 卡片「N3 IPs per gNB」）：PDU session 輪流用 gNB 的幾個 IP 當 DL 隧道位址</td><td>同一個 IP 的 DL 外層都是「UPF:2152 → gNB:2152」，網卡、kernel、tester 都只能用一顆核心處理；多個 IP 就是多條連線，不必一直加 gNB</td><td><span class="pill ok">已完成</span> 效果要在實體網卡上量</td></tr>
-        <tr><td>2</td><td><b>發送線、接收 socket 數可設定</b>（Traffic 卡片），沒有 UE 的發送線不醒、慢的發送線少醒</td><td>原本固定等於 CPU 數，96 CPU 就有約 190 條發送線，每條每 ms 醒一次</td><td><span class="pill ok">已完成</span> 96 條線、4 個 1 Mbps UE 時 CPU 79% → 12%（一顆核心）</td></tr>
-        <tr><td>3</td><td><b>延遲抽樣</b>：每個方向每秒約記 10 萬筆，掉包與亂序仍然每個封包都算</td><td>每個收到的封包都要算一次 log2、更新直方圖</td><td><span class="pill ok">已完成</span> 1000 UE × 30 Mbps 時 32 個記 1 個</td></tr>
-        <tr><td>4</td><td><b>UPF 的 veth 開 GRO</b>（Traffic 卡片，預設開）：host 側開 GRO、容器側關 TSO，run 結束還原</td><td>Docker 的 veth 預設不做 GRO，tester 開了 UDP_GRO 也是一次讀一個封包</td><td><span class="pill ok">已完成</span> 模擬 UPF 轉送時，一次讀 40 個封包，單一 socket 收到的量 1.9 倍</td></tr>
-        <tr><td>5</td><td>依 TEID 分配 DL 的接收 socket（eBPF）</td><td>同一個 gNB 的 DL 分給多條讀取線</td><td><span class="pill muted">不做</span> 第 1 項做到同樣的事、效果更好，eBPF 還要 BPF 權限</td></tr>
-        <tr><td>6</td><td>MSG_ZEROCOPY</td><td>64 KB 的 GSO 訊息不必複製進 kernel</td><td><span class="pill muted">不做</span> 只在分兩台時有用、這裡量不到，而且要等 kernel 通知才能重用緩衝，做錯會送出錯的序號</td></tr>
-      </table>
-    </div>
-    <p><b>建議的設定：</b>tester 與 UPF 同一台時，開著「GRO on the UPF's veth」、Downlink batch 1 ms、UE 多每個打少；DL 要更高時把「N3 IPs per gNB」調到 2–4，而不是只加 gNB。分兩台時，Senders 可以調低到十幾條（Bench 一條線就能送 41 Gbps），把 CPU 留給收包。Docker Compose 跑 fru-tester 時，veth GRO 需要 <code>pid: host</code> 和 <code>SYS_ADMIN</code>（compose 檔已加）。</p>
-    <p><b>tester 以外、影響更大的：</b>tester 與 5GC 分兩台；測試流量跳過 UPF 的 NAT／conntrack；UPF 不走 Docker bridge。這些不是程式能改的，要在部署上決定。</p>
-
     <h4>要先說清楚的前提</h4>
     <ul class="tight">
       <li><b>被測的 UPF 本身未必轉得了 40G</b>：gtp5g 每核心約 30 萬 pps，40G 需要它用上十幾到二十幾顆核心，再加上 URR 字串查詢的低效率。tester 的目標是不要成為瓶頸，數字上不去時很可能就是 UPF 的上限，而這正是要測的東西。</li>
       <li><b>不建議用巨型封包（MTU 9000）當捷徑</b>：pps 會降到約六分之一、現有架構可能就夠，但真實網路是 1500 MTU，數字不具代表性。</li>
       <li>下一步：在高效能機器上用 Bench 分頁量「每核心能送多少、加核心是否線性成長」，再用真實核網跑一次，看瓶頸是在 tester 的收包還是 UPF，再評估 40G。</li>
     </ul>
-  </div>
-
-  <div class="faq">
-    <h3>Q5 · UL 和 DL 的處理方式差在哪裡？</h3>
-    <div class="short"><b>簡答：</b>UL 的 GTP-U 封包是 tester 自己組好送給 UPF，UPF 解封裝後送到 tester 的 sink；DL 是 tester 送一般 UDP 給 UE IP，由 UPF 封裝成 GTP-U 再送回 gNB。兩邊用的 socket、能不能分給多顆核心、GSO 能不能合併都不一樣，所以<b>UL 加 UE 就能往上長，DL 還要靠多個 gNB 才能分散</b>。</div>
-
-    <h4>逐項比較</h4>
-    <div class="tbl-wrap">
-      <table>
-        <tr><th></th><th>UL（上行）</th><th>DL（下行）</th></tr>
-        <tr><td>tester 送出什麼</td><td>完整的 G-PDU：GTP-U 標頭（UL TEID）＋ 內層 IP/UDP（UE IP → sink IP）＋ tester 標頭</td><td>一般 UDP（sink IP → UE IP:9200），內容是 tester 標頭加填充；IP/UDP 標頭由 kernel 加</td></tr>
-        <tr><td>從哪裡送、送到哪</td><td>gNB 的 N3 IP（系統分配的 port）→ UPF N3:2152</td><td>sink IP → UE IP，靠 run 期間加的路由「UE pool 經由 UPF N6 IP」送進 UPF</td></tr>
-        <tr><td>GTP-U 由誰處理</td><td>UPF 解封裝（gtp5g 在 :2152 收），再把內層封包轉到 N6</td><td>UPF 依 UE IP 找到 session，封裝成 GTP-U（DL TEID，gtp5g 另加 8 bytes 的 PDU Session Container）</td></tr>
-        <tr><td>NAT</td><td>fru-lab 的 UPF 做 MASQUERADE，到 sink 時來源被改成 UPF 的 IP</td><td>沒有 NAT</td></tr>
-        <tr><td>發送線</td><td>每個 gNB 分到 ⌈發送線數 ÷ gNB 數⌉ 條，各有自己的 socket（綁在該 gNB 的 N3 IP）；UE 依編號分到其中一條</td><td>共「發送線數」條（預設 = CPU 核心數），各有自己的 socket（綁在 sink IP），不分 gNB；UE 依編號分配</td></tr>
-        <tr><td>UDP GSO 合併</td><td>同一個 gNB 的封包目的地都是 UPF，<b>不同 UE 的封包也能接在一起</b>，一則訊息最多 64 個封包，不用設定</td><td>目的地是各 UE 的 IP，<b>只能合併同一個 UE 的封包</b>；靠 Downlink batch 讓一個 UE 連續送幾 ms 的量。每 UE 30 Mbps、1 ms 時一次只合 2 個</td></tr>
-        <tr><td>在哪裡收</td><td>sink IP:port，一組 SO_REUSEPORT socket（數量 = CPU 核心數），kernel 依連線分給各 socket，每個 socket 一條讀取線</td><td>每個 gNB 的 N3 IP:2152，<b>每個 N3 IP 一個 socket、一條讀取線</b>（預設每個 gNB 一個 IP，可用「N3 IPs per gNB」增加）</td></tr>
-        <tr><td>收到後怎麼認</td><td>來源被 NAT 改過，只能看 tester 標頭裡的 UE 編號；看不到 TEID</td><td>拆掉 GTP-U（略過擴充標頭）後看標頭；<b>還會檢查 TEID 和 gNB</b>，送錯隧道或送錯 gNB 記為 misrouted，不算收到</td></tr>
-        <tr><td>N3 上每個封包多多少</td><td>36 bytes（外層 IP 20 + UDP 8 + GTP-U 8）</td><td>44 bytes（再加 PDU Session Container 8）</td></tr>
-        <tr><td>吞吐、掉包、延遲怎麼算</td><td colspan="2">兩邊相同：都算內層 IP 封包的長度；每個 UE、每個方向各自有序號算亂序，用送出時間算單向延遲</td></tr>
-      </table>
-    </div>
-
-    <h4>對多顆核心的影響（為什麼 DL 比較難往上打）</h4>
-    <p>tester、UPF、網卡都是依「連線」（來源與目的的 IP、port）把封包分給不同核心，同一條連線的封包固定在同一顆核心處理。</p>
-    <ul class="tight">
-      <li><b>UL 天生分得開</b>：每個 gNB 有好幾個發送 socket，port 都不同，UPF 那邊看到的是很多條連線；解封裝後每個 UE 是自己的連線，sink 的多個 socket 又把它們分給多條讀取線。加 UE、加發送線，UL 就跟著長。</li>
-      <li><b>DL 每個 gNB 擠成一條</b>：同一個 gNB 的所有 DL，外層都是「UPF:2152 → gNB:2152」，對網卡和 kernel 來說是同一條連線，只會進同一個佇列，tester 也只有一條讀取線在收（開了 GRO 時一次可以讀一整塊，但 Docker 的 veth 預設不做 GRO）。所以 DL 要往上打，要增加 gNB 數，或用「N3 IPs per gNB」讓每個 gNB 有好幾個 DL 隧道位址；只加 UE 沒有用。UPF 在同一台的 Docker 裡時，再開「GRO on the UPF's veth」，讀取線一次就能讀一整塊。</li>
-      <li><b>DL 的發送比較吃 CPU</b>：每個 UE 速率低時，DL 的 GSO 幾乎合不起來，一次只送一兩個封包；UL 不管每個 UE 多少，同一個 gNB 都能合在一起。</li>
-      <li><b>UPF 單一 UE 的上限兩邊一樣</b>：同一個 UE 的封包在 UPF 也是同一條連線、同一顆核心，gtp5g 每核心約 30 萬 pps（1400 bytes 約 3.4 Gbps）。單一 UE 打很大，兩個方向都會先卡在這裡。</li>
-    </ul>
-
-    <h4>UPF 和 tester 在同一台時</h4>
-    <ul class="tight">
-      <li>封包經 veth 進 UPF container 後，bridge、gtp5g、NAT 的處理大多在<b>送出這個封包的那顆 CPU</b> 上做完（softirq）。所以 UL 的解封裝算在 tester 的 UL 發送線上，DL 的封裝算在 DL 發送線上（見 Q3）。</li>
-      <li>因此每條發送線分到的 UE 越平均，96 顆 CPU 的負載就越平均。UE 多、每個打少比較穩：1000 UE 分到 96 條 DL 發送線，每條 10 或 11 個（差約 10%）；400 UE 時每條 4 或 5 個（差 25%）。每個 UE 速率低，封包到達也比較平均，不容易一次塞滿某顆 CPU 的收包佇列（預設最多 1000 個，<code>net.core.netdev_max_backlog</code>），那種掉包是一陣一陣的。</li>
-      <li>實測（96 CPU 的機器，tester 與 free5GC 的 Docker UPF 在同一台）：10 gNB × 1000 UE × 每 UE 30 Mbps，上下行各 30 Gbps 打得到，96 顆 CPU 都在 90% 左右，比 UE 少、每個打大的配置穩定。</li>
-    </ul>
-
-    <h4>配置建議</h4>
-    <div class="tbl-wrap">
-      <table>
-        <tr><th>情況</th><th>建議</th></tr>
-        <tr><td>tester 和 UPF 同一台</td><td>UE 多、每個打少（例如 1000–2000 UE × 15–30 Mbps）；Downlink batch 維持 1 ms 或更小，平均比省 CPU 重要；可把 <code>net.core.netdev_max_backlog</code> 調大到 10000</td></tr>
-        <tr><td>tester 和 UPF 分兩台</td><td>每 UE 50–100 Mbps、Downlink batch 1–2 ms，讓 DL 的 GSO 一次合多個封包；UE 數夠多，UPF 才分得到很多核心</td></tr>
-        <tr><td>DL 要更高</td><td>把「N3 IPs per gNB」調到 2–4，或增加 gNB 數，讓每個 N3 IP 的 DL 約 2–3 Gbps 以內（一條讀取線收得了）</td></tr>
-        <tr><td>任何情況</td><td>每個 UE 單一方向不要超過約 3 Gbps（UPF 單核上限）；UPF 主機網卡的 UDP 分流要包含 port（<code>ethtool -N &lt;網卡&gt; rx-flow-hash udp4 sdfn</code>），否則同一個 gNB 的 UL 會全進同一個佇列</td></tr>
-      </table>
-    </div>
   </div>
 </section>
 
