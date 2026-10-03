@@ -316,8 +316,8 @@ func TestUplinkIsReadOnSeveralSinkSockets(t *testing.T) {
 		}
 		_ = c.Close()
 	}
-	require.Eventually(t, func() bool { return e.ul.rxPackets.Load() == uint64(sent) }, 2*time.Second, 10*time.Millisecond)
-	require.Zero(t, e.ul.outOfOrder.Load())
+	require.Eventually(t, func() bool { return e.Snapshot().Ul.RxPackets == uint64(sent) }, 2*time.Second, 10*time.Millisecond)
+	require.Zero(t, e.Snapshot().Ul.OutOfOrder)
 }
 
 // Batched sends (sendmmsg) must still carry every packet, each with its

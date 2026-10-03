@@ -40,3 +40,18 @@ func TestLatencySnapshot(t *testing.T) {
 	require.InDelta(t, 3.0, s.AvgMs, 0.001)
 	require.InDelta(t, 4.0, s.MaxMs, 0.001)
 }
+
+func TestMergedSnapshotIsOneHistogramOfAll(t *testing.T) {
+	var a, b, all Latency
+	for i := 1; i <= 100; i++ {
+		d := time.Duration(i) * time.Millisecond
+		all.Record(d)
+		if i%3 == 0 {
+			a.Record(d)
+		} else {
+			b.RecordAll([]time.Duration{d})
+		}
+	}
+	require.Equal(t, all.Snapshot(), MergedSnapshot([]*Latency{&a, &b}))
+	require.Equal(t, LatencySnapshot{}, MergedSnapshot(nil))
+}

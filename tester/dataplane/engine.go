@@ -14,8 +14,6 @@ import (
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/sys/unix"
-
-	"tester/metrics"
 )
 
 // Config is one run's traffic setup. Rates are per UE (design Q10).
@@ -95,16 +93,6 @@ func (s *shard) load() []*flow {
 	return append([]*flow(nil), s.flows...)
 }
 
-type dirCounters struct {
-	txPackets, txBytes, rxPackets, rxBytes atomic.Uint64
-	outOfOrder, sendErrors, misrouted      atomic.Uint64
-	latency                                metrics.Latency
-}
-
-type gnbCounters struct {
-	ulTx, ulRx, dlTx, dlRx atomic.Uint64 // bytes
-}
-
 // Engine runs one run's data plane.
 type Engine struct {
 	cfg   Config
@@ -117,8 +105,7 @@ type Engine struct {
 	ulShards []*shard // ulPerGnb consecutive shards per gNB
 	dlShards []*shard
 	ulPerGnb int
-	ul, dl   dirCounters
-	gnbs     []gnbCounters
+	ul, dl   dirStats
 	active   atomic.Int64
 	stopped  atomic.Bool
 
@@ -145,8 +132,7 @@ func New(cfg Config) *Engine {
 	if cfg.Receivers <= 0 {
 		cfg.Receivers = min(runtime.NumCPU(), maxReceivers)
 	}
-	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), gnbs: make([]gnbCounters, len(cfg.GnbN3IPs)),
-		history: newHistory(historyPoints)}
+	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints)}
 	gnbs := max(1, len(cfg.GnbN3IPs))
 	e.ulPerGnb = max(1, (cfg.Senders+gnbs-1)/gnbs)
 	for range len(cfg.GnbN3IPs) * e.ulPerGnb {
@@ -220,23 +206,27 @@ func (e *Engine) Start() error {
 	e.cancel = cancel
 	e.started = e.cfg.Now()
 	for g, conn := range e.n3 {
+		r := e.newReader(conn, &e.dl)
 		e.readers.Add(1)
-		go e.readN3(g, conn)
+		go r.readN3(g)
 	}
 	for _, conn := range e.sinks {
+		r := e.newReader(conn, &e.ul)
 		e.readers.Add(1)
-		go e.readSink(conn)
+		go r.readSink()
 	}
 	if e.cfg.UlBps > 0 {
 		for i, sh := range e.ulShards {
+			b := e.newBatcher(e.ulOut[i], false, i/e.ulPerGnb)
 			e.senders.Add(1)
-			go e.pace(ctx, sh, e.cfg.UlBps, e.ulOut[i], i/e.ulPerGnb, false)
+			go e.pace(ctx, sh, e.cfg.UlBps, b)
 		}
 	}
 	if e.cfg.DlBps > 0 {
 		for i, sh := range e.dlShards {
+			b := e.newBatcher(e.dlOut[i], true, -1)
 			e.senders.Add(1)
-			go e.pace(ctx, sh, e.cfg.DlBps, e.dlOut[i], -1, true)
+			go e.pace(ctx, sh, e.cfg.DlBps, b)
 		}
 	}
 	e.sampler.Add(1)
@@ -295,12 +285,10 @@ func growReadBuffer(c *net.UDPConn) {
 
 // pace sends round-robin over a shard's flows at bps per flow, using a
 // token bucket refilled every millisecond and capped at 10 ms of burst.
-// Packets go out batchSize at a time through conn (sendmmsg); gnb is the
-// sending gNB for uplink, -1 for downlink (each flow's own gNB).
-func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, conn *net.UDPConn, gnb int, dl bool) {
+// Packets go out batchSize at a time through b (sendmmsg).
+func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 	defer e.senders.Done()
 	pktBits := float64(e.cfg.PacketSize * 8)
-	b := newBatcher(e, conn, dl)
 	tick := time.NewTicker(time.Millisecond)
 	defer tick.Stop()
 	var flows []*flow
@@ -324,10 +312,10 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, conn *net.UDP
 				rr++
 				budget -= pktBits
 				if b.full() {
-					b.flush(gnb)
+					b.flush()
 				}
 			}
-			b.flush(gnb)
+			b.flush()
 		}
 	}
 }
@@ -338,15 +326,24 @@ type batcher struct {
 	e     *Engine
 	pc    *ipv4.PacketConn
 	dl    bool
+	gnb   int // uplink: the gNB it sends for; downlink: -1 (each flow's own)
 	msgs  []ipv4.Message
 	flows []*flow
 	addrs []net.UDPAddr
 	n     int
+	stats *workerStats
+	acc   accumulator
 }
 
-func newBatcher(e *Engine, conn *net.UDPConn, dl bool) *batcher {
-	b := &batcher{e: e, pc: ipv4.NewPacketConn(conn), dl: dl,
-		msgs: make([]ipv4.Message, batchSize), flows: make([]*flow, batchSize), addrs: make([]net.UDPAddr, batchSize)}
+func (e *Engine) newBatcher(conn *net.UDPConn, dl bool, gnb int) *batcher {
+	d := &e.ul
+	if dl {
+		d = &e.dl
+	}
+	b := &batcher{e: e, pc: ipv4.NewPacketConn(conn), dl: dl, gnb: gnb,
+		msgs: make([]ipv4.Message, batchSize), flows: make([]*flow, batchSize), addrs: make([]net.UDPAddr, batchSize),
+		stats: d.addSender(len(e.cfg.GnbN3IPs))}
+	b.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
 	size := e.cfg.PacketSize + gtpHeaderLen // uplink carries the G-PDU header
 	if dl {
 		size = e.cfg.PacketSize - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
@@ -380,17 +377,18 @@ func (b *batcher) add(f *flow) {
 }
 
 // flush sends what is batched; a message the kernel refuses is counted as
-// a send error and the rest still go out.
-func (b *batcher) flush(gnb int) {
+// a send error and the rest still go out. The batch's counts are then
+// published to the sender's own stats.
+func (b *batcher) flush() {
 	for off := 0; off < b.n; {
 		sent, err := b.pc.WriteBatch(b.msgs[off:b.n], 0)
 		for _, f := range b.flows[off : off+sent] {
-			b.count(f, gnb)
+			b.count(f)
 		}
 		off += sent
 		if err != nil {
 			if off < b.n {
-				b.countError()
+				b.acc.errors++
 				off++ // skip the message that failed
 			} else {
 				break
@@ -398,70 +396,76 @@ func (b *batcher) flush(gnb int) {
 		}
 	}
 	b.n = 0
+	b.acc.publish(b.stats)
 }
 
-func (b *batcher) count(f *flow, gnb int) {
-	size := uint64(b.e.cfg.PacketSize)
+func (b *batcher) count(f *flow) {
+	g := b.gnb
 	if b.dl {
-		b.e.dl.txPackets.Add(1)
-		b.e.dl.txBytes.Add(size)
-		b.e.gnbs[f.gnb].dlTx.Add(size)
-		return
+		g = f.gnb
 	}
-	b.e.ul.txPackets.Add(1)
-	b.e.ul.txBytes.Add(size)
-	b.e.gnbs[gnb].ulTx.Add(size)
+	b.acc.add(g, uint64(b.e.cfg.PacketSize))
 }
 
-func (b *batcher) countError() {
-	if b.dl {
-		b.e.dl.sendErrors.Add(1)
-	} else {
-		b.e.ul.sendErrors.Add(1)
-	}
+// reader reads one socket batchSize packets at a time (recvmmsg) and
+// counts what it receives in its own stats.
+type reader struct {
+	e     *Engine
+	pc    *ipv4.PacketConn
+	msgs  []ipv4.Message
+	stats *workerStats
+	acc   accumulator
+	lat   []time.Duration // the batch's one-way delays
 }
 
-// readBatch reads conn batchSize packets at a time (recvmmsg) and hands
-// each to handle until conn is closed.
-func (e *Engine) readBatch(conn *net.UDPConn, handle func([]byte)) {
-	defer e.readers.Done()
-	pc := ipv4.NewPacketConn(conn)
-	msgs := make([]ipv4.Message, batchSize)
-	for i := range msgs {
-		msgs[i].Buffers = [][]byte{make([]byte, readBufLen)}
+func (e *Engine) newReader(conn *net.UDPConn, d *dirStats) *reader {
+	r := &reader{e: e, pc: ipv4.NewPacketConn(conn), msgs: make([]ipv4.Message, batchSize),
+		stats: d.addReader(len(e.cfg.GnbN3IPs))}
+	r.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
+	for i := range r.msgs {
+		r.msgs[i].Buffers = [][]byte{make([]byte, readBufLen)}
 	}
+	return r
+}
+
+// loop hands each packet to handle until the socket is closed.
+func (r *reader) loop(handle func([]byte)) {
+	defer r.e.readers.Done()
 	for {
-		n, err := pc.ReadBatch(msgs, 0)
+		n, err := r.pc.ReadBatch(r.msgs, 0)
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
 				return
 			}
 			continue
 		}
-		for _, m := range msgs[:n] {
+		for _, m := range r.msgs[:n] {
 			handle(m.Buffers[0][:m.N])
 		}
+		r.stats.latency.RecordAll(r.lat)
+		r.lat = r.lat[:0]
+		r.acc.publish(r.stats)
 	}
 }
 
 // readSink receives uplink after the UPF decapsulated it, on one socket of
 // the sink's SO_REUSEPORT group. The source may be NATed (fru-lab's UPF
 // masquerades), so the UE comes from the header.
-func (e *Engine) readSink(conn *net.UDPConn) {
-	e.readBatch(conn, func(payload []byte) {
-		e.receive(&e.ul, payload, false, ipv4HeaderLen+udpHeaderLen+len(payload), -1, 0)
+func (r *reader) readSink() {
+	r.loop(func(payload []byte) {
+		r.receive(payload, false, ipv4HeaderLen+udpHeaderLen+len(payload), -1, 0)
 	})
 }
 
 // readN3 receives downlink G-PDUs addressed to one gNB's N3 IP.
-func (e *Engine) readN3(g int, conn *net.UDPConn) {
-	e.readBatch(conn, func(b []byte) {
+func (r *reader) readN3(g int) {
+	r.loop(func(b []byte) {
 		teid, inner, err := parseGpdu(b)
 		if err != nil {
 			return
 		}
 		if payload, ok := udpPayload(inner); ok {
-			e.receive(&e.dl, payload, true, len(inner), g, teid)
+			r.receive(payload, true, len(inner), g, teid)
 		}
 	})
 }
@@ -470,7 +474,8 @@ func (e *Engine) readN3(g int, conn *net.UDPConn) {
 // are where it arrived; a UE's downlink in another tunnel or at another
 // gNB is a forwarding fault, counted as misrouted rather than received
 // (this also keeps each flow's dlLast owned by its own gNB's reader).
-func (e *Engine) receive(c *dirCounters, payload []byte, dl bool, ipLen, gnb int, teid uint32) {
+func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
+	e := r.e
 	h, ok := parseHeader(payload)
 	if !ok || h.runID != e.cfg.RunID || h.dl != dl || int(h.ue) >= len(e.flows) {
 		return // not ours, or left over from an earlier run
@@ -480,23 +485,19 @@ func (e *Engine) receive(c *dirCounters, payload []byte, dl bool, ipLen, gnb int
 		return
 	}
 	if dl && (teid != f.dlTeid || gnb != f.gnb) {
-		c.misrouted.Add(1)
+		r.acc.misrouted++
 		return
 	}
-	c.rxPackets.Add(1)
-	c.rxBytes.Add(uint64(ipLen))
-	c.latency.Record(time.Duration(e.cfg.Now().UnixNano() - h.txNanos))
+	r.acc.add(f.gnb, uint64(ipLen))
+	r.lat = append(r.lat, time.Duration(e.cfg.Now().UnixNano()-h.txNanos))
 	last := &f.ulLast
 	if dl {
 		last = &f.dlLast
-		e.gnbs[f.gnb].dlRx.Add(uint64(ipLen))
-	} else {
-		e.gnbs[f.gnb].ulRx.Add(uint64(ipLen))
 	}
 	for {
 		prev := last.Load()
 		if int64(h.seq) <= prev {
-			c.outOfOrder.Add(1)
+			r.acc.outOfOrder++
 			break
 		}
 		if last.CompareAndSwap(prev, int64(h.seq)) {

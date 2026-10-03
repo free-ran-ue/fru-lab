@@ -2,6 +2,8 @@ package dataplane
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"tester/metrics"
@@ -51,6 +53,87 @@ type Snapshot struct {
 	Series    []Point      `json:"series"`
 }
 
+// workerStats is one sender's or one reader's counters. Only its own
+// goroutine writes them, once per batch, so senders and readers never
+// wait on each other's counters (or one latency lock); Snapshot sums them.
+type workerStats struct {
+	packets, bytes        atomic.Uint64 // sent by a sender, received by a reader
+	sendErrors            atomic.Uint64
+	outOfOrder, misrouted atomic.Uint64
+	gnbBytes              []atomic.Uint64 // the same bytes, by gNB
+	latency               metrics.Latency // readers only
+	_                     [64]byte        // keep the next worker's counters off this cache line
+}
+
+// dirStats is one direction's workers.
+type dirStats struct {
+	mu               sync.Mutex
+	senders, readers []*workerStats
+}
+
+func (d *dirStats) addSender(gnbs int) *workerStats { return d.add(&d.senders, gnbs) }
+func (d *dirStats) addReader(gnbs int) *workerStats { return d.add(&d.readers, gnbs) }
+
+func (d *dirStats) add(to *[]*workerStats, gnbs int) *workerStats {
+	w := &workerStats{gnbBytes: make([]atomic.Uint64, gnbs)}
+	d.mu.Lock()
+	*to = append(*to, w)
+	d.mu.Unlock()
+	return w
+}
+
+func (d *dirStats) workers() (senders, readers []*workerStats) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.senders, d.readers
+}
+
+// totals sums workers' packets and bytes.
+func totals(ws []*workerStats) (packets, bytes uint64) {
+	for _, w := range ws {
+		packets += w.packets.Load()
+		bytes += w.bytes.Load()
+	}
+	return packets, bytes
+}
+
+// accumulator is what a worker counts during one batch, published to its
+// workerStats in one go when the batch is done.
+type accumulator struct {
+	packets, bytes                uint64
+	errors, outOfOrder, misrouted uint64
+	gnb                           []uint64 // bytes by gNB
+}
+
+func (a *accumulator) add(gnb int, bytes uint64) {
+	a.packets++
+	a.bytes += bytes
+	a.gnb[gnb] += bytes
+}
+
+func (a *accumulator) publish(w *workerStats) {
+	if a.packets > 0 {
+		w.packets.Add(a.packets)
+		w.bytes.Add(a.bytes)
+		for g, b := range a.gnb {
+			if b > 0 {
+				w.gnbBytes[g].Add(b)
+				a.gnb[g] = 0
+			}
+		}
+	}
+	for _, c := range []struct {
+		n *uint64
+		w *atomic.Uint64
+	}{{&a.errors, &w.sendErrors}, {&a.outOfOrder, &w.outOfOrder}, {&a.misrouted, &w.misrouted}} {
+		if *c.n > 0 {
+			c.w.Add(*c.n)
+			*c.n = 0
+		}
+	}
+	a.packets, a.bytes = 0, 0
+}
+
 type counters struct {
 	at                         time.Time
 	ulTx, ulRx, dlTx, dlRx     uint64 // bytes
@@ -58,11 +141,14 @@ type counters struct {
 }
 
 func (e *Engine) read() counters {
-	return counters{
-		at:   e.cfg.Now(),
-		ulTx: e.ul.txBytes.Load(), ulRx: e.ul.rxBytes.Load(), dlTx: e.dl.txBytes.Load(), dlRx: e.dl.rxBytes.Load(),
-		ulTxP: e.ul.txPackets.Load(), ulRxP: e.ul.rxPackets.Load(), dlTxP: e.dl.txPackets.Load(), dlRxP: e.dl.rxPackets.Load(),
-	}
+	c := counters{at: e.cfg.Now()}
+	ulS, ulR := e.ul.workers()
+	dlS, dlR := e.dl.workers()
+	c.ulTxP, c.ulTx = totals(ulS)
+	c.ulRxP, c.ulRx = totals(ulR)
+	c.dlTxP, c.dlTx = totals(dlS)
+	c.dlRxP, c.dlRx = totals(dlR)
+	return c
 }
 
 func (e *Engine) sample(ctx context.Context) {
@@ -114,24 +200,47 @@ func (e *Engine) Snapshot() Snapshot {
 		ActiveUes: int(e.active.Load()),
 		Ul:        dirSnapshot(&e.ul, last.UlTxBps, last.UlRxBps, pps[0], pps[1]),
 		Dl:        dirSnapshot(&e.dl, last.DlTxBps, last.DlRxBps, pps[2], pps[3]),
-		Gnbs:      make([]GnbTraffic, len(e.gnbs)),
+		Gnbs:      make([]GnbTraffic, len(e.cfg.GnbN3IPs)),
 		Series:    series,
 	}
-	for i := range e.gnbs {
-		g := &e.gnbs[i]
-		s.Gnbs[i] = GnbTraffic{UlTxBytes: g.ulTx.Load(), UlRxBytes: g.ulRx.Load(), DlTxBytes: g.dlTx.Load(), DlRxBytes: g.dlRx.Load()}
+	for _, f := range []struct {
+		d  *dirStats
+		tx func(*GnbTraffic) *uint64
+		rx func(*GnbTraffic) *uint64
+	}{
+		{&e.ul, func(g *GnbTraffic) *uint64 { return &g.UlTxBytes }, func(g *GnbTraffic) *uint64 { return &g.UlRxBytes }},
+		{&e.dl, func(g *GnbTraffic) *uint64 { return &g.DlTxBytes }, func(g *GnbTraffic) *uint64 { return &g.DlRxBytes }},
+	} {
+		senders, readers := f.d.workers()
+		addGnbBytes(s.Gnbs, senders, f.tx)
+		addGnbBytes(s.Gnbs, readers, f.rx)
 	}
 	return s
 }
 
-func dirSnapshot(c *dirCounters, txBps, rxBps, txPps, rxPps float64) DirSnapshot {
-	d := DirSnapshot{
-		TxPackets: c.txPackets.Load(), TxBytes: c.txBytes.Load(),
-		RxPackets: c.rxPackets.Load(), RxBytes: c.rxBytes.Load(),
-		TxBps: txBps, RxBps: rxBps, TxPps: txPps, RxPps: rxPps,
-		OutOfOrder: c.outOfOrder.Load(), SendErrors: c.sendErrors.Load(), Misrouted: c.misrouted.Load(),
-		Latency: c.latency.Snapshot(),
+func addGnbBytes(gnbs []GnbTraffic, ws []*workerStats, field func(*GnbTraffic) *uint64) {
+	for _, w := range ws {
+		for g := range w.gnbBytes {
+			*field(&gnbs[g]) += w.gnbBytes[g].Load()
+		}
 	}
+}
+
+func dirSnapshot(ds *dirStats, txBps, rxBps, txPps, rxPps float64) DirSnapshot {
+	senders, readers := ds.workers()
+	d := DirSnapshot{TxBps: txBps, RxBps: rxBps, TxPps: txPps, RxPps: rxPps}
+	d.TxPackets, d.TxBytes = totals(senders)
+	d.RxPackets, d.RxBytes = totals(readers)
+	lat := make([]*metrics.Latency, 0, len(readers))
+	for _, w := range senders {
+		d.SendErrors += w.sendErrors.Load()
+	}
+	for _, w := range readers {
+		d.OutOfOrder += w.outOfOrder.Load()
+		d.Misrouted += w.misrouted.Load()
+		lat = append(lat, &w.latency)
+	}
+	d.Latency = metrics.MergedSnapshot(lat)
 	if d.TxPackets > 0 && d.RxPackets < d.TxPackets {
 		d.LossRate = 1 - float64(d.RxPackets)/float64(d.TxPackets)
 	}
