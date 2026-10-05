@@ -1,0 +1,635 @@
+<title>Throughput Tester 使用指南</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: a manual. Sticky contents rail on wide screens, one reading column;
+   field reference as tables (meaning / raise / lower), N2/N3/N6 colour-coded
+   the way the Setup page groups them. */
+:root {
+  --bg: #f4f6f7;
+  --paper: #ffffff;
+  --ink: #16212a;
+  --ink-2: #47565f;
+  --ink-3: #7a8993;
+  --line: #d8e0e5;
+  --code-bg: #edf1f3;
+  --accent: #0e7575;
+  --accent-soft: #daeeed;
+  --n2: #2f62c9;  --n2-soft: #e3ebfa;
+  --n3: #b06805;  --n3-soft: #f8ecd9;
+  --n6: #2d8744;  --n6-soft: #e0f1e4;
+  --up: #2d8744;  --down: #a8461f; --down-soft: #f8e4da;
+  --warn: #a45a00; --warn-soft: #fbefdc;
+  --f-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --f-head: "IBM Plex Sans Condensed", "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171b; --paper: #172027; --ink: #e3eaee; --ink-2: #a8b6bf; --ink-3: #788893;
+    --line: #2a3740; --code-bg: #1e2930; --accent: #4cc2bf; --accent-soft: #153938;
+    --n2: #7ea6f2; --n2-soft: #1d2b47; --n3: #e3a24b; --n3-soft: #3a2a14; --n6: #6fcf86; --n6-soft: #183421;
+    --up: #6fcf86; --down: #ee8a62; --down-soft: #3d2219; --warn: #e9a24f; --warn-soft: #3a2a14; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171b; --paper: #172027; --ink: #e3eaee; --ink-2: #a8b6bf; --ink-3: #788893;
+  --line: #2a3740; --code-bg: #1e2930; --accent: #4cc2bf; --accent-soft: #153938;
+  --n2: #7ea6f2; --n2-soft: #1d2b47; --n3: #e3a24b; --n3-soft: #3a2a14; --n6: #6fcf86; --n6-soft: #183421;
+  --up: #6fcf86; --down: #ee8a62; --down-soft: #3d2219; --warn: #e9a24f; --warn-soft: #3a2a14; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15.5px; line-height: 1.75; }
+.shell { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 90px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
+nav.toc .toc-title { font-family: var(--f-mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+nav.toc a { color: var(--ink-2); text-decoration: none; padding: 3px 0 3px 10px; border-left: 2px solid var(--line); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); border-left-color: var(--accent); outline: none; }
+nav.toc a.sub { padding-left: 22px; font-size: .82rem; }
+main { min-width: 0; display: flex; flex-direction: column; gap: 56px; }
+@media (max-width: 960px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  nav.toc { position: static; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  nav.toc .toc-title { grid-column: 1 / -1; }
+  nav.toc a.sub { display: none; }
+}
+@media (max-width: 520px) { body { font-size: 15px; } .shell { padding-inline: 16px; } }
+
+header.top { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font-family: var(--f-mono); font-size: .76rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--f-head); font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.15; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--f-head); font-size: 1.5rem; line-height: 1.3; margin: 0; text-wrap: balance; padding-top: 6px; border-top: 2px solid var(--ink); }
+h3 { font-size: 1.08rem; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+h4 { font-size: .98rem; margin: 0; color: var(--ink-2); }
+p { margin: 0; max-width: 70ch; }
+.lead { color: var(--ink-2); font-size: 1.03rem; }
+section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 20px; }
+.block { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 20px; }
+code, .mono { font-family: var(--f-mono); font-size: .87em; }
+:not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+ul, ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 5px; max-width: 72ch; }
+.tag { font-family: var(--f-mono); font-size: .76rem; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+.tag.n2 { background: var(--n2-soft); color: var(--n2); } .tag.n3 { background: var(--n3-soft); color: var(--n3); } .tag.n6 { background: var(--n6-soft); color: var(--n6); }
+.tag.acc { background: var(--accent-soft); color: var(--accent); }
+
+/* tables */
+.tbl { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: .89rem; line-height: 1.6; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .76rem; letter-spacing: .04em; color: var(--ink-3); font-weight: 600; background: var(--bg); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.f { font-weight: 700; min-width: 9em; }
+td.f .path { display: block; font-family: var(--f-mono); font-size: .74rem; font-weight: 400; color: var(--ink-3); overflow-wrap: anywhere; }
+td.r { font-family: var(--f-mono); font-size: .8rem; color: var(--ink-2); min-width: 8em; }
+td.up { min-width: 13em; } td.down { min-width: 13em; }
+th.up { color: var(--up); } th.down { color: var(--down); }
+td.val { font-family: var(--f-mono); font-size: .85rem; white-space: nowrap; }
+tr.grp td { background: var(--bg); font-weight: 700; font-size: .84rem; }
+.fields table { min-width: 860px; }
+
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 12px 14px; border-radius: 0 6px 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.note b { color: var(--warn); }
+.why { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 14px; border-radius: 0 6px 6px 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* code */
+.code { position: relative; background: var(--code-bg); border-radius: 8px; border: 1px solid var(--line); min-width: 0; }
+.code pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-family: var(--f-mono); font-size: .85rem; line-height: 1.65; }
+.code .cmt { color: var(--ink-3); }
+.copy { position: absolute; top: 8px; right: 8px; font-family: var(--f-body); font-size: .76rem; padding: 3px 10px; border-radius: 5px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-2); cursor: pointer; }
+.copy:hover { color: var(--accent); border-color: var(--accent); }
+.copy:focus-visible { outline: 2px solid var(--accent); }
+.where { font-family: var(--f-mono); font-size: .76rem; color: var(--ink-3); margin-bottom: -6px; }
+
+/* flow */
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.flow div { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.flow b { font-family: var(--f-head); font-size: 1rem; }
+.flow span { font-size: .84rem; color: var(--ink-2); line-height: 1.55; }
+.flow .stop { border-color: var(--down); }
+
+/* compare */
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.compare > div { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* inputs */
+.vars { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.vars-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.vars label { display: flex; flex-direction: column; gap: 4px; font-size: .84rem; color: var(--ink-2); min-width: 0; }
+.vars input { font-family: var(--f-mono); font-size: .9rem; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
+.vars input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint { font-size: .84rem; color: var(--ink-3); }
+
+/* diagram */
+.diagram { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.d-box { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+.d-pod { fill: var(--paper); stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 3; }
+.d-title { fill: var(--ink); font-family: var(--f-head); font-size: 15px; font-weight: 700; }
+.d-sub { fill: var(--ink-3); font-family: var(--f-body); font-size: 11.5px; }
+.d-ip { font-family: var(--f-mono); font-size: 12px; font-weight: 600; }
+.d-nic { fill: var(--ink-2); font-family: var(--f-mono); font-size: 11.5px; }
+.d-port { fill: var(--paper); stroke-width: 2; }
+.c2 { stroke: var(--n2); } .c3 { stroke: var(--n3); } .c6 { stroke: var(--n6); }
+.t2 { fill: var(--n2); } .t3 { fill: var(--n3); } .t6 { fill: var(--n6); }
+.d-wire { stroke-width: 3; fill: none; }
+footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="目錄">
+    <div class="toc-title">目錄</div>
+    <a href="#overview">它做什麼</a>
+    <a href="#prereq">開始之前</a>
+    <a href="#launch">啟動 fru-tester</a>
+    <a href="#deploy">部署架構</a>
+    <a class="sub" href="#two-hosts">兩台機器：步驟</a>
+    <a href="#fields">Setup 頁欄位</a>
+    <a class="sub" href="#f-scale">規模</a>
+    <a class="sub" href="#f-template">gNB／UE 樣板</a>
+    <a class="sub" href="#f-network">N2／N3／N6</a>
+    <a class="sub" href="#f-traffic">Traffic per UE</a>
+    <a class="sub" href="#f-pacing">N2 與流程步調</a>
+    <a href="#recipes">建議設定</a>
+    <a href="#run">Run 頁怎麼看</a>
+    <a href="#history">History 與 Bench</a>
+    <a href="#limits">已知限制與排錯</a>
+  </nav>
+
+  <main>
+    <header class="top">
+      <div class="eyebrow">fru-lab · Throughput Tester</div>
+      <h1>Throughput Tester 使用指南</h1>
+      <p class="lead">Throughput Tester 模擬大量 gNB 和 UE，對<b>任何</b> 5G 核網做 N2 建立、註冊、PDU session，再打固定速率的上下行流量，量 UPF 實際轉送了多少。它不依賴 fru-lab 部署的 free5GC。這份指南涵蓋啟動、部署架構、Setup 頁每個欄位的意思與調整方向，以及怎麼讀結果。</p>
+    </header>
+
+    <section id="overview">
+      <h2>它做什麼</h2>
+      <p>引擎是獨立的程式 <code>fru-tester</code>。fru-lab 保存你的設定檔，並把 Tester 各頁的 API 轉給 fru-tester（用共用的 API token）。一次 run 依序做這些事，每一段都有即時統計：</p>
+      <div class="flow">
+        <div><b>N2 建立</b><span>每個 gNB 開一條 SCTP、送 NG Setup</span></div>
+        <div><b>註冊</b><span>gNB 一 up，它的 UE 就開始註冊</span></div>
+        <div><b>PDU session</b><span>每個註冊成功的 UE 建一個</span></div>
+        <div><b>流量</b><span>PDU 建好 500 ms 後開始打 UL／DL，確認從 UPF 回來</span></div>
+        <div class="stop"><b>Stop 之後</b><span>流量立即停 → UE Deregister（核網一併釋放 PDU）→ 關 SCTP → 移除 IP 與路由</span></div>
+      </div>
+      <ul>
+        <li>UE 不開無線連線：每個 gNB 透過自己唯一的 SCTP association，直接在 NGAP 裡帶它所有 UE 的 NAS 訊息。</li>
+        <li>沒有 TUN 介面：UL 由 tester 直接組成 GTP-U 封包送給 UPF；DL 由 tester 送一般 UDP 給 UE IP，經路由進 UPF，UPF 封裝後送回 gNB 的 N3 IP。</li>
+        <li>每個封包都帶一個小標頭（UE、序號、送出時間），UPF 做了 NAT 也認得出是哪個 UE；上一次 run 殘留的封包會被忽略。</li>
+        <li>流量一直跑到按 <b>Stop</b> 或達到最長執行時間。收尾中再按一次 Stop（<b>Skip cleanup</b>）會略過剩下的 Deregistration，但 SCTP 一樣關、IP 一樣清。收尾結束才能開始下一個 run。</li>
+      </ul>
+    </section>
+
+    <section id="prereq">
+      <h2>開始之前</h2>
+      <ul>
+        <li><b>SCTP 模組</b>：跑 fru-tester 的主機要先 <code>sudo modprobe sctp</code>（要開機自動載入：<code>echo sctp | sudo tee /etc/modules-load.d/sctp.conf</code>）。</li>
+        <li><b>權限</b>：fru-tester 用 root 或 <code>CAP_NET_ADMIN</code> 執行。run 開始時它會在網卡上加每個 gNB 的 IP、加 UE pool 的路由，結束時移除。</li>
+        <li><b>IP 規劃</b>：挑一段沒人用的 CIDR 和起始 IP。fru-tester 會跳過網路與廣播位址、AMF 與 UPF 的 IP、以及<b>這台主機上</b>已經有的 IP。它看不到別台機器、Docker bridge 上的容器、k8s pod 用掉的 IP（例如 fru-lab 部署的 gNB 容器 <code>10.0.1.2</code>），所以起始 IP 要從遠一點的地方開始，例如 <code>10.0.1.100</code>。</li>
+        <li><b>訂閱資料</b>：fru-tester 不會建訂閱。每個 UE 都要在核網裡有：plan preview 顯示的 SUPI（每個 gNB 一列，列出第一個與最後一個 SUPI）、UE 樣板的 K、OPc、AMF、SQN，以及 gNB 樣板有宣告的切片（S-NSSAI）。fru-lab 的 Subscribers 頁可以一次新增大量 UE（IMSI 逐一加 1），但它管的是 fru-lab 自己部署的核網；別的核網要在那個核網的 webconsole 建。</li>
+        <li><b>free5GC 的兩個設定</b>：SMF 的 <code>urrThreshold</code> 要調大（fru-lab 的範本是 10 GB），否則高速率時 UPF 每一兩個封包就報一次用量，DL 會斷；CHF 的 <code>cgf.enable</code> 要是 <code>false</code>，否則 PDU session 會卡 10 秒後逾時。fru-lab 的範本已經這樣設，其他核網或舊版要自己改。</li>
+      </ul>
+    </section>
+
+    <section id="launch">
+      <h2>啟動 fru-tester</h2>
+      <div class="compare">
+        <div>
+          <h3>開發模式</h3>
+          <div class="code"><button class="copy" type="button">複製</button><pre>make backend frontend tester
+make run          <span class="cmt"># fru-lab，:8888，讀 config.yaml</span>
+make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），讀 tester.yaml</span></pre></div>
+          <p class="hint"><code>config.yaml</code> 的 <code>backend.tester.url</code>、<code>apiToken</code> 要和 <code>tester.yaml</code> 的 <code>listen</code>、<code>apiToken</code> 一致。<code>backend.tester.url</code> 空白時，Tester 各頁會顯示「Throughput Tester is not configured」。</p>
+        </div>
+        <div>
+          <h3>Docker Compose</h3>
+          <p><code>docker/docker-compose.yaml</code> 讓 fru-tester 用 host network 執行，權限是 <code>NET_ADMIN</code>（加 gNB IP 和路由）。fru-lab 透過 <code>http://host.docker.internal:9100</code> 連到它。</p>
+          <p class="hint">tester API 會在 host 的所有網卡上聽，所以 <code>docker/tester.yaml</code> 和 <code>docker/config.yaml</code> 的 <code>apiToken</code> 都要改掉預設值。兩個 image 用 <code>make docker</code> 建。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="deploy">
+      <h2>部署架構：同一台還是兩台</h2>
+      <div class="compare">
+        <div>
+          <h3>tester 和 5GC 同一台 <span class="tag acc">fru-lab 預設</span></h3>
+          <ul>
+            <li>最簡單：fru-lab 部署的 free5GC 在 Docker bridge <code>docker-cn-ran</code> 上，Setup 頁的預設值直接能跑。</li>
+            <li>封包經 veth 進 UPF 容器後，bridge、gtp5g、NAT 的處理大多在 tester 送出封包的那顆 CPU 上做完，所以 tester 與 UPF 搶同一批 CPU。量到的是「兩者合起來」的上限。</li>
+            <li>實測：96 CPU 機器，10 gNB × 1000 UE × 30 Mbps，上下行各 30 Gbps，CPU 約 90%。</li>
+          </ul>
+        </div>
+        <div>
+          <h3>tester 和 5GC 分兩台 <span class="tag acc">量 UPF 上限時建議</span></h3>
+          <ul>
+            <li>A 主機只跑 5GC，B 主機只跑 tester，量到的才是 UPF 自己的上限。</li>
+            <li>tester 那台的發送端幾乎不會是瓶頸（Bench：一條發送線 19–41 Gbps，看 CPU）。</li>
+            <li>要多注意網路：同一個 L2、同一個 subnet、網卡依 port 分流。步驟見下面。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="why">
+        <p><b>5GC 在 k8s、N2/N3/N6 用 macvlan 時：</b>主機上看到的 N2/N3/N6 網卡沒有 IP，IP 在 pod 裡。macvlan 的子介面（pod）連不到同一台主機的母網卡，所以 tester 如果也跑在這台，<b>不能</b>直接用那幾張網卡，要先在主機上開 macvlan 子介面給 tester 用（<code>ip link add n3-t link N3 type macvlan mode bridge</code>，N2、N6 同理），Setup 頁的介面填子介面。tester 在另一台、經實體線連過去就沒有這個限制。</p>
+      </div>
+
+      <div class="block" id="two-hosts">
+        <h3>兩台機器：B 主機接到 A 主機的 k8s 5GC</h3>
+        <p>例子：A 主機用 k8s 跑 5GC，N2、N3、N6 是綁在實體網卡上的 macvlan；B 主機跑 fru-tester，三個網口用線直接接到 A 的三個網口。先填你 B 主機的值，下面的指令會跟著換。</p>
+        <div class="vars">
+          <div class="vars-grid">
+            <label for="v-n2">B 的 N2 網卡<input id="v-n2" value="ens2f0" spellcheck="false" autocomplete="off"></label>
+            <label for="v-n3">B 的 N3 網卡<input id="v-n3" value="ens2f1" spellcheck="false" autocomplete="off"></label>
+            <label for="v-n6">B 的 N6 網卡<input id="v-n6" value="ens2f2" spellcheck="false" autocomplete="off"></label>
+            <label for="v-pool">SMF 的 UE IP pool<input id="v-pool" value="10.60.0.0/16" spellcheck="false" autocomplete="off"></label>
+          </div>
+          <p class="hint">預設值只是範例。網卡名稱用 <code>ip -br link</code> 查，UE pool 看 SMF 設定（free5GC 是 <code>smfcfg.yaml</code> 的 <code>pools</code>）。下面的 IP 以這組為例：AMF N2 <code>172.22.49.140</code>、UPF N3 <code>172.23.49.140</code>、UPF N6 <code>172.26.49.140</code>，三個網段都是 /16；gNB 從 <code>172.22.6.1</code>、<code>172.23.6.1</code> 開始，sink 是 <code>172.26.6.1</code>。</p>
+        </div>
+        <div class="diagram" role="img" aria-label="A 主機的 AMF 與 UPF pod 透過三條網路線連到 B 主機的三張網卡">
+          <svg viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg">
+            <rect class="d-box" x="10" y="10" width="300" height="310" rx="8"/>
+            <text class="d-title" x="26" y="38">A 主機 · k8s 5GC</text>
+            <text class="d-sub" x="26" y="56">主機上的網卡沒有 IP，IP 在 pod 裡</text>
+            <rect class="d-pod" x="26" y="74" width="190" height="62" rx="6"/>
+            <text class="d-title" x="38" y="98" style="font-size:13px">AMF pod</text>
+            <text class="d-ip t2" x="38" y="122">N2 172.22.49.140</text>
+            <rect class="d-pod" x="26" y="152" width="190" height="150" rx="6"/>
+            <text class="d-title" x="38" y="176" style="font-size:13px">UPF pod</text>
+            <text class="d-ip t3" x="38" y="200">N3 172.23.49.140</text>
+            <text class="d-ip t6" x="38" y="270">N6 172.26.49.140</text>
+            <text class="d-sub" x="38" y="290">UE pool 的 DL 從這裡進</text>
+            <line class="d-wire c2" x1="216" y1="117" x2="300" y2="117"/>
+            <line class="d-wire c3" x1="216" y1="195" x2="300" y2="195"/>
+            <line class="d-wire c6" x1="216" y1="265" x2="300" y2="265"/>
+            <text class="d-sub" x="226" y="108">macvlan</text>
+            <circle class="d-port c2" cx="300" cy="117" r="6"/>
+            <circle class="d-port c3" cx="300" cy="195" r="6"/>
+            <circle class="d-port c6" cx="300" cy="265" r="6"/>
+            <line class="d-wire c2" x1="306" y1="117" x2="454" y2="117"/>
+            <line class="d-wire c3" x1="306" y1="195" x2="454" y2="195"/>
+            <line class="d-wire c6" x1="306" y1="265" x2="454" y2="265"/>
+            <text class="d-sub" x="350" y="108">網路線</text>
+            <rect class="d-box" x="450" y="10" width="300" height="310" rx="8"/>
+            <text class="d-title" x="466" y="38">B 主機 · fru-tester</text>
+            <text class="d-sub" x="466" y="56">run 開始時 tester 自己加 gNB IP</text>
+            <circle class="d-port c2" cx="460" cy="117" r="6"/>
+            <circle class="d-port c3" cx="460" cy="195" r="6"/>
+            <circle class="d-port c6" cx="460" cy="265" r="6"/>
+            <text class="d-nic" x="476" y="102" data-v="n2">ens2f0</text>
+            <text class="d-ip t2" x="476" y="122">gNB 172.22.6.1, .6.2 …</text>
+            <text class="d-nic" x="476" y="180" data-v="n3">ens2f1</text>
+            <text class="d-ip t3" x="476" y="200">gNB 172.23.6.1, .6.2 …</text>
+            <text class="d-nic" x="476" y="250" data-v="n6">ens2f2</text>
+            <text class="d-ip t6" x="476" y="270">sink 172.26.6.1</text>
+            <text class="d-sub" x="476" y="290" data-v="route">路由 10.60.0.0/16 via 172.26.49.140</text>
+          </svg>
+        </div>
+
+        <h4>1. 找出 B 的哪張網卡接到哪個網路</h4>
+        <p>每張網卡先暫時加一個 IP、ping 對面的 pod，通了就知道是哪個網路，再拿掉。用 <code>.6.250</code> 這種不會和 gNB 撞到的 IP。</p>
+        <div class="where">在 B 上</div>
+        <div class="code"><button class="copy" type="button">複製</button><pre>ip -br link   <span class="cmt"># LOWER_UP 代表線有接上</span>
+
+sudo ip link set <span data-v="n2">ens2f0</span> up
+sudo ip addr add 172.22.6.250/16 dev <span data-v="n2">ens2f0</span>
+ping -c 3 -I <span data-v="n2">ens2f0</span> 172.22.49.140
+sudo ip addr del 172.22.6.250/16 dev <span data-v="n2">ens2f0</span>
+
+sudo ip link set <span data-v="n3">ens2f1</span> up
+sudo ip addr add 172.23.6.250/16 dev <span data-v="n3">ens2f1</span>
+ping -c 3 -I <span data-v="n3">ens2f1</span> 172.23.49.140
+sudo ip addr del 172.23.6.250/16 dev <span data-v="n3">ens2f1</span></pre></div>
+
+        <h4>2. B 主機的準備</h4>
+        <div class="where">在 B 上</div>
+        <div class="code"><button class="copy" type="button">複製</button><pre>sudo modprobe sctp
+echo sctp | sudo tee /etc/modules-load.d/sctp.conf
+
+<span class="cmt"># N2、N3 只要 up，不用加 IP：run 開始時 tester 會用 CIDR 的遮罩加 gNB IP</span>
+sudo ip link set <span data-v="n2">ens2f0</span> up
+sudo ip link set <span data-v="n3">ens2f1</span> up
+sudo ip link set <span data-v="n6">ens2f2</span> up
+
+<span class="cmt"># N6 的 sink IP 要手動加，而且要帶 /16</span>
+sudo ip addr add 172.26.6.1/16 dev <span data-v="n6">ens2f2</span>
+ping -c 3 172.26.49.140
+
+<span class="cmt"># UDP 依 port 分流（只有 IP SA / IP DA 時才要改），兩台的 N3、N6 都要</span>
+ethtool -n <span data-v="n3">ens2f1</span> rx-flow-hash udp4
+sudo ethtool -N <span data-v="n3">ens2f1</span> rx-flow-hash udp4 sdfn</pre></div>
+        <div class="why">
+          <p><b>為什麼 sink IP 要自己先加成 /16：</b>主機上沒有 sink IP 時，tester 只會把它加成 /32，主機就沒有到 172.26.0.0/16 的路由，tester 要加的「UE pool 經由 172.26.49.140」會因為閘道不可達而失敗。先手動加，tester 看到主機已經有這個 IP 就不會再加。N2、N3 網卡上不要放 172.22.6.x、172.23.6.x 的 IP，否則 gNB 不會從 .6.1 開始。</p>
+        </div>
+
+        <h4>3. 核網那一邊要確認的事</h4>
+        <div class="where">在 A 上（kubectl）</div>
+        <div class="code"><button class="copy" type="button">複製</button><pre><span class="cmt"># UPF 要能把 UL 送到 sink、把 DL 送到 gNB：都應該走對應的 macvlan 介面</span>
+kubectl exec -n &lt;namespace&gt; &lt;upf-pod&gt; -- ip route get 172.26.6.1
+kubectl exec -n &lt;namespace&gt; &lt;upf-pod&gt; -- ip route get 172.23.6.1
+
+<span class="cmt"># AMF 要在 N2 IP 上收 SCTP（free5GC：amfcfg.yaml 的 ngapIpList）</span>
+kubectl exec -n &lt;namespace&gt; &lt;amf-pod&gt; -- cat /free5gc/config/amfcfg.yaml | grep -A3 ngapIpList</pre></div>
+        <ul>
+          <li>tester 的 UE pool 要和 SMF 發給 UE 的範圍一樣（<code class="mono" data-v="pool">10.60.0.0/16</code>）；SMF 給的 UPF N3 位址要是 <code>172.23.49.140</code>。</li>
+          <li>訂閱資料、<code>urrThreshold</code>、<code>cgf.enable</code> 見「開始之前」。</li>
+          <li>A 是 VM 的話，虛擬交換器要允許一個 port 有多個 MAC（例如 VMware 的 promiscuous mode 和 forged transmits）；第 1 步 ping 得通就代表沒問題。</li>
+          <li>A 的 macvlan IPAM 不能發出 172.22.6.x、172.23.6.x：tester 看不到 pod 的 IP，撞到不會被擋。</li>
+        </ul>
+
+        <h4>4. Setup 頁的網路欄位</h4>
+        <div class="tbl">
+          <table>
+            <tr><th>欄位</th><th>填</th></tr>
+            <tr class="grp"><td colspan="2"><span class="tag n2">N2</span></td></tr>
+            <tr><td>Local interface</td><td class="val" data-v="n2">ens2f0</td></tr>
+            <tr><td>gNB IP CIDR / First gNB IP</td><td class="val">172.22.0.0/16 / 172.22.6.1</td></tr>
+            <tr><td>AMF IP / port</td><td class="val">172.22.49.140 / 38412</td></tr>
+            <tr class="grp"><td colspan="2"><span class="tag n3">N3</span></td></tr>
+            <tr><td>Local interface</td><td class="val" data-v="n3">ens2f1</td></tr>
+            <tr><td>gNB IP CIDR / First gNB IP</td><td class="val">172.23.0.0/16 / 172.23.6.1</td></tr>
+            <tr><td>UPF IP / port</td><td class="val">172.23.49.140 / 2152</td></tr>
+            <tr class="grp"><td colspan="2"><span class="tag n6">N6</span></td></tr>
+            <tr><td>Local interface</td><td class="val" data-v="n6">ens2f2</td></tr>
+            <tr><td>Sink IP / UPF N6 IP</td><td class="val">172.26.6.1 / 172.26.49.140</td></tr>
+            <tr><td>UE IP pool</td><td class="val" data-v="pool">10.60.0.0/16</td></tr>
+          </table>
+        </div>
+        <p>流量欄位的建議值見「建議設定」的兩台情境。</p>
+
+        <h4>5. 第一次跑：先最小規模</h4>
+        <p>先 1 gNB、1 UE、UL/DL 各 1 Mbps。run 進行中可以在 B 上確認：</p>
+        <div class="code"><button class="copy" type="button">複製</button><pre>ip -br addr show <span data-v="n2">ens2f0</span>     <span class="cmt"># tester 加的 gNB IP</span>
+ip route get <span data-v="poolip">10.60.0.1</span>               <span class="cmt"># 要 via 172.26.49.140 dev N6 網卡</span>
+sudo tcpdump -ni <span data-v="n2">ens2f0</span> sctp -c 5
+sudo tcpdump -ni <span data-v="n3">ens2f1</span> udp port 2152 -c 5
+sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
+
+        <h4>6. 固定下來（重開機後還在）</h4>
+        <div class="where">在 B 上：/etc/netplan/60-tester.yaml，再 sudo chmod 600 該檔、sudo netplan apply</div>
+        <div class="code"><button class="copy" type="button">複製</button><pre>network:
+  version: 2
+  ethernets:
+    <span data-v="n2">ens2f0</span>:
+      dhcp4: false
+    <span data-v="n3">ens2f1</span>:
+      dhcp4: false
+    <span data-v="n6">ens2f2</span>:
+      dhcp4: false
+      addresses: [172.26.6.1/16]</pre></div>
+      </div>
+    </section>
+
+    <section id="fields">
+      <h2>Setup 頁欄位</h2>
+      <p>Setup 頁的每一張卡片依序說明。「範圍／預設」的預設是 Console 第一次開啟時的值（對應 fru-lab 的 basic free5GC 範本）。欄位有問題時，錯誤訊息會直接顯示在該欄位下面。</p>
+
+      <div class="block fields" id="f-scale">
+        <h3>規模（Scale）</h3>
+        <div class="tbl"><table>
+          <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
+          <tr><td class="f">Profile name<span class="path">name</span></td><td class="r">不可空白／basic</td><td>設定檔名稱，存在 fru-lab，History 會顯示。</td><td class="up">—</td><td class="down">—</td></tr>
+          <tr><td class="f">gNB count<span class="path">scale.gnbCount</span></td><td class="r">≥ 1／10</td><td>模擬幾個 gNB。每個 gNB 一條 SCTP、一個 N2 IP、一個 N3 IP。</td><td class="up">AMF 要處理更多 NG Setup；要更多 IP。每個 gNB 分到的 DL 變少，DL 收包分得更開。</td><td class="down">每個 gNB 的 DL 是一條連線（UPF:2152 → gNB:2152），只能由一條讀取線、一顆核心收，約 2–3 Gbps。</td></tr>
+          <tr><td class="f">UE count<span class="path">scale.ueCount</span></td><td class="r">≥ 1／1000</td><td>UE 總數。依序填滿 gNB，每個 gNB 容量 = ⌈UE 數 ÷ gNB 數⌉，最後一個可能沒滿。總流量 = UE 數 × 每 UE 速率。</td><td class="up">同樣總量下每個 UE 打得少，UPF 和 tester 的負載分得更平均（同一台時比較穩）；但註冊、PDU 要更久，核網裡 session 也更多。</td><td class="down">要達到同樣總量，每個 UE 得打更大。單一 UE 在 UPF 只會用一顆核心（gtp5g 約 3 Gbps 上限）。</td></tr>
+        </table></div>
+      </div>
+
+      <div class="block fields" id="f-template">
+        <h3>gNB 樣板與 UE 樣板</h3>
+        <p>這兩張卡片不影響效能，但必須和核網一致，否則 NG Setup 或註冊會失敗。</p>
+        <div class="tbl"><table>
+          <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th>注意</th></tr>
+          <tr class="grp"><td colspan="4">gNB template</td></tr>
+          <tr><td class="f">First gNB ID<span class="path">gnb.gnbIdStart</span></td><td class="r">6 或 8 位 hex／000314</td><td>第一個 gNB 的 ID，之後每個加 1。</td><td>不可和核網上其他 gNB 重複。</td></tr>
+          <tr><td class="f">Name pattern<span class="path">gnb.namePattern</span></td><td class="r">要有 {i}／gNB-{i}</td><td>gNB 名稱，<code>{i}</code> 換成 1、2、3…</td><td>只用在顯示和 NG Setup 的 RAN node name。</td></tr>
+          <tr><td class="f">MCC / MNC<span class="path">gnb.mcc / gnb.mnc</span></td><td class="r">3 位／2–3 位；208 / 93</td><td>PLMN。UE 也用這組。</td><td>MCC + MNC + MSIN 必須剛好 15 位。</td></tr>
+          <tr><td class="f">TAC<span class="path">gnb.tac</span></td><td class="r">6 位 hex／000001</td><td>gNB 宣告的追蹤區。</td><td>AMF 要支援這個 TA。</td></tr>
+          <tr><td class="f">SST / SD<span class="path">gnb.sst / gnb.sd</span></td><td class="r">0–255；SD 可空白或 6 位 hex／1 / 010203</td><td>gNB 宣告支援的切片。</td><td>UE 要求的切片不在其中，AMF 回 <code>5gmm(62)</code>。</td></tr>
+          <tr class="grp"><td colspan="4">UE template</td></tr>
+          <tr><td class="f">First MSIN<span class="path">ue.msinStart</span></td><td class="r">十進位／0000000001</td><td>第一個 UE 的 MSIN，之後每個加 1、保持位數。SUPI = imsi- + MCC + MNC + MSIN。</td><td>plan preview 會列出每個 gNB 的 SUPI 範圍，拿來和訂閱資料對照。</td></tr>
+          <tr><td class="f">Key (K) / OPc<span class="path">ue.key / ue.opc</span></td><td class="r">32 位 hex</td><td>認證金鑰。</td><td>和訂閱資料不同，該 UE 註冊失敗。</td></tr>
+          <tr><td class="f">AMF / SQN<span class="path">ue.amf / ue.sqn</span></td><td class="r">4 位 hex／12 位 hex；8000 / 000000000023</td><td>認證用的 AMF 欄位與序號。</td><td>tester 不檢查 SQN 的新鮮度，同一批 UE 重跑不需要重新同步。</td></tr>
+          <tr><td class="f">Integrity / Ciphering<span class="path">ue.integrity / ue.ciphering</span></td><td class="r">nia0–3／nea0–3；nia2 / nea0</td><td>UE 支援的 NAS 完整性與加密演算法，核網從中選。</td><td>nea0 不加密，最省 CPU。</td></tr>
+          <tr><td class="f">DNN<span class="path">ue.dnn</span></td><td class="r">不可空白／internet</td><td>PDU session 要的 DNN。</td><td>SMF 要有這個 DNN 和對應的 UE pool。</td></tr>
+          <tr><td class="f">SST / SD<span class="path">ue.sst / ue.sd</span></td><td class="r">同 gNB／1 / 010203</td><td>UE 要求的切片。</td><td>要在 gNB 宣告的切片裡，也要在訂閱資料裡。</td></tr>
+        </table></div>
+      </div>
+
+      <div class="block fields" id="f-network">
+        <h3><span class="tag n2">N2</span><span class="tag n3">N3</span><span class="tag n6">N6</span> 網路</h3>
+        <div class="tbl"><table>
+          <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
+          <tr class="grp"><td colspan="5"><span class="tag n2">N2 · gNB ↔ AMF</span></td></tr>
+          <tr><td class="f">Local interface<span class="path">network.n2.interface</span></td><td class="r">主機上要有／docker-cn-ran</td><td>tester 把每個 gNB 的 N2 IP 加在這張網卡上，SCTP 從這裡連 AMF。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">gNB IP CIDR / First gNB IP<span class="path">network.n2.cidr / startIp</span></td><td class="r">10.0.1.0/24 / 10.0.1.100</td><td>從 First gNB IP 起遞增分給每個 gNB，用 CIDR 的遮罩加上去（所以主機會有到這個網段的路由）。跳過網路、廣播、AMF、UPF 與主機已有的 IP。</td><td colspan="2">CIDR 要大到裝得下所有 gNB，否則驗證會說 IP 不夠。</td></tr>
+          <tr><td class="f">AMF IP / port<span class="path">network.n2.amfIp / amfPort</span></td><td class="r">10.0.1.3 / 38412</td><td>AMF 的 NGAP 位址。</td><td colspan="2">—</td></tr>
+          <tr class="grp"><td colspan="5"><span class="tag n3">N3 · gNB ↔ UPF</span></td></tr>
+          <tr><td class="f">Local interface<span class="path">network.n3.interface</span></td><td class="r">docker-cn-ran</td><td>gNB 的 N3 IP 加在這裡；UL 從這裡送出、DL 從這裡收。它的 MTU 決定封包大小上限。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">gNB IP CIDR / First gNB IP<span class="path">network.n3.cidr / startIp</span></td><td class="r">10.0.1.0/24 / 10.0.1.100</td><td>同 N2。N2 和 N3 可以同一個網段，不會分到同一個 IP。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">UPF IP / port<span class="path">network.n3.upfIp / upfPort</span></td><td class="r">10.0.1.5 / 2152</td><td>UL 送往的 UPF 位址。PDU 建立時核網有給 UPF 位址就用核網給的，這裡是沒給時的預設。</td><td colspan="2">—</td></tr>
+          <tr class="grp"><td colspan="5"><span class="tag n6">N6 · data network side</span></td></tr>
+          <tr><td class="f">Local interface<span class="path">network.n6.interface</span></td><td class="r">docker-cn-ran</td><td>sink IP 所在、UE pool 路由走的網卡。它的 MTU 也限制封包大小。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">Sink IP<span class="path">network.n6.sinkIp</span></td><td class="r">10.0.1.1</td><td>UL 的終點（UPF 解封裝後送到這裡），也是 DL 的來源。主機沒有這個 IP 時，tester 會把它加成 /32。</td><td colspan="2">sink 和 UPF N6 不在主機已有的網段時，要自己先把 sink IP 加成帶遮罩的 IP（見兩台步驟 2）。</td></tr>
+          <tr><td class="f">UPF N6 IP<span class="path">network.n6.upfIp</span></td><td class="r">10.0.1.5</td><td>DL 的下一跳：run 期間 tester 加一條「UE pool 經由這個 IP」的路由。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">UE IP pool<span class="path">network.n6.uePool</span></td><td class="r">10.60.0.0/16</td><td>SMF 發給 UE 的 IP 範圍，要和 SMF 設定一樣。</td><td colspan="2">主機上已經有一條到這個網段、但閘道不同的路由時，tester 不覆蓋，run 會失敗並說明。</td></tr>
+        </table></div>
+      </div>
+
+      <div class="block fields" id="f-traffic">
+        <h3>Traffic per UE</h3>
+        <p>速率都是<b>每個 UE</b>，不是總量；頁面下方會算出整個 run 的總 Gbps 與 pps。</p>
+        <div class="tbl"><table>
+          <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
+          <tr><td class="f">Uplink / Downlink (Mbps)<span class="path">traffic.ulMbps / dlMbps</span></td><td class="r">0–10000，0 = 關／1 / 1</td><td>每個 UE 每個方向的固定速率。</td><td class="up">總量變大；每個 UE 封包更密，DL 一次合得更多（省 tester CPU）。單一 UE 超過約 3 Gbps 會先卡在 UPF 的單一核心。</td><td class="down">同樣總量要更多 UE；每個 UE 封包稀疏，DL 幾乎一次送一個。</td></tr>
+          <tr><td class="f">Packet size<span class="path">traffic.packetSize</span></td><td class="r">64 到 N3 MTU − 44（1500 MTU 時 1456）／1400</td><td>內層 IP 封包長度。N3 上每個 UL 封包再多 36 bytes，DL 由 gtp5g 再多 8 bytes。</td><td class="up">成本幾乎只看「每秒幾個封包」，封包越大，同樣 CPU 打出越多 Gbps。超過 MTU 時驗證會擋下。</td><td class="down">同樣 Gbps 要更多封包，tester 和 UPF 都更吃力；適合測 UPF 處理小封包的能力。</td></tr>
+          <tr><td class="f">UDP port<span class="path">traffic.port</span></td><td class="r">1–65535／9200</td><td>sink 和 UE 用的 UDP port。</td><td colspan="2">和主機上其他程式衝突時才需要改。</td></tr>
+          <tr><td class="f">Max run time<span class="path">traffic.maxDurationMin</span></td><td class="r">0–10080 分鐘，0 = 不限／0</td><td>開始後多久自動 Stop，流程和按 Stop 一樣。</td><td colspan="2">長時間 run 的圖會自動壓縮，不會變慢。</td></tr>
+          <tr><td class="f">Downlink batch<span class="path">traffic.dlBatchMs</span></td><td class="r">0–10 ms，0 = 關／1</td><td>每個 UE 連續送這麼多時間量的 DL 封包，讓 kernel 用一次 UDP GSO 送出（DL 的目的地是各 UE，只能合同一個 UE 的封包）。UL 不需要：同一個 gNB 的 UL 都送往 UPF，本來就會合併。</td><td class="up">一次合更多封包，tester 送 DL 更省 CPU；但每個 UE 的 DL 變得一陣一陣，同一台時容易瞬間塞滿某顆 CPU 的佇列。</td><td class="down">流量最平均，但 tester 送 DL 最吃 CPU。每 UE 10 Mbps 時 1 ms 不到一個封包，等於沒合併。</td></tr>
+          </table></div>
+      </div>
+
+      <div class="block fields" id="f-pacing">
+        <h3>N2 setup timing 與註冊／PDU／Deregistration 步調</h3>
+        <p>註冊、PDU session、Deregistration（按 Stop 後）三段各有同樣四個設定。核網快時由「每秒啟動數」決定速度；核網變慢時，「同時上限」讓請求不會一直堆上去，你會看到排隊變長。失敗但還有重試次數的 UE 會排回隊尾。</p>
+        <div class="tbl"><table>
+          <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
+          <tr class="grp"><td colspan="5">N2 setup timing</td></tr>
+          <tr><td class="f">Timeout per attempt<span class="path">rates.n2.timeoutMs</span></td><td class="r">1–60000 ms／5000</td><td>一個 gNB 的 SCTP 連線加 NG Setup 最多等多久。</td><td class="up">慢的 AMF 也能成功；但連不上時要等更久才失敗，Stop 也可能等更久。</td><td class="down">更快判定失敗、進入重試。</td></tr>
+          <tr><td class="f">Retries<span class="path">rates.n2.retries</span></td><td class="r">≥ 0／1</td><td>失敗後再試幾次。</td><td class="up">暫時性問題可以補回來；失敗的 gNB 要更久才確定。</td><td class="down">失敗就放棄，它的 UE 記為未開始。</td></tr>
+          <tr class="grp"><td colspan="5">Registration / PDU session / Deregistration pacing（預設：50／s、200、10000 ms（Dereg 5000）、1）</td></tr>
+          <tr><td class="f">Starts per second<span class="path">rates.*.ratePerSec</span></td><td class="r">1–100000</td><td>每秒最多開始幾個新的嘗試。</td><td class="up">整批 UE 建得更快，核網（AMF、AUSF、UDM、SMF）壓力更大，可能開始逾時。</td><td class="down">核網比較輕鬆，整批要更久。</td></tr>
+          <tr><td class="f">Max in flight<span class="path">rates.*.maxInFlight</span></td><td class="r">1–100000</td><td>同時最多幾個嘗試在等核網回應。</td><td class="up">核網慢時也能維持吞吐；但同時等的太多，逾時跟著變多。</td><td class="down">核網慢時速度跟著掉，排隊變長，但比較不會壓垮核網。</td></tr>
+          <tr><td class="f">Timeout per attempt<span class="path">rates.*.timeoutMs</span></td><td class="r">1–60000 ms</td><td>單一程序最多等多久。</td><td class="up">慢的核網也算成功；卡住的嘗試佔住在途名額更久。</td><td class="down">更早判定失敗、進入重試。</td></tr>
+          <tr><td class="f">Retries<span class="path">rates.*.retries</span></td><td class="r">≥ 0</td><td>失敗後再試幾次，重試排回隊尾。核網明確拒絕 Dereg 時不重試。</td><td class="up">暫時性失敗補得回來，總時間變長。</td><td class="down">失敗率直接反映核網第一次的表現。</td></tr>
+        </table></div>
+      </div>
+
+      <div class="block">
+        <h3>Plan preview</h3>
+        <p>按 Start 前先看：每個 gNB 一列，列出它的 ID、名稱、N2 IP、N3 IP、UE 範圍與 SUPI 範圍。拿 SUPI 範圍和核網的訂閱資料對照。<b>Start run</b> 會存檔並打開 Run 頁；同一時間只能有一個 run。</p>
+      </div>
+    </section>
+
+    <section id="recipes">
+      <h2>建議設定</h2>
+      <div class="tbl"><table>
+        <tr><th>情境</th><th>規模</th><th>每 UE 速率</th><th>Downlink batch</th></tr>
+        <tr><td><b>第一次接新核網</b></td><td class="val">1 gNB × 1 UE</td><td class="val">1 / 1 Mbps</td><td class="val">1</td></tr>
+        <tr><td><b>同一台，衝高吞吐</b></td><td class="val">10 gNB × 1000–2000 UE</td><td class="val">15–30 Mbps</td><td class="val">1</td></tr>
+        <tr><td><b>兩台，上下行各 40G</b></td><td class="val">20 gNB × 800 UE</td><td class="val">50 / 50 Mbps</td><td class="val">2</td></tr>
+      </table></div>
+      <ul>
+        <li><b>同一台時 UE 多、每個打少比較穩</b>：UPF 的工作跟著 tester 發送線所在的 CPU 跑，UE 越多分得越平均；每個 UE 速率低，封包也比較平均，不容易一次塞滿某顆 CPU 的收包佇列（可再調大 <code>sysctl -w net.core.netdev_max_backlog=10000</code>）。實測：96 CPU、10 gNB × 1000 UE × 30 Mbps，上下行各 30 Gbps。</li>
+        <li><b>DL 要更高就加 gNB</b>：每個 gNB 的 DL 是一條連線、一條讀取線，讓每個 gNB 的 DL 約在 2–3 Gbps 以內。</li>
+        <li><b>兩台時</b>：tester 那台不缺 CPU，Downlink batch 可以調到 2 ms，讓 DL 一次合更多封包。</li>
+        <li><b>任何情況</b>：每個 UE 單一方向不要超過約 3 Gbps（UPF 單核上限）；收 UDP 的網卡要依 port 分流（<code>ethtool -N &lt;網卡&gt; rx-flow-hash udp4 sdfn</code>）。</li>
+        <li>跑的時候在 UPF 那台用 <code>mpstat -P ALL 1</code> 看工作有沒有分散；只有少數核心滿載，就是分流或連線數不夠。</li>
+      </ul>
+    </section>
+
+    <section id="run">
+      <h2>Run 頁怎麼看</h2>
+      <p>有三張階段卡片：N2 setup（每個 gNB）、Registration（每個 UE）、PDU session（每個 UE）。按 Stop 後上面多兩張收尾卡片：UE deregistration（每個 UE）和 gNB SCTP close（每個 gNB）。五張卡片的數字意思相同：</p>
+      <div class="tbl"><table>
+        <tr><th>數字</th><th>意思</th></tr>
+        <tr><td><b>accepted / expected</b></td><td>成功的數量／這個 run 的總數</td></tr>
+        <tr><td><b>Rejected</b></td><td>核網拒絕：NGSetupFailure（<code>misc(4)</code>）、Registration Reject（<code>5gmm(N)</code>）、PDU Session Establishment Reject（<code>5gsm(N)</code>）。原因列在 Failure causes</td></tr>
+        <tr><td><b>Timed out</b></td><td>逾時沒有回應。<code>operation now in progress</code> 代表 SCTP 連線本身就沒有回應</td></tr>
+        <tr><td><b>Connection errors</b></td><td>本機或傳輸錯誤，例如 <code>connection refused</code>、<code>association lost</code></td></tr>
+        <tr><td><b>Retries</b></td><td>額外的嘗試次數</td></tr>
+        <tr><td><b>Not started</b></td><td>沒有嘗試過：它的 gNB 沒起來、前一段失敗、或 run 先被停了</td></tr>
+        <tr><td><b>Total time</b></td><td>從第一個嘗試開始到最後一個結束</td></tr>
+        <tr><td><b>Average、p50／p95／p99、Max</b></td><td><b>成功</b>的耗時，從第一次嘗試算起，所以重試的時間也算在內</td></tr>
+      </table></div>
+      <div class="tbl"><table>
+        <tr><th>階段</th><th>從</th><th>到</th></tr>
+        <tr><td>N2 setup</td><td>SCTP 連線</td><td>收到 NG Setup Response</td></tr>
+        <tr><td>Registration</td><td>送出 Initial UE Message（Registration Request）</td><td>送出 Registration Complete</td></tr>
+        <tr><td>PDU session</td><td>送出 PDU Session Establishment Request</td><td>收到 Accept（gNB 已回覆 PDU Session Resource Setup）</td></tr>
+        <tr><td>UE deregistration</td><td>送出 Deregistration Request</td><td>收到 Deregistration Accept</td></tr>
+        <tr><td>gNB SCTP close</td><td>開始關閉</td><td>關閉完成（最多約 1 秒，socket 會等送完排隊中的資料）</td></tr>
+      </table></div>
+      <ul>
+        <li>收尾卡片的 Not started 包含：沒註冊成功的 UE、association 已斷的 UE 和 gNB、第二次 Stop 時還在排隊的 Dereg。第二次 Stop 時已送出的 Dereg 記為 Connection errors，原因 <code>cleanup skipped</code>。這些 UE 最後都是 cancelled；PDU 失敗的 UE 維持 failed。</li>
+        <li>註冊都成功、但<b>每個</b> PDU 都逾時：先看核網，SMF log 裡有沒有 CHF 計費逾時（<code>cgf.enable</code>）。</li>
+      </ul>
+      <h3>Data plane 卡片</h3>
+      <ul>
+        <li><b>Sent／received</b>：最近一秒的速率。received 是真正經過 UPF 回來的量，也就是 UPF 實際轉送的速率。</li>
+        <li><b>Packets per second</b>、<b>Total sent／received</b>：總量算內層 IP 封包，單位是 bits（Mb、Gb）。</li>
+        <li><b>Loss</b>：到目前為止的 <code>1 − received ÷ sent</code>。</li>
+        <li><b>Latency p50／p99</b>：單向延遲，收送用同一台主機的時鐘。</li>
+        <li><b>Out of order</b>、<b>Send errors</b>（本機 socket 拒絕送出的封包）。</li>
+        <li><b>Misrouted</b>（不為 0 才顯示）：DL 從別的 UE 的隧道或別的 gNB 回來，不算收到。</li>
+        <li>UL 和 DL 各有一張圖，從 0 秒顯示整個 run（h:mm:ss）。虛線橘色是送出（Tx），實線綠色是收到（Rx），兩條重疊代表沒有掉包。前 10 分鐘每點 1 秒，之後每點是 2、4、8… 秒的平均。</li>
+      </ul>
+      <h3>UEs 卡片與 gNB 表</h3>
+      <ul>
+        <li>依狀態計數：established、establishing、registered、registering、pending、failed、gNB down、cancelled；Stop 後加上 deregistering、deregistered。列出前 200 個失敗的 UE（SUPI、gNB、階段、原因、嘗試次數）。</li>
+        <li>gNB 表：每個 gNB 的 UE 註冊與 PDU 成功數、UL/DL 收到的量與掉包。</li>
+        <li>gNB 狀態：<code>pending</code> → <code>connecting</code> → <code>up</code> 或 <code>failed</code>。<code>lost</code> 表示原本 up、被 AMF 那邊斷掉，例如 AMF 重啟。</li>
+      </ul>
+    </section>
+
+    <section id="history">
+      <h2>History 與 Bench</h2>
+      <div class="compare">
+        <div>
+          <h3>History</h3>
+          <p>最近 50 個已結束的 run（fru-lab 保存）。勾兩筆可以並排比較；<b>JSON</b> 下載完整報告（設定與最終數字），<b>CSV</b> 下載吞吐時序。fru-tester 自己只保留最近 10 個，fru-lab 關著時如果結束了超過 10 個，較舊的不會進到 History。</p>
+        </div>
+        <div>
+          <h3>Bench</h3>
+          <p>不經過核網，量這台主機的 fru-tester 能送多快：上行封包經 loopback 送到一個不讀取的 socket，依序用 1、2、4… 條發送線到 CPU 核心數。</p>
+          <ul>
+            <li><b>Packet size</b>（64–9000）：改大小時 pps 幾乎不變、Gbps 等比例變，證明成本在「每個封包」。</li>
+            <li><b>Seconds per step</b>（1–30）：每一階量幾秒，越長越穩。</li>
+            <li><b>UDP GSO</b>：關掉就是一次一個封包（sendmmsg），可以比較前後。</li>
+          </ul>
+          <p class="hint">Scaling 是「n 條線 ÷ (1 條線 × n)」；線越多越低是正常的，代表多出來的線在互搶。Bench 和 run 不能同時跑。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>已知限制與排錯</h2>
+      <h3>已知限制</h3>
+      <ul>
+        <li>fru-tester 被 SIGKILL 時，它加的 gNB IP 會留在網卡上；之後的 run 會把它們當主機 IP 跳過，用 <code>ip addr del</code> 清掉。</li>
+        <li>NG Setup 之後 AMF 送來的訊息只讀不處理。</li>
+        <li>流量在每個 PDU 建好後固定 500 ms 才開始；裝隧道比較慢的核網，每個 UE 開頭可能掉幾個 DL 封包。</li>
+        <li>收尾被略過（第二次 Stop、或 fru-tester 被強制關掉）的 UE 會留在核網裡；再跑同一批 UE，free5GC 可能出現 <code>Duplicated PDU session ID</code> 而逾時，要重開核網。</li>
+        <li>重開 free5GC 的容器時，NRF 要先重開，SMF 要在 UPF 之後；否則 SMF 失去 PFCP 關聯，每個 PDU 都會逾時。</li>
+        <li>gNB 後來變成 lost 時，它底下已經 established 的 UE 仍算 established。</li>
+        <li>UDP GRO 只在封包「合併後」才到時有用（例如實體網卡的 GRO）。Docker 的 veth 預設不做 GRO，fru-lab 的環境裡 tester 多半一次讀一個封包，結果一樣正確。</li>
+      </ul>
+      <h3>排錯</h3>
+      <div class="tbl"><table>
+        <tr><th>症狀</th><th>先檢查</th></tr>
+        <tr><td>N2 一直逾時</td><td>有沒有 <code>modprobe sctp</code>；AMF 的 <code>ngapIpList</code>；<code>tcpdump -ni &lt;N2 網卡&gt; sctp</code> 有沒有 INIT 出去、INIT ACK 回來；兩台時先 ping AMF。</td></tr>
+        <tr><td>Registration 失敗 <code>5gmm(N)</code></td><td>訂閱資料（IMSI 範圍、K、OPc、SQN）；PLMN、TAC、切片和 AMF 設定一致。<code>5gmm(62)</code> 是切片不對。</td></tr>
+        <tr><td>PDU 逾時</td><td>SMF 與 UPF 的 PFCP 有沒有連上；CHF 的 <code>cgf.enable</code>；重開順序。</td></tr>
+        <tr><td>PDU 成功但 UL Rx 是 0</td><td>UPF 往 sink 的路由（<code>ip route get &lt;sink IP&gt;</code> 在 UPF 裡）；<code>tcpdump -ni &lt;N6 網卡&gt; udp port 9200</code>。</td></tr>
+        <tr><td>PDU 成功但 DL Rx 是 0 或一直斷</td><td>tester 主機上 <code>ip route get &lt;UE IP&gt;</code> 要經 UPF N6 IP；UPF 往 gNB N3 的路由；SMF 的 <code>urrThreshold</code>。</td></tr>
+        <tr><td>Misrouted 不為 0</td><td>UPF 把 DL 送到錯的隧道或錯的 gNB，是 UPF 的轉送問題。</td></tr>
+        <tr><td>run 一開始失敗：already routed</td><td>主機上已有一條到 UE pool、閘道不同的路由，先 <code>ip route del</code>。</td></tr>
+        <tr><td>run 一開始失敗：加路由失敗</td><td>UPF N6 IP 不在任何直連網段：把 sink IP 用帶遮罩的方式手動加在 N6 網卡上。</td></tr>
+        <tr><td>Setup 說 packet size 太大</td><td>上限是 N3 網卡 MTU − 44 和 N6 網卡 MTU；調小封包或兩台一起調大 MTU。</td></tr>
+        <tr><td>UL 掉包、高速率時一陣一陣</td><td><code>cat /proc/net/softnet_stat</code> 第 2 欄（每顆 CPU 佇列滿了丟的封包）、<code>nstat -az | grep UdpRcvbufErrors</code>；同一台時降每 UE 速率、加 UE、調大 <code>netdev_max_backlog</code>。</td></tr>
+        <tr><td>CPU 很高但吞吐上不去</td><td><code>sudo perf record -a -g -- sleep 10</code>，再 <code>perf report --sort dso</code> 看 gtp5g、kernel、fru-tester 各佔多少；<code>[gtp5g]</code> 大就是 UPF 本身的上限。</td></tr>
+      </table></div>
+    </section>
+
+    <footer>依 fru-tester 目前的程式整理（refactor/dp-performance，2026-10-03）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var ids = { n2: 'v-n2', n3: 'v-n3', n6: 'v-n6', pool: 'v-pool' };
+  var KEY = 'tester-guide-vars';
+  function read() {
+    var o = {};
+    for (var k in ids) { var el = document.getElementById(ids[k]); o[k] = el.value.trim() || el.defaultValue; }
+    return o;
+  }
+  function firstHost(pool) {
+    var m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)/.exec(pool);
+    return m ? m[1] + '.' + m[2] + '.' + m[3] + '.' + (Number(m[4]) + 1) : pool;
+  }
+  function apply() {
+    var v = read();
+    v.poolip = firstHost(v.pool);
+    v.route = '路由 ' + v.pool + ' via 172.26.49.140';
+    document.querySelectorAll('[data-v]').forEach(function (el) {
+      var k = el.getAttribute('data-v');
+      if (v[k] !== undefined) el.textContent = v[k];
+    });
+    try { localStorage.setItem(KEY, JSON.stringify(read())); } catch (e) {}
+  }
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved) for (var k in ids) if (saved[k]) document.getElementById(ids[k]).value = saved[k];
+  } catch (e) {}
+  for (var k in ids) document.getElementById(ids[k]).addEventListener('input', apply);
+  apply();
+
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var pre = btn.parentElement.querySelector('pre');
+      var text = pre.innerText;
+      function done(label) { btn.textContent = label; setTimeout(function () { btn.textContent = '複製'; }, 1500); }
+      function select() {
+        var r = document.createRange(); r.selectNodeContents(pre);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        done('已選取，按 Ctrl+C');
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { done('已複製'); }, select);
+      } else { select(); }
+    });
+  });
+})();
+</script>
