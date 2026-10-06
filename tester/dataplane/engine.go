@@ -491,6 +491,9 @@ func (b *batcher) flush() {
 	}
 	for off := 0; off < b.n; {
 		sent, err := b.pc.WriteBatch(b.msgs[off:b.n], 0)
+		// sendmmsg returns -1 when the kernel refuses the first message;
+		// x/net passes it on
+		sent = max(sent, 0)
 		for i := off; i < off+sent; i++ {
 			b.count(i)
 		}

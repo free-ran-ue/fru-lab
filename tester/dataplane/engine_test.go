@@ -558,3 +558,23 @@ func TestGROSocketGetsOneMessageWithTheSegmentLength(t *testing.T) {
 	require.Equal(t, 300, groSegment(oob[:oobn]))
 	require.Zero(t, groSegment(nil))
 }
+
+// When the kernel refuses the first message of a batch, sendmmsg returns
+// -1; that must count as send errors, not crash the engine.
+func TestARefusedFirstMessageIsASendError(t *testing.T) {
+	for _, noGSO := range []bool{false, true} {
+		t.Run(fmt.Sprintf("noGSO=%v", noGSO), func(t *testing.T) {
+			b, flows, _ := gsoBatcher(t, noGSO)
+			f := flows[0]
+			// UDP to port 0: the kernel refuses it (EINVAL)
+			f.upf = netip.MustParseAddrPort("127.0.0.100:0")
+			f.upfAddr = net.UDPAddrFromAddrPort(f.upf)
+			for range 3 {
+				b.add(f)
+			}
+			require.NotPanics(t, b.flush)
+			require.Zero(t, b.stats.packets.Load())
+			require.Positive(t, b.stats.sendErrors.Load())
+		})
+	}
+}
