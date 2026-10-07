@@ -23,7 +23,7 @@ func sampleProfile() Profile {
 		Network: Network{
 			N2: N2Network{Interface: "ens19", Cidr: "10.0.1.0/24", StartIP: "10.0.1.1", AmfIP: "10.0.1.1", AmfPort: 38412},
 			N3: N3Network{Interface: "ens20", Cidr: "10.0.2.0/24", StartIP: "10.0.2.2", UpfIP: "10.0.2.1", UpfPort: 2152},
-			N6: N6Network{Interface: "ens21", SinkIP: "10.0.3.2", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
+			N6: N6Network{Interface: "ens21", SinkIP: "10.0.3.2/24", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
 		},
 		Traffic: Traffic{UlMbps: 1, DlMbps: 5, PacketSize: 1400, Port: 9200},
 		Rates: Rates{
@@ -174,7 +174,7 @@ func TestExpandValidatesTrafficAndN6(t *testing.T) {
 		{Field: "traffic.packetSize", Message: "must be between 64 and 9000"},
 		{Field: "traffic.port", Message: "must be between 1 and 65535"},
 		{Field: "network.n6.interface", Message: "must not be empty"},
-		{Field: "network.n6.sinkIp", Message: `"x" is not an IPv4 address`},
+		{Field: "network.n6.sinkIp", Message: `"x" is not an IPv4 address with a prefix length, e.g. 10.0.1.1/24`},
 		{Field: "network.n6.uePool", Message: `"10.60.0.0" is not an IPv4 CIDR`},
 	}, verr.Errors)
 }
@@ -183,7 +183,7 @@ func TestExpandValidatesTrafficAndN6(t *testing.T) {
 // N6 address must never be handed to a gNB.
 func TestExpandNeverAllocatesTheSinkOrUpfN6IP(t *testing.T) {
 	p := sampleProfile()
-	p.Network.N6.SinkIP, p.Network.N6.UpfIP = "10.0.1.2", "10.0.1.4"
+	p.Network.N6.SinkIP, p.Network.N6.UpfIP = "10.0.1.2/24", "10.0.1.4"
 	plan, err := Expand(p, nil)
 	require.NoError(t, err)
 	for _, g := range plan.Gnbs {
@@ -211,4 +211,66 @@ func TestExpandValidatesDeregistrationAndMaxDuration(t *testing.T) {
 			{Field: "traffic.dlBatchMs", Message: "must be between 0 (off) and 10"},
 		}, verr.Errors, "maxDurationMin %d", bad)
 	}
+}
+
+// The sink is an address with its prefix length, as it goes on the
+// interface; a bare IP or a network address is refused.
+func TestExpandWantsTheSinkWithItsPrefix(t *testing.T) {
+	for sink, msg := range map[string]string{
+		"10.0.3.2":    `"10.0.3.2" is not an IPv4 address with a prefix length, e.g. 10.0.1.1/24`,
+		"10.0.3.0/24": `10.0.3.0/24 is the network's own address; use a host address in it, e.g. 10.0.3.1/24`,
+		"::1/64":      `"::1/64" is not an IPv4 address with a prefix length, e.g. 10.0.1.1/24`,
+	} {
+		p := sampleProfile()
+		p.Network.N6.SinkIP = sink
+		_, err := Expand(p, nil)
+		var verr *ValidationError
+		require.ErrorAs(t, err, &verr, sink)
+		require.Equal(t, []FieldError{{Field: "network.n6.sinkIp", Message: msg}}, verr.Errors, sink)
+	}
+	p := sampleProfile()
+	p.Network.N6.SinkIP = "172.26.6.1/16"
+	_, err := Expand(p, nil)
+	require.NoError(t, err)
+	require.Equal(t, netip.MustParsePrefix("172.26.6.1/16"), p.Network.N6.Sink())
+}
+
+func TestPingTargetUsesTheFirstGnbIPOrTheSink(t *testing.T) {
+	p := sampleProfile()
+	n2, err := PingTargetFor(p, PlaneN2, []netip.Addr{netip.MustParseAddr("10.0.1.3")})
+	require.NoError(t, err)
+	// .1 is the AMF and .3 is on the host, as in TestExpandFillsGnbsInOrder
+	require.Equal(t, PingTarget{Interface: p.Network.N2.Interface, Source: netip.MustParsePrefix("10.0.1.2/24"), Peer: netip.MustParseAddr("10.0.1.1")}, n2)
+
+	n3, err := PingTargetFor(p, PlaneN3, nil)
+	require.NoError(t, err)
+	require.Equal(t, netip.MustParseAddr(p.Network.N3.UpfIP), n3.Peer)
+	require.Equal(t, p.Network.N3.Interface, n3.Interface)
+
+	n6, err := PingTargetFor(p, PlaneN6, nil)
+	require.NoError(t, err)
+	require.Equal(t, PingTarget{Interface: "ens21", Source: netip.MustParsePrefix("10.0.3.2/24"), Peer: netip.MustParseAddr("10.0.3.1")}, n6)
+
+	_, err = PingTargetFor(p, "n4", nil)
+	require.ErrorIs(t, err, ErrUnknownPlane)
+}
+
+// A ping test checks only its own network's fields: a broken UE template
+// or another network does not stop it.
+func TestPingTargetChecksOnlyItsOwnNetwork(t *testing.T) {
+	p := sampleProfile()
+	p.Ue.Key = "nope"
+	p.Network.N6.SinkIP = "10.0.3.2"
+	_, err := PingTargetFor(p, PlaneN2, nil)
+	require.NoError(t, err)
+
+	_, err = PingTargetFor(p, PlaneN6, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, "network.n6.sinkIp", verr.Errors[0].Field)
+
+	p.Network.N3.UpfIP = "x"
+	_, err = PingTargetFor(p, PlaneN3, nil)
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "network.n3.upfIp", Message: `"x" is not an IPv4 address`}}, verr.Errors)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"tester/bench"
+	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
 )
@@ -26,6 +27,8 @@ type Controller interface {
 	Snapshot() run.Snapshot
 	Changed() <-chan struct{}
 	Reports() []run.Report
+	Ping(p profile.Profile, plane string) (run.PingResult, error)
+	Interfaces() ([]netcfg.InterfaceInfo, error)
 }
 
 // Bench is the slice of *bench.Runner the handlers use.
@@ -45,6 +48,13 @@ type ValidateResponse struct {
 	Valid  bool                 `json:"valid"`
 	Errors []profile.FieldError `json:"errors"`
 	Plan   *profile.Plan        `json:"plan"`
+}
+
+// PingRequest asks for a ping test of one network ("n2", "n3" or "n6") as
+// profile configures it.
+type PingRequest struct {
+	Plane   string          `json:"plane"`
+	Profile profile.Profile `json:"profile"`
 }
 
 // StartErrorResponse carries field errors when Start rejects the profile.
@@ -74,6 +84,15 @@ func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 	g.GET("/run/stream", handleStream(ctrl))
 	g.GET("/bench", func(c *gin.Context) { c.JSON(http.StatusOK, b.Result()) })
 	g.POST("/bench", handleBenchStart(b))
+	g.POST("/network/ping", handlePing(ctrl))
+	g.GET("/network/interfaces", func(c *gin.Context) {
+		ifaces, err := ctrl.Interfaces()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, ifaces)
+	})
 	g.GET("/run/reports", func(c *gin.Context) {
 		reps := ctrl.Reports()
 		if reps == nil {
@@ -143,7 +162,35 @@ func handleStart(ctrl Controller, b Bench) gin.HandlerFunc {
 			c.JSON(http.StatusAccepted, snap)
 		case errors.As(err, &verr):
 			c.JSON(http.StatusBadRequest, StartErrorResponse{Message: "profile is invalid", Errors: verr.Errors})
-		case errors.Is(err, run.ErrRunActive):
+		case errors.Is(err, run.ErrRunActive), errors.Is(err, run.ErrPingActive):
+			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+		}
+	}
+}
+
+// handlePing runs a ping test and answers 200 with its result, whether or
+// not replies came back.
+func handlePing(ctrl Controller) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req PingRequest
+		dec := json.NewDecoder(c.Request.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: "invalid ping request JSON: " + err.Error()})
+			return
+		}
+		res, err := ctrl.Ping(req.Profile, req.Plane)
+		var verr *profile.ValidationError
+		switch {
+		case err == nil:
+			c.JSON(http.StatusOK, res)
+		case errors.As(err, &verr):
+			c.JSON(http.StatusBadRequest, StartErrorResponse{Message: "fix this network's settings first", Errors: verr.Errors})
+		case errors.Is(err, profile.ErrUnknownPlane):
+			c.JSON(http.StatusBadRequest, StartErrorResponse{Message: err.Error(), Errors: []profile.FieldError{}})
+		case errors.Is(err, run.ErrRunActive), errors.Is(err, run.ErrPingActive):
 			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})

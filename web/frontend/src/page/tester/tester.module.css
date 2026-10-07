@@ -82,3 +82,10 @@
   .layout { flex-direction: column; }
   .content { padding: 1.25rem 1rem; }
 }
+
+/* ping test in the N2 / N3 / N6 cards */
+.pingTest { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.75rem 1rem; margin-top: 1rem; }
+.pingResult { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; font-size: 0.85rem; min-width: 0; flex: 1 1 18rem; padding-top: 0.35rem; }
+.pingNote { color: #64748b; font-size: 0.8rem; }
+.pingError { color: #b91c1c; font-size: 0.82rem; }
+.fieldHint { margin: 0.3rem 0 0; color: #64748b; font-size: 0.76rem; }

@@ -870,6 +870,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/tester/network/interfaces:
+    get:
+      summary: Interfaces on fru-tester's host
+      description: Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page's interface menus.
+      operationId: testerNetworkInterfaces
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterInterface'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/tester/network/ping:
+    post:
+      summary: Ping test of one network
+      description: Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR's prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF's N3 or the UPF's N6 three times, and removes the address again. Only that network's fields are checked. Not while a run is active.
+      operationId: testerNetworkPing
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterPingRequest'
+      responses:
+        '200':
+          description: Test done; received may be 0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterPingResult'
+        '400':
+          description: That network's settings are wrong (errors lists the fields), or an unknown plane
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run or another ping test is active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/bench:
     get:
       summary: Latest data plane bench
@@ -1322,7 +1382,7 @@ components:
                   example: 2152
             n6:
               type: object
-              description: Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
+              description: Data-network side. Uplink is addressed to the sink; downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
               required: [interface, sinkIp, upfIp, uePool]
               properties:
                 interface:
@@ -1330,7 +1390,8 @@ components:
                   example: docker-cn-ran
                 sinkIp:
                   type: string
-                  example: 10.0.1.1
+                  description: The sink's address with its prefix length, as it goes on the interface (e.g. 172.26.6.1/16). If the host does not have the address, the tester adds it to the interface for the run with that prefix, which also gives the host a route to the subnet; it is removed afterwards.
+                  example: 10.0.1.1/24
                 upfIp:
                   type: string
                   example: 10.0.1.5
@@ -1838,6 +1899,68 @@ components:
           format: int64
         dlLossRate:
           type: number
+    TesterInterface:
+      type: object
+      required: [name, kind, state, mtu, addresses]
+      properties:
+        name:
+          type: string
+          example: ens2f1
+        kind:
+          type: string
+          description: Link type, e.g. device (a NIC), bridge, veth, macvlan, vlan, bond.
+          example: device
+        state:
+          type: string
+          description: Operational state, e.g. up, down, unknown.
+          example: up
+        mtu:
+          type: integer
+          example: 1500
+        addresses:
+          type: array
+          description: IPv4 addresses with prefix length.
+          items:
+            type: string
+    TesterPingRequest:
+      type: object
+      required: [plane, profile]
+      properties:
+        plane:
+          type: string
+          enum: [n2, n3, n6]
+        profile:
+          $ref: '#/components/schemas/TesterProfile'
+    TesterPingResult:
+      type: object
+      required: [plane, interface, source, target, added, sent, received, rttMs, error]
+      properties:
+        plane:
+          type: string
+          enum: [n2, n3, n6]
+        interface:
+          type: string
+        source:
+          type: string
+          description: The address the test used, with its prefix length.
+          example: 10.0.1.100/24
+        target:
+          type: string
+          description: The AMF (N2), the UPF's N3 or the UPF's N6 address.
+        added:
+          type: boolean
+          description: The source was added to the interface for the test and removed again.
+        sent:
+          type: integer
+        received:
+          type: integer
+        rttMs:
+          type: array
+          items:
+            type: number
+        error:
+          type: string
+          description: Why the test could not run (e.g. the address could not be added) or a send error such as no route to host; empty otherwise.
     TesterBenchSettings:
       type: object
       required: [packetSize, stepSeconds, gso]

@@ -16,8 +16,14 @@ import (
 type AddrManager interface {
 	// HostIPv4s lists every IPv4 address already on any interface.
 	HostIPv4s() ([]netip.Addr, error)
+	// FindAddr reports which interface has ip, and with which prefix
+	// length; ok is false when no interface has it.
+	FindAddr(ip netip.Addr) (iface string, prefix netip.Prefix, ok bool, err error)
 	// Interfaces lists the names of every link on the host.
 	Interfaces() ([]string, error)
+	// InterfaceDetails describes every link on the host, for the Setup
+	// page's interface menus.
+	InterfaceDetails() ([]InterfaceInfo, error)
 	Add(iface string, addr netip.Prefix) error
 	// Remove must treat an already-missing address as success, because the
 	// kernel drops secondary addresses when their primary is removed.
@@ -50,6 +56,26 @@ func (Netlink) HostIPv4s() ([]netip.Addr, error) {
 	return out, nil
 }
 
+func (Netlink) FindAddr(ip netip.Addr) (string, netip.Prefix, bool, error) {
+	list, err := netlink.AddrList(nil, netlink.FAMILY_V4)
+	if err != nil {
+		return "", netip.Prefix{}, false, fmt.Errorf("list host addresses: %w", err)
+	}
+	for _, a := range list {
+		got, ok := netip.AddrFromSlice(a.IP.To4())
+		if !ok || got != ip || a.IPNet == nil {
+			continue
+		}
+		ones, _ := a.IPNet.Mask.Size()
+		name := ""
+		if link, err := netlink.LinkByIndex(a.LinkIndex); err == nil {
+			name = link.Attrs().Name
+		}
+		return name, netip.PrefixFrom(ip, ones), true, nil
+	}
+	return "", netip.Prefix{}, false, nil
+}
+
 func (Netlink) Interfaces() ([]string, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
@@ -60,6 +86,36 @@ func (Netlink) Interfaces() ([]string, error) {
 		names = append(names, l.Attrs().Name)
 	}
 	return names, nil
+}
+
+// InterfaceInfo is one link on the host.
+type InterfaceInfo struct {
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`  // "device" (a NIC), "bridge", "veth", "macvlan", "vlan", "bond", …
+	State     string   `json:"state"` // operational state: "up", "down", "unknown", …
+	Mtu       int      `json:"mtu"`
+	Addresses []string `json:"addresses"` // IPv4, with prefix length
+}
+
+func (Netlink) InterfaceDetails() ([]InterfaceInfo, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, fmt.Errorf("list host interfaces: %w", err)
+	}
+	out := make([]InterfaceInfo, 0, len(links))
+	for _, l := range links {
+		a := l.Attrs()
+		info := InterfaceInfo{Name: a.Name, Kind: l.Type(), State: a.OperState.String(), Mtu: a.MTU, Addresses: []string{}}
+		if addrs, err := netlink.AddrList(l, netlink.FAMILY_V4); err == nil {
+			for _, ad := range addrs {
+				if ad.IPNet != nil {
+					info.Addresses = append(info.Addresses, ad.IPNet.String())
+				}
+			}
+		}
+		out = append(out, info)
+	}
+	return out, nil
 }
 
 func (Netlink) MTU(iface string) (int, error) {

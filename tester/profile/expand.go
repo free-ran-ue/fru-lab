@@ -73,7 +73,7 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 		netip.MustParseAddr(p.Network.N2.AmfIP),
 		netip.MustParseAddr(p.Network.N3.UpfIP),
 		netip.MustParseAddr(p.Network.N6.UpfIP),
-		netip.MustParseAddr(p.Network.N6.SinkIP),
+		p.Network.N6.Sink().Addr(),
 	}, hostIPs...)
 	n2IPs, err := AllocateIPs(p.Network.N2.Cidr, p.Network.N2.StartIP, count, exclude)
 	if err != nil {
@@ -241,13 +241,26 @@ func validateTraffic(p Profile, verr *ValidationError) {
 	if strings.TrimSpace(n6.Interface) == "" {
 		verr.add("network.n6.interface", "must not be empty")
 	}
-	for field, v := range map[string]string{"network.n6.sinkIp": n6.SinkIP, "network.n6.upfIp": n6.UpfIP} {
-		if a, err := netip.ParseAddr(v); err != nil || !a.Is4() {
-			verr.add(field, fmt.Sprintf("%q is not an IPv4 address", v))
-		}
+	validateSink(verr, n6.SinkIP)
+	if a, err := netip.ParseAddr(n6.UpfIP); err != nil || !a.Is4() {
+		verr.add("network.n6.upfIp", fmt.Sprintf("%q is not an IPv4 address", n6.UpfIP))
 	}
 	if pre, err := netip.ParsePrefix(n6.UePool); err != nil || !pre.Addr().Is4() {
 		verr.add("network.n6.uePool", fmt.Sprintf("%q is not an IPv4 CIDR", n6.UePool))
+	}
+}
+
+// validateSink wants the sink as it goes on the interface: a host address
+// with its prefix length.
+func validateSink(verr *ValidationError, v string) {
+	p, err := netip.ParsePrefix(v)
+	if err != nil || !p.Addr().Is4() {
+		verr.add("network.n6.sinkIp", fmt.Sprintf("%q is not an IPv4 address with a prefix length, e.g. 10.0.1.1/24", v))
+		return
+	}
+	if p.Bits() < 31 && p.Addr() == p.Masked().Addr() {
+		verr.add("network.n6.sinkIp", fmt.Sprintf("%s is the network's own address; use a host address in it, e.g. %s/%d",
+			p, p.Addr().Next(), p.Bits()))
 	}
 }
 
