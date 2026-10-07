@@ -146,5 +146,6 @@ type Snapshot struct {
 	Gnbs       []GnbStatus        `json:"gnbs"`
 	Ues        UeSummary          `json:"ues"`
 	FailedUes  []UeFailure        `json:"failedUes"` // first maxFailuresListed failures
+	CpLoop     CpLoopSnapshot     `json:"cpLoop"`
 	Dataplane  dataplane.Snapshot `json:"dataplane"`
 }

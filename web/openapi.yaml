@@ -1390,13 +1390,17 @@ components:
           example: 1000 UE baseline
         scale:
           type: object
-          required: [gnbCount, ueCount]
+          required: [gnbCount, ueCount, throughputUeCount]
           properties:
             gnbCount:
               type: integer
               example: 10
             ueCount:
               type: integer
+              example: 1000
+            throughputUeCount:
+              type: integer
+              description: How many UEs, the first ones, establish a PDU session and carry traffic (0..ueCount). The rest are the control-plane test - they register and deregister in a loop (rates.cpLoop) once every throughput UE is done. fru-tester treats an absent value as ueCount.
               example: 1000
         gnb:
           type: object
@@ -1492,7 +1496,7 @@ components:
                   example: 10.60.0.0/16
         rates:
           type: object
-          required: [n2, registration, pdu, deregistration]
+          required: [n2, registration, pdu, deregistration, cpLoop]
           properties:
             n2:
               $ref: '#/components/schemas/TesterStageRate'
@@ -1502,6 +1506,26 @@ components:
               $ref: '#/components/schemas/TesterProcedureRate'
             deregistration:
               $ref: '#/components/schemas/TesterProcedureRate'
+            cpLoop:
+              $ref: '#/components/schemas/TesterCpLoopRate'
+    TesterCpLoopRate:
+      type: object
+      description: Paces the control-plane loop - at most ratePerSec registrations start per second and at most maxInFlight UEs are in a cycle at once. A cycle registers, stays registered holdMs, then deregisters; each procedure is bounded by timeoutMs. No retries - a failed cycle is counted and the UE tries again later. Only checked when there are control-plane UEs.
+      required: [ratePerSec, maxInFlight, timeoutMs, holdMs]
+      properties:
+        ratePerSec:
+          type: integer
+          example: 50
+        maxInFlight:
+          type: integer
+          example: 200
+        timeoutMs:
+          type: integer
+          example: 10000
+        holdMs:
+          type: integer
+          description: 0..3600000
+          example: 1000
     TesterTraffic:
       type: object
       description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
@@ -1610,8 +1634,11 @@ components:
           type: string
     TesterGnbSpec:
       type: object
-      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, ueFirst, ueLast, firstSupi, lastSupi]
+      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, cpUeCount, ueFirst, ueLast, firstSupi, lastSupi]
       properties:
+        cpUeCount:
+          type: integer
+          description: Of ueCount, how many are in the control-plane loop.
         index:
           type: integer
         name:
@@ -1755,9 +1782,60 @@ components:
               type: integer
             established:
               type: integer
+    TesterCpLoopSnapshot:
+      type: object
+      description: The control-plane test. registration and deregistration count every attempt of every cycle (expected is 0, a loop has no end); latencies are of accepted procedures.
+      required: [ues, state, durationSec, registered, cycles, registration, deregistration, cleanup, series]
+      properties:
+        ues:
+          type: integer
+        state:
+          type: string
+          enum: ['off', waiting, running, stopped]
+          description: off = no control-plane UEs; waiting = throughput UEs are still being set up.
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationSec:
+          type: number
+          description: How long the loop has run.
+        registered:
+          type: integer
+          description: Control-plane UEs registered right now.
+        cycles:
+          type: integer
+          description: Cycles whose registration and deregistration were both accepted.
+        registration:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        deregistration:
+          $ref: '#/components/schemas/TesterStageSnapshot'
+        cleanup:
+          allOf:
+            - $ref: '#/components/schemas/TesterStageSnapshot'
+          description: After Stop, the control-plane UEs still registered deregister (expected = every control-plane UE; the others are skipped). The throughput UEs' cleanup is the run snapshot's deregistration.
+        series:
+          type: array
+          description: Per-second rates from the loop's start, in at most 600 points (like the data plane's).
+          items:
+            $ref: '#/components/schemas/TesterCpPoint'
+    TesterCpPoint:
+      type: object
+      required: [t, regPerSec, deregPerSec, failPerSec]
+      properties:
+        t:
+          type: number
+          description: Seconds since the loop started.
+        regPerSec:
+          type: number
+        deregPerSec:
+          type: number
+        failPerSec:
+          type: number
+          description: Procedures that did not succeed.
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane]
+      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane, cpLoop]
       properties:
         runId:
           type: string
@@ -1803,6 +1881,8 @@ components:
             $ref: '#/components/schemas/TesterUeFailure'
         dataplane:
           $ref: '#/components/schemas/TesterDataplaneSnapshot'
+        cpLoop:
+          $ref: '#/components/schemas/TesterCpLoopSnapshot'
     TesterDataplaneSnapshot:
       type: object
       required: [engine, activeUes, ul, dl, gnbs, series]

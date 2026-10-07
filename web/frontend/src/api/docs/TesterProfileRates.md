@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **registration** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
 **pdu** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
 **deregistration** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
+**cpLoop** | [**TesterCpLoopRate**](TesterCpLoopRate.md) |  | [default to undefined]
 
 ## Example
 
@@ -20,6 +21,7 @@ const instance: TesterProfileRates = {
     registration,
     pdu,
     deregistration,
+    cpLoop,
 };
 ```
 

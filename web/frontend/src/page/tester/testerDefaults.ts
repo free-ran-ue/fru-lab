@@ -7,7 +7,7 @@ import type { TesterProfile } from '../../api'
 // subscribers imsi-208930000000001.. in the core with the same keys.
 export const DEFAULT_TESTER_PROFILE: TesterProfile = {
   name: 'basic',
-  scale: { gnbCount: 10, ueCount: 1000 },
+  scale: { gnbCount: 10, ueCount: 1000, throughputUeCount: 1000 },
   gnb: {
     gnbIdStart: '000314',
     namePattern: 'gNB-{i}',
@@ -42,6 +42,7 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     registration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
     pdu: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
     deregistration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 5000, retries: 1 },
+    cpLoop: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, holdMs: 1000 },
   },
 }
 
@@ -50,7 +51,11 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
 // this version doesn't know are dropped (fru-tester rejects unknown
 // fields). Saved profiles can predate fields added in later phases.
 export function normalizeProfile(saved: unknown): TesterProfile {
-  return mergeKnown(DEFAULT_TESTER_PROFILE, saved) as TesterProfile
+  const p = mergeKnown(DEFAULT_TESTER_PROFILE, saved) as TesterProfile
+  // saved before the control-plane test existed: every UE carried traffic
+  const scale = (saved as { scale?: { throughputUeCount?: unknown } } | null)?.scale
+  if (typeof scale?.throughputUeCount !== 'number') p.scale.throughputUeCount = p.scale.ueCount
+  return p
 }
 
 function mergeKnown(defaults: unknown, saved: unknown): unknown {

@@ -289,3 +289,47 @@ func TestExpandChecksTheEngine(t *testing.T) {
 	require.ErrorAs(t, err, &verr)
 	require.Equal(t, []FieldError{{Field: "traffic.engine", Message: `must be "auto", "socket" or "afxdp"`}}, verr.Errors)
 }
+
+// The first ThroughputUeCount UEs carry traffic; the rest, wherever their
+// gNB is, are the control-plane test.
+func TestExpandSplitsThroughputAndControlPlaneUes(t *testing.T) {
+	p := sampleProfile()
+	p.Scale = Scale{GnbCount: 3, UeCount: 10, ThroughputUeCount: intPtr(5)}
+	p.Rates.CpLoop = CpLoopRate{RatePerSec: 10, MaxInFlight: 5, TimeoutMs: 1000, HoldMs: 100}
+	plan, err := Expand(p, nil)
+	require.NoError(t, err)
+	var cp []int
+	for _, u := range plan.Ues {
+		if u.Cp {
+			cp = append(cp, u.Index)
+		}
+	}
+	require.Equal(t, []int{6, 7, 8, 9, 10}, cp)
+	require.Equal(t, []int{0, 3, 2}, []int{plan.Gnbs[0].CpUeCount, plan.Gnbs[1].CpUeCount, plan.Gnbs[2].CpUeCount})
+
+	// absent: every UE carries traffic, and the loop's pacing is not checked
+	p.Scale.ThroughputUeCount = nil
+	p.Rates.CpLoop = CpLoopRate{}
+	plan, err = Expand(p, nil)
+	require.NoError(t, err)
+	for _, u := range plan.Ues {
+		require.False(t, u.Cp)
+	}
+}
+
+func TestExpandChecksTheControlPlaneSplit(t *testing.T) {
+	p := sampleProfile()
+	p.Scale.ThroughputUeCount = intPtr(p.Scale.UeCount + 1)
+	_, err := Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "scale.throughputUeCount", Message: "must be between 0 and the UE count"}}, verr.Errors)
+
+	p.Scale.ThroughputUeCount = intPtr(0) // every UE in the loop: its pacing must be set
+	p.Rates.CpLoop = CpLoopRate{RatePerSec: 10, MaxInFlight: 5, TimeoutMs: 1000, HoldMs: -1}
+	_, err = Expand(p, nil)
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "rates.cpLoop.holdMs", Message: "must be between 0 and 3600000"}}, verr.Errors)
+}
+
+func intPtr(n int) *int { return &n }

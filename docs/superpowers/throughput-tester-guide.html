@@ -409,6 +409,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
           <tr><td class="f">Profile name<span class="path">name</span></td><td class="r">不可空白／basic</td><td>設定檔名稱，不能和別份設定檔重複；History 會顯示。也是切換設定檔的選單，見「設定檔」。</td><td class="up">—</td><td class="down">—</td></tr>
           <tr><td class="f">gNB count<span class="path">scale.gnbCount</span></td><td class="r">≥ 1／10</td><td>模擬幾個 gNB。每個 gNB 一條 SCTP、一個 N2 IP、一個 N3 IP。</td><td class="up">AMF 要處理更多 NG Setup；要更多 IP。每個 gNB 分到的 DL 變少，DL 收包分得更開。</td><td class="down">每個 gNB 的 DL 是一條連線（UPF:2152 → gNB:2152），只能由一條讀取線、一顆核心收，約 2–3 Gbps。</td></tr>
           <tr><td class="f">UE count<span class="path">scale.ueCount</span></td><td class="r">≥ 1／1000</td><td>UE 總數。依序填滿 gNB，每個 gNB 容量 = ⌈UE 數 ÷ gNB 數⌉，最後一個可能沒滿。總流量 = UE 數 × 每 UE 速率。</td><td class="up">同樣總量下每個 UE 打得少，UPF 和 tester 的負載分得更平均（同一台時比較穩）；但註冊、PDU 要更久，核網裡 session 也更多。</td><td class="down">要達到同樣總量，每個 UE 得打更大。單一 UE 在 UPF 只會用一顆核心（gtp5g 約 3 Gbps 上限）。</td></tr>
+          <tr><td class="f">Throughput UEs<span class="path">scale.throughputUeCount</span></td><td class="r">0 到 UE 數／等於 UE 數</td><td>前面這麼多個 UE 建 PDU session、打流量；其餘的是<b>控制面測試（CP）</b>：不建 PDU，等所有打流量的 UE 都有結果（建好或失敗）後，不斷「註冊 → 停留 → Dereg」直到 Stop。例：UE 40000、Throughput 16000，#1–16000 打流量，#16001–40000 做 CP。UE 依序填滿 gNB，所以 CP 的 UE 集中在後面的 gNB（plan preview 每個 gNB 會標出幾個是 CP）。總流量 = 這個數字 × 每 UE 速率。原本 Throughput 等於 UE 數時，改 UE 數會跟著改。</td><td class="up">打流量的 UE 變多；CP 負載變小。</td><td class="down">打流量的 UE 變少，CP 的 UE 變多；設 0 就只做控制面測試。</td></tr>
         </table></div>
       </div>
 
@@ -486,7 +487,12 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
           <tr><td class="f">Starts per second<span class="path">rates.*.ratePerSec</span></td><td class="r">1–100000</td><td>每秒最多開始幾個新的嘗試。</td><td class="up">整批 UE 建得更快，核網（AMF、AUSF、UDM、SMF）壓力更大，可能開始逾時。</td><td class="down">核網比較輕鬆，整批要更久。</td></tr>
           <tr><td class="f">Max in flight<span class="path">rates.*.maxInFlight</span></td><td class="r">1–100000</td><td>同時最多幾個嘗試在等核網回應。</td><td class="up">核網慢時也能維持吞吐；但同時等的太多，逾時跟著變多。</td><td class="down">核網慢時速度跟著掉，排隊變長，但比較不會壓垮核網。</td></tr>
           <tr><td class="f">Timeout per attempt<span class="path">rates.*.timeoutMs</span></td><td class="r">1–60000 ms</td><td>單一程序最多等多久。</td><td class="up">慢的核網也算成功；卡住的嘗試佔住在途名額更久。</td><td class="down">更早判定失敗、進入重試。</td></tr>
-          <tr><td class="f">Retries<span class="path">rates.*.retries</span></td><td class="r">≥ 0</td><td>失敗後再試幾次，重試排回隊尾。核網明確拒絕 Dereg 時不重試。</td><td class="up">暫時性失敗補得回來，總時間變長。</td><td class="down">失敗率直接反映核網第一次的表現。</td></tr>
+          <tr><td class="f">Retries<span class="path">rates.*.retries</span></td><td class="r">≥ 0</td><td>失敗後再試幾次，重試排回隊尾。核網明確拒絕 Dereg 時不重試。只用在打流量的 UE（以及 Stop 後的 Dereg），CP 迴圈不重試。</td><td class="up">暫時性失敗補得回來，總時間變長。</td><td class="down">失敗率直接反映核網第一次的表現。</td></tr>
+                  <tr class="grp"><td colspan="5">Control-plane loop（只在有 CP UE 時使用；預設：50／s、200、10000 ms、1000 ms）</td></tr>
+          <tr><td class="f">Registrations per second<span class="path">rates.cpLoop.ratePerSec</span></td><td class="r">1–100000</td><td>CP 迴圈每秒最多開始幾次註冊。和打流量 UE 的 Registration pacing 分開計算，不互相搶。</td><td class="up">核網每秒要處理更多註冊（AMF、AUSF、UDM 壓力更大）。</td><td class="down">信令負載變輕。</td></tr>
+          <tr><td class="f">Max UEs in a cycle<span class="path">rates.cpLoop.maxInFlight</span></td><td class="r">1–100000</td><td>同時最多幾個 CP UE 在一個循環裡（註冊中、停留中、Dereg 中都算）。</td><td class="up">核網慢或停留時間長時，仍維持每秒的註冊數。</td><td class="down">實際速率可能低於上面的設定：大約是 這個數字 ÷ 每個循環的時間。</td></tr>
+          <tr><td class="f">Timeout per procedure<span class="path">rates.cpLoop.timeoutMs</span></td><td class="r">1–60000 ms</td><td>註冊、Dereg 各自最多等多久。</td><td class="up">慢的核網也算成功。</td><td class="down">更早判定逾時。</td></tr>
+          <tr><td class="f">Stay registered<span class="path">rates.cpLoop.holdMs</span></td><td class="r">0–3600000 ms</td><td>註冊成功後停留多久才 Dereg。</td><td class="up">同時註冊著的 UE 變多（核網裡的 context 變多），每秒的循環數變少。</td><td class="down">循環變快；0 = 註冊完立刻 Dereg。</td></tr>
         </table></div>
       </div>
 
@@ -539,6 +545,15 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <li>收尾卡片的 Not started 包含：沒註冊成功的 UE、association 已斷的 UE 和 gNB、第二次 Stop 時還在排隊的 Dereg。第二次 Stop 時已送出的 Dereg 記為 Connection errors，原因 <code>cleanup skipped</code>。這些 UE 最後都是 cancelled；PDU 失敗的 UE 維持 failed。</li>
         <li>註冊都成功、但<b>每個</b> PDU 都逾時：先看核網，SMF log 裡有沒有 CHF 計費逾時（<code>cgf.enable</code>）。</li>
       </ul>
+      <h3>Control-plane loop 卡片（有 CP UE 時才顯示）</h3>
+      <ul>
+        <li>狀態：<code>Waiting for the throughput UEs</code>（打流量的 UE 還在建）→ <code>Running</code> → <code>Stopped</code>。</li>
+        <li><b>Cycles completed</b>：註冊和 Dereg 都成功的循環數；<b>Registered now</b>：此刻註冊著的 CP UE；<b>Running for</b>：迴圈跑了多久。</li>
+        <li>註冊、Dereg 每秒的數量（最近一秒／平均）、每秒失敗數，以及一張每秒註冊／Dereg／失敗的圖。</li>
+        <li>註冊、Dereg 各一欄：成功、拒絕、逾時、連線錯誤、成功率、耗時 p50／p95／p99、失敗原因。每個循環都是全新的初始註冊（完整認證）；失敗只計數、不列進失敗 UE 清單，那個 UE 下一輪再試。</li>
+        <li>上面的 Registration、PDU session 卡片只算打流量的 UE。</li>
+        <li>按 Stop 後的收尾分兩張卡片：<b>Cleanup · throughput UE deregistration</b>（打流量的 UE）和 <b>Cleanup · control-plane UE deregistration</b>（CP UE：Stop 時還註冊著的做 Dereg，正在兩輪之間、本來就沒註冊的記為 Not started）。兩者用同一組 Deregistration pacing。報告的 Control plane 表也分成兩列。</li>
+      </ul>
       <h3>Data plane 卡片</h3>
       <ul>
         <li><b>Engine</b>：實際使用的資料面引擎。<code>socket</code>；<code>socket (auto: …)</code> 表示選了 auto 但改用 socket，括號裡是原因；<code>af_xdp (ens1f0 zero-copy, 24 queues; …)</code> 列出每張網卡的模式（zero-copy 最快；copy mode 要複製；generic mode 表示驅動不支援原生 XDP，最慢）與佇列數。</li>
@@ -564,7 +579,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <div>
           <h3>History</h3>
           <p>最近 50 個已結束的 run（fru-lab 保存）。勾兩筆可以並排比較。每一筆的 <b>View</b> 在新分頁打開完整的測試報告，<b>Download</b> 把同一份報告存成一個 HTML 檔，不用連線、不用 fru-lab 也能打開，可以直接寄給別人或列印。fru-tester 自己只保留最近 10 個，fru-lab 關著時如果結束了超過 10 個，較舊的不會進到 History。</p>
-          <p>報告內容：結果與時間、引擎；UL／DL 平均與最高接收速率、掉包、延遲、註冊與 PDU 成功率；UL／DL 吞吐圖（滑鼠移上去看每一點的數字）；每個控制面階段的成功／拒絕／逾時／重試與耗時分佈、失敗原因；資料面收送量、掉包、亂序、送出錯誤、延遲；每個 gNB 的狀態與流量；失敗的 UE；這次 run 用的完整設定（K、OPc 只顯示頭尾）。最下面的 <b>Download raw data (JSON)</b> 可以拿到原始資料。</p>
+          <p>報告內容：結果與時間、引擎；UL／DL 平均與最高接收速率、掉包、延遲、註冊與 PDU 成功率；UL／DL 吞吐圖（滑鼠移上去看每一點的數字）；每個控制面階段的成功／拒絕／逾時／重試與耗時分佈、失敗原因；有 CP 測試時另有一節：循環數、平均與最高每秒註冊數、每秒註冊／Dereg／失敗圖、兩個程序的成功率與耗時分佈；資料面收送量、掉包、亂序、送出錯誤、延遲；每個 gNB 的狀態與流量；失敗的 UE；這次 run 用的完整設定（K、OPc 只顯示頭尾）。最下面的 <b>Download raw data (JSON)</b> 可以拿到原始資料。</p>
           <p class="hint">報告裡的平均速率是「收到的量 ÷ 流量時間」，流量時間從第一個 UE 開始打流量算起，不含 N2、註冊、PDU 建立和收尾的時間。</p>
         </div>
         <div>
@@ -610,7 +625,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（feat/tester-profiles，2026-10-07）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（feat/cp-loop，2026-10-07）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 

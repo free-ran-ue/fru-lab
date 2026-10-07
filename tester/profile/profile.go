@@ -49,6 +49,11 @@ type Traffic struct {
 type Scale struct {
 	GnbCount int `json:"gnbCount"`
 	UeCount  int `json:"ueCount"`
+	// ThroughputUeCount is how many UEs, the first ones, establish a PDU
+	// session and carry traffic; the rest are the control-plane test:
+	// once every throughput UE is done, they register and deregister in a
+	// loop until Stop (see Rates.CpLoop). Absent means every UE.
+	ThroughputUeCount *int `json:"throughputUeCount,omitempty"`
 }
 
 // GnbTemplate is expanded once per gNB. GnbIDStart is hex and keeps its
@@ -121,6 +126,15 @@ type N3Network struct {
 	UpfPort   int    `json:"upfPort"`
 }
 
+// Throughput is how many UEs carry traffic; the rest are the
+// control-plane test.
+func (s Scale) Throughput() int {
+	if s.ThroughputUeCount == nil {
+		return s.UeCount
+	}
+	return *s.ThroughputUeCount
+}
+
 type Rates struct {
 	N2           StageRate     `json:"n2"`
 	Registration ProcedureRate `json:"registration"`
@@ -128,6 +142,25 @@ type Rates struct {
 	// Deregistration paces the UE deregistrations that Stop runs; the core
 	// releases each UE's PDU session with it.
 	Deregistration ProcedureRate `json:"deregistration"`
+	// CpLoop paces the control-plane test; only checked when it has UEs.
+	CpLoop CpLoopRate `json:"cpLoop"`
+}
+
+// CpLoopRate paces the control-plane loop: at most RatePerSec
+// registrations start per second and at most MaxInFlight UEs are in a
+// cycle at once. A cycle registers, stays registered HoldMs, then
+// deregisters; each procedure is bounded by TimeoutMs. A failed cycle is
+// counted and the UE simply tries again later: there are no retries.
+type CpLoopRate struct {
+	RatePerSec  int `json:"ratePerSec"`
+	MaxInFlight int `json:"maxInFlight"`
+	TimeoutMs   int `json:"timeoutMs"`
+	HoldMs      int `json:"holdMs"`
+}
+
+// ProcedureRate is the loop's pacing as a stage's, without retries.
+func (r CpLoopRate) ProcedureRate() ProcedureRate {
+	return ProcedureRate{RatePerSec: r.RatePerSec, MaxInFlight: r.MaxInFlight, TimeoutMs: r.TimeoutMs}
 }
 
 // ProcedureRate paces a per-UE stage: at most RatePerSec new attempts per

@@ -21,6 +21,7 @@ Name | Type | Description | Notes
 **ues** | [**TesterUeSummary**](TesterUeSummary.md) |  | [default to undefined]
 **failedUes** | [**Array&lt;TesterUeFailure&gt;**](TesterUeFailure.md) | The first 200 UEs that failed; ues.failed has the total. | [default to undefined]
 **dataplane** | [**TesterDataplaneSnapshot**](TesterDataplaneSnapshot.md) |  | [default to undefined]
+**cpLoop** | [**TesterCpLoopSnapshot**](TesterCpLoopSnapshot.md) |  | [default to undefined]
 
 ## Example
 
@@ -44,6 +45,7 @@ const instance: TesterRunSnapshot = {
     ues,
     failedUes,
     dataplane,
+    cpLoop,
 };
 ```
 

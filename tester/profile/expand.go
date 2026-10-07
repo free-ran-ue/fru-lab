@@ -18,6 +18,7 @@ type GnbSpec struct {
 	N2IP      string `json:"n2Ip"`
 	N3IP      string `json:"n3Ip"`
 	UeCount   int    `json:"ueCount"`
+	CpUeCount int    `json:"cpUeCount"` // of UeCount, in the control-plane test
 	UeFirst   int    `json:"ueFirst"`
 	UeLast    int    `json:"ueLast"`
 	FirstSupi string `json:"firstSupi"`
@@ -30,6 +31,7 @@ type UeSpec struct {
 	Gnb   int    // 0-based index into Plan.Gnbs
 	Msin  string // incremented from UeTemplate.MsinStart
 	Supi  string // "imsi-" + MCC + MNC + MSIN
+	Cp    bool   // in the control-plane test, not carrying traffic
 }
 
 // Plan is a profile expanded against a specific host. Ues is left out of
@@ -117,9 +119,13 @@ func Expand(p Profile, hostIPs []netip.Addr) (*Plan, error) {
 		}
 		for range ues {
 			msin, _ := IncrementDecimal(p.Ue.MsinStart, nextUe-1)
+			cp := nextUe > p.Scale.Throughput()
+			if cp {
+				spec.CpUeCount++
+			}
 			plan.Ues = append(plan.Ues, UeSpec{
 				Index: nextUe, Gnb: i, Msin: msin,
-				Supi: "imsi-" + p.Gnb.Mcc + p.Gnb.Mnc + msin,
+				Supi: "imsi-" + p.Gnb.Mcc + p.Gnb.Mnc + msin, Cp: cp,
 			})
 			nextUe++
 		}
@@ -142,6 +148,9 @@ func validateFields(p Profile, verr *ValidationError) {
 	}
 	if p.Scale.UeCount < 1 {
 		verr.add("scale.ueCount", "must be at least 1")
+	}
+	if n := p.Scale.Throughput(); n < 0 || n > p.Scale.UeCount {
+		verr.add("scale.throughputUeCount", "must be between 0 and the UE count")
 	}
 	if len(p.Gnb.GnbIDStart) < 6 || len(p.Gnb.GnbIDStart) > 8 || len(p.Gnb.GnbIDStart)%2 != 0 {
 		verr.add("gnb.gnbIdStart", "must be 6 or 8 hex digits")
@@ -181,6 +190,16 @@ func validateFields(p Profile, verr *ValidationError) {
 	validateProcedureRate(verr, "rates.registration", p.Rates.Registration)
 	validateProcedureRate(verr, "rates.pdu", p.Rates.Pdu)
 	validateProcedureRate(verr, "rates.deregistration", p.Rates.Deregistration)
+	if p.Scale.Throughput() < p.Scale.UeCount {
+		validateCpLoop(verr, p.Rates.CpLoop)
+	}
+}
+
+func validateCpLoop(verr *ValidationError, r CpLoopRate) {
+	validateProcedureRate(verr, "rates.cpLoop", r.ProcedureRate())
+	if r.HoldMs < 0 || r.HoldMs > 3600000 {
+		verr.add("rates.cpLoop.holdMs", "must be between 0 and 3600000")
+	}
 }
 
 func validateUe(p Profile, verr *ValidationError) {

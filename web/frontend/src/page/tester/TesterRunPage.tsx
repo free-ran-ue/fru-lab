@@ -6,6 +6,8 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type {
+  TesterCpLoopSnapshot,
+  TesterCpPoint,
   TesterDataplaneSnapshot, TesterGnbTraffic, TesterRunSnapshot, TesterStageSnapshot, TesterTrafficDirection,
   TesterTrafficPoint, TesterUeSummary,
 } from '../../api'
@@ -204,6 +206,145 @@ function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
   )
 }
 
+// CpChart plots the control-plane loop's per-second registrations,
+// deregistrations and failures from the loop's start.
+function CpChart({ series }: { series: TesterCpPoint[] }) {
+  const [ref, W] = useWidth<HTMLDivElement>()
+  const [hover, setHover] = useState<number | null>(null)
+  const H = 150
+  const pad = { l: 40, r: 8, t: 8, b: 20 }
+  if (series.length < 2) {
+    return <div ref={ref} className={styles.chartEmpty}>The chart starts after two seconds of the loop.</div>
+  }
+  const t1 = series[series.length - 1].t
+  const peak = Math.max(1, ...series.flatMap((p) => [p.regPerSec, p.deregPerSec, p.failPerSec]))
+  const gridStep = niceStep(peak / 4)
+  const top = Math.ceil(peak / gridStep) * gridStep
+  const plotW = Math.max(1, W - pad.l - pad.r)
+  const span = Math.max(1, t1)
+  const x = (t: number) => pad.l + (t / span) * plotW
+  const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
+  const line = (f: (p: TesterCpPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
+  const maxTicks = Math.max(2, Math.floor(plotW / 70))
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
+    .find((s) => span / s <= maxTicks) ?? 86400
+  const ticks: number[] = []
+  for (let t = 0; t <= t1; t += step) ticks.push(t)
+  const h = hover === null ? null : series[hover]
+  const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
+    const t = ((ev.clientX - ev.currentTarget.getBoundingClientRect().left - pad.l) / plotW) * span
+    let best = 0
+    series.forEach((p, k) => { if (Math.abs(p.t - t) < Math.abs(series[best].t - t)) best = k })
+    setHover(best)
+  }
+  const perSec = (v: number) => `${Number(v.toFixed(1)).toLocaleString()}/s`
+  return (
+    <div ref={ref} className={styles.chartBox}>
+      {W > 0 && (
+        <svg width={W} height={H} className={styles.chart} role="img" aria-label="Control-plane procedures per second over time"
+          onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+          {Array.from({ length: Math.round(top / gridStep) + 1 }, (_, k) => k * gridStep).map((v) => (
+            <g key={v}>
+              <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className={styles.chartGrid} />
+              <text x={pad.l - 6} y={y(v) + 3.5} textAnchor="end" className={styles.chartAxis}>{Number(v.toFixed(1))}</text>
+            </g>
+          ))}
+          {ticks.map((t) => (
+            <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
+          ))}
+          <polyline points={line((p) => p.failPerSec)} className={styles.lineFail} />
+          <polyline points={line((p) => p.deregPerSec)} className={styles.lineDereg} />
+          <polyline points={line((p) => p.regPerSec)} className={styles.lineRx} />
+          {h && <line x1={x(h.t)} x2={x(h.t)} y1={pad.t} y2={H - pad.b} className={styles.chartCursor} />}
+        </svg>
+      )}
+      {h && W > 0 && (
+        <div className={styles.chartTip} style={{ left: Math.min(x(h.t) + 10, W - 160) }}>
+          <b>{clock(h.t)}</b>
+          <span><i className={styles.swatchRx} />Registered {perSec(h.regPerSec)}</span>
+          <span><i className={styles.swatchDereg} />Deregistered {perSec(h.deregPerSec)}</span>
+          <span><i className={styles.swatchFail} />Failed {perSec(h.failPerSec)}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ProcedureStats is one procedure of the loop: outcomes and latency.
+function ProcedureStats({ title, s }: { title: string, s: TesterStageSnapshot }) {
+  const finished = s.accepted + s.rejected + s.timedOut + s.failed
+  return (
+    <div className={styles.dirPanel}>
+      <div className={styles.dirHead}>
+        <h4 className={styles.dirTitle}>{title}</h4>
+        <span className={`${styles.pill} ${finished > s.accepted ? styles.pillBad : styles.pillOk}`}>
+          {finished ? `${((s.accepted / finished) * 100).toFixed(finished > s.accepted ? 2 : 0)} % ok` : '—'}
+        </span>
+      </div>
+      <dl className={styles.kv}>
+        <dt>Accepted</dt><dd>{s.accepted.toLocaleString()}</dd>
+        <dt>Rejected</dt><dd>{s.rejected.toLocaleString()}</dd>
+        <dt>Timed out</dt><dd>{s.timedOut.toLocaleString()}</dd>
+        <dt>Connection errors</dt><dd>{s.failed.toLocaleString()}</dd>
+        <dt>In flight</dt><dd>{s.inFlight.toLocaleString()}</dd>
+        <dt>Average</dt><dd>{formatMs(s.avgMs)}</dd>
+        <dt>p50 / p95 / p99</dt><dd>{formatMs(s.p50Ms)} / {formatMs(s.p95Ms)} / {formatMs(s.p99Ms)}</dd>
+        <dt>Max</dt><dd>{formatMs(s.maxMs)}</dd>
+      </dl>
+      {s.causes.length > 0 && (
+        <div className={styles.causes}>
+          <h4>Failure causes</h4>
+          <ul>{s.causes.map((c) => <li key={c.cause}><span className={styles.mono}>{c.cause}</span> × {c.count}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const CP_STATE: Record<TesterCpLoopSnapshot['state'], [string, string]> = {
+  off: ['Off', 'pillMuted'],
+  waiting: ['Waiting for the throughput UEs', 'pillMuted'],
+  running: ['Running', 'pillActive'],
+  stopped: ['Stopped', 'pillOk'],
+}
+
+// CpLoopCard is the control-plane test: UEs registering and
+// deregistering in a loop.
+function CpLoopCard({ cp }: { cp: TesterCpLoopSnapshot }) {
+  const [label, tone] = CP_STATE[cp.state]
+  const last = cp.series.length ? cp.series[cp.series.length - 1] : null
+  const avg = (n: number) => (cp.durationSec > 0 ? `${(n / cp.durationSec).toFixed(1)}/s` : '—')
+  return (
+    <section className={styles.card}>
+      <div className={styles.stageTop}>
+        <h3 className={styles.cardTitle}>Control-plane loop</h3>
+        <span className={`${styles.pill} ${styles[tone]}`}>{label}</span>
+      </div>
+      <p className={styles.hint} style={{ marginTop: 0 }}>
+        {cp.ues.toLocaleString()} UEs register, stay registered, deregister and start over; they have no PDU session.
+      </p>
+      <div className={styles.statGrid} style={{ margin: '0.75rem 0' }}>
+        <Stat label="Cycles completed" value={cp.cycles.toLocaleString()} />
+        <Stat label="Registered now" value={cp.registered.toLocaleString()} />
+        <Stat label="Running for" value={cp.startedAt ? clock(cp.durationSec) : '—'} />
+        <Stat label="Registrations · last second / average" value={`${last ? `${last.regPerSec.toFixed(0)}/s` : '—'} / ${avg(cp.registration.accepted)}`} />
+        <Stat label="Deregistrations · last second / average" value={`${last ? `${last.deregPerSec.toFixed(0)}/s` : '—'} / ${avg(cp.deregistration.accepted)}`} />
+        <Stat label="Failed · last second" value={last ? `${last.failPerSec.toFixed(0)}/s` : '—'} />
+      </div>
+      <div className={styles.legend}>
+        <span><i className={styles.swatchRx} />Registrations/s</span>
+        <span><i className={styles.swatchDereg} />Deregistrations/s</span>
+        <span><i className={styles.swatchFail} />Failed/s</span>
+      </div>
+      <CpChart series={cp.series} />
+      <div className={styles.dirRow} style={{ marginTop: '1rem' }}>
+        <ProcedureStats title="Registration" s={cp.registration} />
+        <ProcedureStats title="Deregistration" s={cp.deregistration} />
+      </div>
+    </section>
+  )
+}
+
 const ACTIVE_STATES: TesterRunSnapshot['state'][] = ['configuring', 'n2', 'running']
 
 function StageCard({ title, stage }: { title: string, stage: TesterStageSnapshot }) {
@@ -331,7 +472,8 @@ export default function TesterRunPage() {
           <>
             {(snapshot.state === 'stopping' || snapshot.state === 'stopped') && (
               <div className={styles.stageRow}>
-                <StageCard title="Cleanup · UE deregistration" stage={snapshot.deregistration} />
+                <StageCard title={snapshot.cpLoop.state === 'off' ? 'Cleanup · UE deregistration' : 'Cleanup · throughput UE deregistration'} stage={snapshot.deregistration} />
+                {snapshot.cpLoop.state !== 'off' && <StageCard title="Cleanup · control-plane UE deregistration" stage={snapshot.cpLoop.cleanup} />}
                 <StageCard title="Cleanup · gNB SCTP close" stage={snapshot.n2Release} />
               </div>
             )}
@@ -342,6 +484,8 @@ export default function TesterRunPage() {
             </div>
 
             <DataplaneCard dp={snapshot.dataplane} />
+
+            {snapshot.cpLoop.state !== 'off' && <CpLoopCard cp={snapshot.cpLoop} />}
 
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>UEs</h3>
