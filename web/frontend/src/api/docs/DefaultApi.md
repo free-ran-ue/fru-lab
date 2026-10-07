@@ -31,6 +31,7 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON export)|
 |[**testerHistoryList**](#testerhistorylist) | **GET** /api/tester/history | Finished runs, newest first|
 |[**testerHistorySeriesCsv**](#testerhistoryseriescsv) | **GET** /api/tester/history/{runId}/series.csv | One finished run\&#39;s throughput time series (CSV export)|
+|[**testerNetworkInterfaces**](#testernetworkinterfaces) | **GET** /api/tester/network/interfaces | Interfaces on fru-tester\&#39;s host|
 |[**testerNetworkPing**](#testernetworkping) | **POST** /api/tester/network/ping | Ping test of one network|
 |[**testerProfileGet**](#testerprofileget) | **GET** /api/tester/profile | Get the saved Throughput Tester profile|
 |[**testerProfilePut**](#testerprofileput) | **PUT** /api/tester/profile | Save the Throughput Tester profile|
@@ -1397,6 +1398,52 @@ const { status, data } = await apiInstance.testerHistorySeriesCsv(
 |-------------|-------------|------------------|
 |**200** | t,ulTxBps,ulRxBps,dlTxBps,dlRxBps, one row per chart point |  -  |
 |**404** | No such run |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerNetworkInterfaces**
+> Array<TesterInterface> testerNetworkInterfaces()
+
+Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerNetworkInterfaces();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<TesterInterface>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**502** | fru-tester is unreachable |  -  |
+|**503** | backend.tester.url is not configured |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

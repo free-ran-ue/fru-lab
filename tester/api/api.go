@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"tester/bench"
+	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
 )
@@ -27,6 +28,7 @@ type Controller interface {
 	Changed() <-chan struct{}
 	Reports() []run.Report
 	Ping(p profile.Profile, plane string) (run.PingResult, error)
+	Interfaces() ([]netcfg.InterfaceInfo, error)
 }
 
 // Bench is the slice of *bench.Runner the handlers use.
@@ -83,6 +85,14 @@ func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 	g.GET("/bench", func(c *gin.Context) { c.JSON(http.StatusOK, b.Result()) })
 	g.POST("/bench", handleBenchStart(b))
 	g.POST("/network/ping", handlePing(ctrl))
+	g.GET("/network/interfaces", func(c *gin.Context) {
+		ifaces, err := ctrl.Interfaces()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, ifaces)
+	})
 	g.GET("/run/reports", func(c *gin.Context) {
 		reps := ctrl.Reports()
 		if reps == nil {

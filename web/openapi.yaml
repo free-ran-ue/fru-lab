@@ -870,6 +870,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/tester/network/interfaces:
+    get:
+      summary: Interfaces on fru-tester's host
+      description: Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page's interface menus.
+      operationId: testerNetworkInterfaces
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterInterface'
+        '502':
+          description: fru-tester is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: backend.tester.url is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/network/ping:
     post:
       summary: Ping test of one network
@@ -1871,6 +1899,29 @@ components:
           format: int64
         dlLossRate:
           type: number
+    TesterInterface:
+      type: object
+      required: [name, kind, state, mtu, addresses]
+      properties:
+        name:
+          type: string
+          example: ens2f1
+        kind:
+          type: string
+          description: Link type, e.g. device (a NIC), bridge, veth, macvlan, vlan, bond.
+          example: device
+        state:
+          type: string
+          description: Operational state, e.g. up, down, unknown.
+          example: up
+        mtu:
+          type: integer
+          example: 1500
+        addresses:
+          type: array
+          description: IPv4 addresses with prefix length.
+          items:
+            type: string
     TesterPingRequest:
       type: object
       required: [plane, profile]

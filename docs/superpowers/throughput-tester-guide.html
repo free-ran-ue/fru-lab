@@ -421,21 +421,24 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <div class="block fields" id="f-network">
         <h3><span class="tag n2">N2</span><span class="tag n3">N3</span><span class="tag n6">N6</span> 網路</h3>
         <div class="why">
+          <p><b>選網卡：</b>三張卡片的 Local interface 是下拉選單，列出 <b>fru-tester 所在主機</b>上的網卡名稱。啟用中的網卡排在前面，<code>lo</code> 排最後；容器的 veth 通常有幾十個，不列出。主機上的網卡有變動時按選單下方的 <b>Refresh list</b>。設定檔裡的網卡不在這台主機上時，選單最上面會標示「not on this host」；fru-tester 連不上、列不出網卡時，欄位會變回可以手動輸入。</p>
+        </div>
+        <div class="why">
           <p><b>Ping 測試：</b>每張網路卡片下方有一個按鈕（<b>Ping AMF</b>、<b>Ping UPF (N3)</b>、<b>Ping UPF (N6)</b>），不用開始 run 就能確認這個網路設好後通不通。按下去時，fru-tester 會用 run 會用的位址，也就是第一個 gNB 的 IP 加上 CIDR 的遮罩（N6 用 sink 和它的遮罩）。主機沒有這個位址就暫時加到卡片設定的網卡上，ping 對端 3 次（N2 是 AMF、N3 是 UPF N3 IP、N6 是 UPF N6 IP），再把位址移除。</p>
           <p>只檢查這張卡片自己的欄位，其他卡片沒填好也能測。結果會顯示回應數與平均延遲；沒有回應時檢查線路、對端是否在同一個網段、核網那一側的 VLAN，以及對端是否允許 ping。run 進行中不能測；測試進行中也不能開始 run。</p>
         </div>
         <div class="tbl"><table>
           <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
           <tr class="grp"><td colspan="5"><span class="tag n2">N2 · gNB ↔ AMF</span></td></tr>
-          <tr><td class="f">Local interface<span class="path">network.n2.interface</span></td><td class="r">主機上要有／docker-cn-ran</td><td>tester 把每個 gNB 的 N2 IP 加在這張網卡上，SCTP 從這裡連 AMF。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">Local interface<span class="path">network.n2.interface</span></td><td class="r">主機上要有／docker-cn-ran</td><td>從下拉選單選。tester 把每個 gNB 的 N2 IP 加在這張網卡上，SCTP 從這裡連 AMF。</td><td colspan="2">—</td></tr>
           <tr><td class="f">gNB IP CIDR / First gNB IP<span class="path">network.n2.cidr / startIp</span></td><td class="r">10.0.1.0/24 / 10.0.1.100</td><td>從 First gNB IP 起遞增分給每個 gNB，用 CIDR 的遮罩加上去（所以主機會有到這個網段的路由）。跳過網路、廣播、AMF、UPF 與主機已有的 IP。</td><td colspan="2">CIDR 要大到裝得下所有 gNB，否則驗證會說 IP 不夠。</td></tr>
           <tr><td class="f">AMF IP / port<span class="path">network.n2.amfIp / amfPort</span></td><td class="r">10.0.1.3 / 38412</td><td>AMF 的 NGAP 位址。</td><td colspan="2">—</td></tr>
           <tr class="grp"><td colspan="5"><span class="tag n3">N3 · gNB ↔ UPF</span></td></tr>
-          <tr><td class="f">Local interface<span class="path">network.n3.interface</span></td><td class="r">docker-cn-ran</td><td>gNB 的 N3 IP 加在這裡；UL 從這裡送出、DL 從這裡收。它的 MTU 決定封包大小上限。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">Local interface<span class="path">network.n3.interface</span></td><td class="r">docker-cn-ran</td><td>從下拉選單選。gNB 的 N3 IP 加在這裡；UL 從這裡送出、DL 從這裡收。它的 MTU 決定封包大小上限。</td><td colspan="2">—</td></tr>
           <tr><td class="f">gNB IP CIDR / First gNB IP<span class="path">network.n3.cidr / startIp</span></td><td class="r">10.0.1.0/24 / 10.0.1.100</td><td>同 N2。N2 和 N3 可以同一個網段，不會分到同一個 IP。</td><td colspan="2">—</td></tr>
           <tr><td class="f">UPF IP / port<span class="path">network.n3.upfIp / upfPort</span></td><td class="r">10.0.1.5 / 2152</td><td>UL 送往的 UPF 位址。PDU 建立時核網有給 UPF 位址就用核網給的，這裡是沒給時的預設。</td><td colspan="2">—</td></tr>
           <tr class="grp"><td colspan="5"><span class="tag n6">N6 · data network side</span></td></tr>
-          <tr><td class="f">Local interface<span class="path">network.n6.interface</span></td><td class="r">docker-cn-ran</td><td>sink IP 所在、UE pool 路由走的網卡。它的 MTU 也限制封包大小。</td><td colspan="2">—</td></tr>
+          <tr><td class="f">Local interface<span class="path">network.n6.interface</span></td><td class="r">docker-cn-ran</td><td>從下拉選單選。sink IP 所在、UE pool 路由走的網卡。它的 MTU 也限制封包大小。</td><td colspan="2">—</td></tr>
           <tr><td class="f">Sink IP (CIDR)<span class="path">network.n6.sinkIp</span></td><td class="r">IP/遮罩／10.0.1.1/24</td><td>UL 的終點（UPF 解封裝後送到這裡），也是 DL 的來源。要連遮罩一起填，例如 <code>172.26.6.1/16</code>。主機沒有這個 IP 時，tester 照這個遮罩加到 N6 網卡上，主機就有到這個網段的路由，結束時移除。</td><td colspan="2">遮罩要涵蓋 UPF N6 IP，DL 的路由才加得上去。只填 IP、或填網段本身的位址（例如 172.26.0.0/16）驗證會擋下。</td></tr>
           <tr><td class="f">UPF N6 IP<span class="path">network.n6.upfIp</span></td><td class="r">10.0.1.5</td><td>DL 的下一跳：run 期間 tester 加一條「UE pool 經由這個 IP」的路由。</td><td colspan="2">—</td></tr>
           <tr><td class="f">UE IP pool<span class="path">network.n6.uePool</span></td><td class="r">10.60.0.0/16</td><td>SMF 發給 UE 的 IP 範圍，要和 SMF 設定一樣。</td><td colspan="2">主機上已經有一條到這個網段、但閘道不同的路由時，tester 不覆蓋，run 會失敗並說明。</td></tr>

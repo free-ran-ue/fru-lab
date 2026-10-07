@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"tester/bench"
+	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
 )
@@ -40,6 +41,9 @@ func (f *fakeCtrl) Stop() (run.Snapshot, error)                 { return f.snap,
 func (f *fakeCtrl) Snapshot() run.Snapshot                      { return f.snap }
 func (f *fakeCtrl) Changed() <-chan struct{}                    { return f.changed }
 func (f *fakeCtrl) Reports() []run.Report                       { return f.reports }
+func (f *fakeCtrl) Interfaces() ([]netcfg.InterfaceInfo, error) {
+	return []netcfg.InterfaceInfo{{Name: "ens20", Kind: "device", State: "up", Mtu: 1500, Addresses: []string{"10.0.2.5/24"}}}, nil
+}
 func (f *fakeCtrl) Ping(_ profile.Profile, plane string) (run.PingResult, error) {
 	f.pingPlane = plane
 	return f.ping, f.pingErr
@@ -237,4 +241,10 @@ func TestPingStatusCodes(t *testing.T) {
 	require.Contains(t, rec.Body.String(), `"field":"network.n3.upfIp"`)
 	require.Equal(t, http.StatusBadRequest, do(t, newTestRouter(&fakeCtrl{}, "t"), http.MethodPost, "/api/network/ping", `{"plane":"n2","extra":1}`, "t").Code)
 	require.Equal(t, http.StatusConflict, do(t, newTestRouter(&fakeCtrl{startErr: run.ErrPingActive}, "t"), http.MethodPost, "/api/run", `{}`, "t").Code)
+}
+
+func TestInterfacesListsTheHostsLinks(t *testing.T) {
+	rec := do(t, newTestRouter(&fakeCtrl{}, "t"), http.MethodGet, "/api/network/interfaces", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `[{"name":"ens20","kind":"device","state":"up","mtu":1500,"addresses":["10.0.2.5/24"]}]`, rec.Body.String())
 }

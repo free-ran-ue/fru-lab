@@ -57,3 +57,18 @@ func TestNetlinkAddRemoveOnDummyLink(t *testing.T) {
 	require.NoError(t, m.RemoveRoute("frutest0", pool, gw))
 	require.NoError(t, m.RemoveRoute("frutest0", pool, gw), "removing twice is fine")
 }
+
+// Every host has a loopback, up, with 127.0.0.1/8.
+func TestInterfaceDetailsListsLoopback(t *testing.T) {
+	ifaces, err := Netlink{}.InterfaceDetails()
+	require.NoError(t, err)
+	var lo *InterfaceInfo
+	for i := range ifaces {
+		if ifaces[i].Name == "lo" {
+			lo = &ifaces[i]
+		}
+	}
+	require.NotNil(t, lo)
+	require.Contains(t, lo.Addresses, "127.0.0.1/8")
+	require.Equal(t, 65536, lo.Mtu)
+}

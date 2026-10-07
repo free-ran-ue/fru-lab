@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"tester/netcfg"
 	"tester/profile"
 )
 
@@ -97,6 +98,12 @@ func (c *Controller) pingFrom(plane string, t profile.PingTarget, hostIPs []neti
 		res.Error = err.Error()
 	}
 	return res
+}
+
+// Interfaces describes the host's links, for the Setup page's interface
+// menus.
+func (c *Controller) Interfaces() ([]netcfg.InterfaceInfo, error) {
+	return c.deps.Addrs.InterfaceDetails()
 }
 
 func joinMessages(a, b string) string {

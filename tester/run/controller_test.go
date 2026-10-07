@@ -19,6 +19,7 @@ import (
 	"tester/dataplane"
 	"tester/gnb"
 	"tester/metrics"
+	"tester/netcfg"
 	"tester/profile"
 )
 
@@ -43,6 +44,10 @@ func (f *fakeAddrs) MTU(iface string) (int, error) {
 	}
 	return 1500, nil
 }
+func (f *fakeAddrs) InterfaceDetails() ([]netcfg.InterfaceInfo, error) {
+	return []netcfg.InterfaceInfo{{Name: "eth-n2", Kind: "device", State: "up", Mtu: 1500, Addresses: []string{}}}, nil
+}
+
 func (f *fakeAddrs) Interfaces() ([]string, error) {
 	return []string{"lo", "eth-n2", "eth-n3", "eth-n6", "jumbo"}, nil
 }

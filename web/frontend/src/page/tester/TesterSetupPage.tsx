@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Sidebar from '../../components/sidebar/Sidebar'
 import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterFieldError, TesterPlan, TesterProfile, TesterValidateResponse } from '../../api'
+import type { TesterFieldError, TesterInterface, TesterPlan, TesterProfile, TesterValidateResponse } from '../../api'
 import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
 import { formatBps } from './testerFormat'
 import styles from './tester.module.css'
 import PingTest from './PingTest'
+import InterfaceField from './InterfaceField'
 import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
 
@@ -102,6 +103,21 @@ export default function TesterSetupPage() {
   const [validation, setValidation] = useState<TesterValidateResponse | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const validateSeq = useRef(0)
+  // the host's interfaces for the N2/N3/N6 menus: null while loading,
+  // undefined when they could not be listed (the fields fall back to text)
+  const [interfaces, setInterfaces] = useState<TesterInterface[] | null | undefined>(null)
+
+  const loadInterfaces = useCallback(() => {
+    setInterfaces(null)
+    api.testerNetworkInterfaces()
+      .then((response) => setInterfaces(response.data))
+      .catch((error) => {
+        setInterfaces(undefined)
+        addError(extractErrorMessage(error, "Failed to list the tester host's interfaces"))
+      })
+  }, [addError])
+
+  useEffect(() => { loadInterfaces() }, [loadInterfaces])
 
   useEffect(() => {
     api.testerProfileGet()
@@ -238,7 +254,8 @@ export default function TesterSetupPage() {
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>N2 · gNB ↔ AMF</h3>
               <div className={styles.fieldGrid}>
-                <Field label="Local interface" path="network.n2.interface" {...fieldProps} />
+                <InterfaceField label="Local interface" path="network.n2.interface" value={profile.network.n2.interface}
+                  errors={fieldErrors} interfaces={interfaces} onChange={handleChange} onRefresh={loadInterfaces} />
                 <Field label="gNB IP CIDR" path="network.n2.cidr" {...fieldProps} />
                 <Field label="First gNB IP" path="network.n2.startIp" {...fieldProps} />
                 <Field label="AMF IP" path="network.n2.amfIp" {...fieldProps} />
@@ -251,7 +268,8 @@ export default function TesterSetupPage() {
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>N3 · gNB ↔ UPF</h3>
               <div className={styles.fieldGrid}>
-                <Field label="Local interface" path="network.n3.interface" {...fieldProps} />
+                <InterfaceField label="Local interface" path="network.n3.interface" value={profile.network.n3.interface}
+                  errors={fieldErrors} interfaces={interfaces} onChange={handleChange} onRefresh={loadInterfaces} />
                 <Field label="gNB IP CIDR" path="network.n3.cidr" {...fieldProps} />
                 <Field label="First gNB IP" path="network.n3.startIp" {...fieldProps} />
                 <Field label="UPF IP" path="network.n3.upfIp" {...fieldProps} />
@@ -264,7 +282,8 @@ export default function TesterSetupPage() {
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>N6 · data network side</h3>
               <div className={styles.fieldGrid}>
-                <Field label="Local interface" path="network.n6.interface" {...fieldProps} />
+                <InterfaceField label="Local interface" path="network.n6.interface" value={profile.network.n6.interface}
+                  errors={fieldErrors} interfaces={interfaces} onChange={handleChange} onRefresh={loadInterfaces} />
                 <Field label="Sink IP (CIDR)" path="network.n6.sinkIp" {...fieldProps} />
                 <Field label="UPF N6 IP" path="network.n6.upfIp" {...fieldProps} />
                 <Field label="UE IP pool" path="network.n6.uePool" {...fieldProps} />

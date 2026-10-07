@@ -30,6 +30,8 @@ func (b *backend) getTesterRoutes() util.Routes {
 			HandlerFunc: b.handleTesterProxy}, // polled; not logged per request
 		{Name: "TesterBenchStart", Method: http.MethodPost, Pattern: "/tester/bench",
 			HandlerFunc: withLogging("TesterBenchStart", b.TesterLog, b.handleTesterProxy)},
+		{Name: "TesterNetworkInterfaces", Method: http.MethodGet, Pattern: "/tester/network/interfaces",
+			HandlerFunc: b.handleTesterProxy},
 		{Name: "TesterNetworkPing", Method: http.MethodPost, Pattern: "/tester/network/ping",
 			HandlerFunc: withLogging("TesterNetworkPing", b.TesterLog, b.handleTesterProxy)},
 	}
