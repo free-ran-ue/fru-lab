@@ -1,28 +1,73 @@
 package processor
 
 import (
+	"backend/internal/context"
 	"backend/model"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
 // maxTesterProfileBytes caps what a client can make us store.
 const maxTesterProfileBytes = 64 << 10
 
-// TesterProfileGet returns the saved profile JSON, or nil if none exists.
-func (p *Processor) TesterProfileGet() ([]byte, *model.ErrorDetail) {
-	raw, err := p.FlContext.GetTesterProfile()
+// TesterProfileList returns every saved profile, by name.
+func (p *Processor) TesterProfileList() ([]context.TesterProfile, *model.ErrorDetail) {
+	list, err := p.FlContext.ListTesterProfiles()
 	if err != nil {
-		p.ProcLog.Errorf("Failed to read tester profile: %v", err)
-		return nil, &model.ErrorDetail{HttpStatus: http.StatusInternalServerError, Detail: "Failed to read the saved profile"}
+		p.ProcLog.Errorf("Failed to list tester profiles: %v", err)
+		return nil, &model.ErrorDetail{HttpStatus: http.StatusInternalServerError, Detail: "Failed to read the saved profiles"}
 	}
-	return raw, nil
+	return list, nil
 }
 
-// TesterProfilePut stores raw as-is after checking it is one JSON object.
+// TesterProfileGet returns one saved profile.
+func (p *Processor) TesterProfileGet(id string) (*context.TesterProfile, *model.ErrorDetail) {
+	profile, err := p.FlContext.GetTesterProfile(id)
+	if err != nil {
+		return nil, p.profileError("read", err)
+	}
+	return profile, nil
+}
+
+// TesterProfileCreate stores raw as a new profile.
+func (p *Processor) TesterProfileCreate(raw []byte) (*context.TesterProfile, *model.ErrorDetail) {
+	compact, errDetail := compactProfile(raw)
+	if errDetail != nil {
+		return nil, errDetail
+	}
+	profile, err := p.FlContext.CreateTesterProfile(compact)
+	if err != nil {
+		return nil, p.profileError("save", err)
+	}
+	return profile, nil
+}
+
+// TesterProfileUpdate replaces the profile stored under id with raw.
+func (p *Processor) TesterProfileUpdate(id string, raw []byte) (*context.TesterProfile, *model.ErrorDetail) {
+	compact, errDetail := compactProfile(raw)
+	if errDetail != nil {
+		return nil, errDetail
+	}
+	profile, err := p.FlContext.UpdateTesterProfile(id, compact)
+	if err != nil {
+		return nil, p.profileError("save", err)
+	}
+	return profile, nil
+}
+
+// TesterProfileDelete removes one saved profile.
+func (p *Processor) TesterProfileDelete(id string) (*model.ResponseTesterAction, *model.ErrorDetail) {
+	if err := p.FlContext.DeleteTesterProfile(id); err != nil {
+		return nil, p.profileError("delete", err)
+	}
+	return &model.ResponseTesterAction{Message: "Profile deleted"}, nil
+}
+
+// compactProfile checks raw is one JSON object of at most 64 KiB.
 // Field-level validation belongs to fru-tester (/api/tester/profile/validate).
-func (p *Processor) TesterProfilePut(raw []byte) (*model.ResponseTesterAction, *model.ErrorDetail) {
+func compactProfile(raw []byte) ([]byte, *model.ErrorDetail) {
 	if len(raw) > maxTesterProfileBytes {
 		return nil, &model.ErrorDetail{HttpStatus: http.StatusRequestEntityTooLarge, Detail: "Profile is larger than 64 KiB"}
 	}
@@ -32,9 +77,18 @@ func (p *Processor) TesterProfilePut(raw []byte) (*model.ResponseTesterAction, *
 	}
 	var compact bytes.Buffer
 	_ = json.Compact(&compact, raw)
-	if err := p.FlContext.PutTesterProfile(compact.Bytes()); err != nil {
-		p.ProcLog.Errorf("Failed to save tester profile: %v", err)
-		return nil, &model.ErrorDetail{HttpStatus: http.StatusInternalServerError, Detail: "Failed to save the profile"}
+	return compact.Bytes(), nil
+}
+
+func (p *Processor) profileError(action string, err error) *model.ErrorDetail {
+	switch {
+	case errors.Is(err, context.ErrProfileNotFound):
+		return &model.ErrorDetail{HttpStatus: http.StatusNotFound, Detail: "No such profile"}
+	case errors.Is(err, context.ErrProfileNameMissing):
+		return &model.ErrorDetail{HttpStatus: http.StatusBadRequest, Detail: "Profile name is required"}
+	case errors.Is(err, context.ErrProfileNameTaken):
+		return &model.ErrorDetail{HttpStatus: http.StatusConflict, Detail: "Another profile already has this name"}
 	}
-	return &model.ResponseTesterAction{Message: "Profile saved"}, nil
+	p.ProcLog.Errorf("Failed to %s tester profile: %v", action, err)
+	return &model.ErrorDetail{HttpStatus: http.StatusInternalServerError, Detail: "Failed to " + action + " the profile"}
 }

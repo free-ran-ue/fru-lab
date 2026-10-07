@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -146,11 +145,8 @@ type storedReport struct {
 		Pdu            storedStage `json:"pdu"`
 		Deregistration storedStage `json:"deregistration"`
 		Dataplane      struct {
-			Ul     storedDirection `json:"ul"`
-			Dl     storedDirection `json:"dl"`
-			Series []struct {
-				T, UlTxBps, UlRxBps, DlTxBps, DlRxBps float64
-			} `json:"series"`
+			Ul storedDirection `json:"ul"`
+			Dl storedDirection `json:"dl"`
 		} `json:"dataplane"`
 	} `json:"snapshot"`
 }
@@ -172,8 +168,8 @@ func summarize(raw []byte) (testerHistorySummary, error) {
 }
 
 // addTesterHistoryRoutes serves the History page under group (which is
-// behind the JWT middleware): the list, the JSON report and the CSV time
-// series of each stored run.
+// behind the JWT middleware): the list, and each stored run's JSON report
+// and HTML report.
 func addTesterHistoryRoutes(group *gin.RouterGroup, store testerRunStore) {
 	group.GET("/tester/history", func(c *gin.Context) {
 		runs, err := store.ListTesterRuns()
@@ -197,24 +193,18 @@ func addTesterHistoryRoutes(group *gin.RouterGroup, store testerRunStore) {
 		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="tester-%s.json"`, c.Param("runId")))
 		c.Data(http.StatusOK, "application/json", raw)
 	})
-	group.GET("/tester/history/:runId/series.csv", func(c *gin.Context) {
+	group.GET("/tester/history/:runId/report.html", func(c *gin.Context) {
 		raw, ok := storedRun(c, store)
 		if !ok {
 			return
 		}
-		var r storedReport
-		if err := json.Unmarshal(raw, &r); err != nil {
+		page, err := renderTesterReport(raw, time.Now())
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, model.ResponseTesterAction{Message: "Stored run is not readable"})
 			return
 		}
-		var b strings.Builder
-		b.WriteString("t,ulTxBps,ulRxBps,dlTxBps,dlRxBps\n")
-		f := func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
-		for _, p := range r.Snapshot.Dataplane.Series {
-			b.WriteString(strings.Join([]string{f(p.T), f(p.UlTxBps), f(p.UlRxBps), f(p.DlTxBps), f(p.DlRxBps)}, ",") + "\n")
-		}
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="tester-%s.csv"`, c.Param("runId")))
-		c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(b.String()))
+		c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="tester-%s.html"`, c.Param("runId")))
+		c.Data(http.StatusOK, "text/html; charset=utf-8", page)
 	})
 }
 

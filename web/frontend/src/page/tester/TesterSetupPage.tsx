@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/sidebar/Sidebar'
+import Modal from '../../components/modal/modal'
 import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterFieldError, TesterInterface, TesterPlan, TesterProfile, TesterValidateResponse } from '../../api'
+import type { TesterFieldError, TesterInterface, TesterPlan, TesterProfile, TesterStoredProfile, TesterValidateResponse } from '../../api'
 import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
 import { formatBps } from './testerFormat'
 import styles from './tester.module.css'
 import PingTest from './PingTest'
 import InterfaceField from './InterfaceField'
+import ProfileNameField from './ProfileNameField'
+import { byName, freeName, lastProfileId, nameOwner, rememberProfileId } from './testerProfiles'
 import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
 
@@ -41,6 +44,13 @@ function setPath(profile: TesterProfile, path: string, value: string | number): 
   for (const key of keys.slice(0, -1)) node = node[key] as Record<string, unknown>
   node[keys[keys.length - 1]] = value
   return next as unknown as TesterProfile
+}
+
+// RenameRequest asks for a new name before saving as a new profile;
+// then says whether to start a run afterwards.
+interface RenameRequest {
+  name: string
+  then: 'save' | 'start'
 }
 
 function getPath(profile: TesterProfile, path: string): string | number {
@@ -97,7 +107,15 @@ function RateFields({ stage, fieldProps }: { stage: 'registration' | 'pdu' | 'de
 export default function TesterSetupPage() {
   const navigate = useNavigate()
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [profile, setProfile] = useState<TesterProfile>(DEFAULT_TESTER_PROFILE)
+  // the saved profiles (null while loading), the one open (null: not saved
+  // yet) and what it looked like when last opened or saved
+  const [profiles, setProfiles] = useState<TesterStoredProfile[] | null>(null)
+  const [currentId, setCurrentId] = useState<string | null>(null)
+  const [savedJson, setSavedJson] = useState('')
+  const [isChoosingSave, setIsChoosingSave] = useState(false)
+  const [rename, setRename] = useState<RenameRequest | null>(null)
   const [previewPage, setPreviewPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [validation, setValidation] = useState<TesterValidateResponse | null>(null)
@@ -119,14 +137,61 @@ export default function TesterSetupPage() {
 
   useEffect(() => { loadInterfaces() }, [loadInterfaces])
 
+  // Open the profile the URL names (?profile=<id>, or ?new for a new
+  // one), else the one this browser had open last, else the first saved
+  // one, else a new one; then drop the query so a reload keeps the choice
+  // made here.
   useEffect(() => {
-    api.testerProfileGet()
+    const wanted = searchParams.has('new') ? null : searchParams.get('profile') ?? lastProfileId()
+    api.testerProfileList()
       .then((response) => {
-        if (response.status === 200 && response.data) setProfile(normalizeProfile(response.data))
+        const list = response.data
+        setProfiles(list)
+        const found = list.find((p) => p.id === wanted) ?? (searchParams.has('new') ? undefined : list[0])
+        if (found) openProfile(found)
+        else openNew(list)
       })
-      .catch((error) => addError(extractErrorMessage(error, 'Failed to load the saved profile')))
-      .finally(() => setIsLoading(false))
-  }, [addError])
+      .catch((error) => {
+        setProfiles([])
+        addError(extractErrorMessage(error, 'Failed to load the saved profiles'))
+      })
+      .finally(() => {
+        setIsLoading(false)
+        setSearchParams({}, { replace: true })
+      })
+    // once, on arrival
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function openProfile(stored: TesterStoredProfile) {
+    const p = normalizeProfile(stored.profile)
+    setProfile(p)
+    setSavedJson(JSON.stringify(p))
+    setCurrentId(stored.id)
+    rememberProfileId(stored.id)
+  }
+
+  function openNew(list: TesterStoredProfile[]) {
+    const p = { ...structuredClone(DEFAULT_TESTER_PROFILE), name: freeName(list, DEFAULT_TESTER_PROFILE.name) }
+    setProfile(p)
+    setSavedJson(JSON.stringify(p))
+    setCurrentId(null)
+    // the remembered profile stays: Cancel and a reload go back to it
+  }
+
+  // handleCancel drops the new profile: back to the profile open before
+  // it, or to the Profiles page if there was none.
+  function handleCancel() {
+    if (!leave()) return
+    const previous = list.find((p) => p.id === lastProfileId())
+    if (previous) openProfile(previous)
+    else navigate('/tester/profiles')
+  }
+
+  // leave asks before dropping unsaved edits.
+  function leave(): boolean {
+    return !isDirty || window.confirm(`Discard the unsaved changes to "${profile.name}"?`)
+  }
 
   // Re-validate 400 ms after the last edit; a sequence number drops
   // answers that arrive after a newer request was sent.
@@ -152,29 +217,104 @@ export default function TesterSetupPage() {
     setProfile((prev) => setPath(prev, path, value))
   }
 
-  async function handleSave() {
+  const isDirty = JSON.stringify(profile) !== savedJson
+  const list = profiles ?? []
+  const savedName = list.find((p) => p.id === currentId)?.profile.name ?? ''
+  const nameError = profile.name.trim() === ''
+    ? 'Give the profile a name'
+    : nameOwner(list, profile.name, currentId) ? 'Another saved profile already has this name' : undefined
+
+  // stored puts a created or updated profile into the list and opens it.
+  function stored(p: TesterStoredProfile) {
+    setProfiles((cur) => byName([...(cur ?? []).filter((x) => x.id !== p.id), p]))
+    openProfile(p)
+  }
+
+  // saveNew saves the form as a new profile named name, first asking for
+  // another name if a saved profile already has it.
+  async function saveNew(name: string, then: RenameRequest['then']) {
+    if (name.trim() === '' || nameOwner(list, name, null)) {
+      setRename({ name: freeName(list, name.trim() ? `${name.trim()} copy` : 'profile'), then })
+      return
+    }
     setIsBusy(true)
     try {
-      await api.testerProfilePut(profile)
-      addSuccess('Profile saved')
+      const response = await api.testerProfileCreate({ ...profile, name: name.trim() })
+      stored(response.data)
+      if (then === 'start') {
+        await start(normalizeProfile(response.data.profile))
+        return
+      }
+      addSuccess(`Saved as new profile "${name.trim()}"`)
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to save the profile'))
-    } finally {
-      setIsBusy(false)
+    }
+    setIsBusy(false)
+  }
+
+  // update saves the form over the open profile.
+  async function update(): Promise<boolean> {
+    if (currentId === null) return false
+    try {
+      const response = await api.testerProfileUpdate(currentId, profile)
+      stored(response.data)
+      return true
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to update the profile'))
+      return false
     }
   }
 
-  async function handleStart() {
+  function handleSave() {
+    if (currentId === null) void saveNew(profile.name, 'save')
+    else setIsChoosingSave(true)
+  }
+
+  async function handleUpdate() {
+    setIsChoosingSave(false)
     setIsBusy(true)
+    if (await update()) addSuccess(`Updated profile "${profile.name.trim()}"`)
+    setIsBusy(false)
+  }
+
+  function handleSaveAsNew() {
+    setIsChoosingSave(false)
+    void saveNew(profile.name, 'save')
+  }
+
+  function handleRename() {
+    if (!rename) return
+    setRename(null)
+    void saveNew(rename.name, rename.then)
+  }
+
+  async function start(p: TesterProfile) {
     try {
-      await api.testerProfilePut(profile)
-      await api.testerRunStart(profile)
+      await api.testerRunStart(p)
       navigate('/tester/run')
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to start the run'))
       setIsBusy(false)
     }
   }
+
+  // handleStart saves first: over the open profile, or as a new one.
+  async function handleStart() {
+    if (currentId === null) {
+      void saveNew(profile.name, 'start')
+      return
+    }
+    setIsBusy(true)
+    if (isDirty && !(await update())) {
+      setIsBusy(false)
+      return
+    }
+    await start(profile)
+  }
+
+  const renameError = rename && (rename.name.trim() === ''
+    ? 'Give the profile a name'
+    : nameOwner(list, rename.name, null) ? 'A saved profile already has this name' : undefined)
 
   const fieldErrors = validation?.errors ?? []
   const plan = validation?.valid ? validation.plan : null
@@ -188,12 +328,20 @@ export default function TesterSetupPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · Setup</h2>
+            <h2 className={styles.title}>
+              Throughput Tester · Setup
+              {!isLoading && (currentId === null
+                ? <span className={styles.dirtyTag}>New profile, not saved</span>
+                : isDirty && <span className={styles.dirtyTag}>Unsaved changes</span>)}
+            </h2>
             <p className={styles.subtitle}>Describe the gNBs and UEs to simulate. A run brings up N2 for every gNB, registers its UEs and establishes one PDU session each, then holds everything until you stop it.</p>
           </div>
           <div className={styles.headerActions}>
+            {!isLoading && currentId === null && (
+              <Button variant="secondary" onClick={handleCancel} disabled={isBusy}>Cancel</Button>
+            )}
             <Button variant="secondary" onClick={handleSave} disabled={isLoading || isBusy}>Save</Button>
-            <Button onClick={handleStart} disabled={isLoading || isBusy || !validation?.valid}>
+            <Button onClick={handleStart} disabled={isLoading || isBusy || !validation?.valid || (currentId !== null && nameError !== undefined)}>
               {isBusy ? 'Starting…' : 'Start run'}
             </Button>
           </div>
@@ -206,7 +354,11 @@ export default function TesterSetupPage() {
             <section className={styles.card}>
               <h3 className={styles.cardTitle}>Scale</h3>
               <div className={styles.fieldGrid}>
-                <Field label="Profile name" path="name" {...fieldProps} />
+                <ProfileNameField value={profile.name} profiles={profiles} currentId={currentId}
+                  message={nameError ?? fieldErrors.find((e) => e.field === 'name')?.message}
+                  onChange={(name) => handleChange('name', name)}
+                  onPick={(p) => { if (p.id !== currentId && leave()) openProfile(p) }}
+                  onNew={() => { if (leave()) openNew(list) }} />
                 <Field label="gNB count" path="scale.gnbCount" numeric {...fieldProps} />
                 <Field label="UE count" path="scale.ueCount" numeric {...fieldProps} />
               </div>
@@ -391,6 +543,48 @@ export default function TesterSetupPage() {
           </>
         )}
       </main>
+
+      <Modal
+        isOpen={isChoosingSave}
+        onClose={() => setIsChoosingSave(false)}
+        title="Save profile"
+        onSubmit={handleUpdate}
+        submitLabel="Update current profile"
+        submitDisabled={nameError !== undefined}
+        actions={<Button variant="secondary" onClick={handleSaveAsNew}>Save as new</Button>}
+      >
+        <p className={styles.modalText}>
+          <b>Update current profile</b> overwrites &quot;{savedName}&quot;{!sameTrimmed(savedName, profile.name) && <> and renames it to &quot;{profile.name.trim()}&quot;</>}.
+          {' '}<b>Save as new</b> keeps &quot;{savedName}&quot; as it was and saves these settings as another profile.
+        </p>
+        {nameError && <p className={styles.fieldError}>{nameError}; rename it or save as new.</p>}
+      </Modal>
+
+      <Modal
+        isOpen={rename !== null}
+        onClose={() => setRename(null)}
+        title="Name the new profile"
+        onSubmit={handleRename}
+        submitLabel={rename?.then === 'start' ? 'Save and start' : 'Save'}
+        submitDisabled={renameError !== undefined}
+      >
+        <form onSubmit={(e) => { e.preventDefault(); if (!renameError) handleRename() }}>
+          <p className={styles.modalText}>
+            {profile.name.trim() === '' ? 'The profile has no name yet.' : <>A saved profile is already named &quot;{profile.name.trim()}&quot;.</>}
+            {' '}Choose a name for the new one.
+          </p>
+          <div className={styles.field}>
+            <label htmlFor="rename">Profile name</label>
+            <input id="rename" className={`${styles.input} ${renameError ? styles.inputError : ''}`} type="text" autoFocus
+              value={rename?.name ?? ''} onChange={(e) => setRename((r) => r && { ...r, name: e.target.value })} />
+            {renameError && <p className={styles.fieldError}>{renameError}</p>}
+          </div>
+        </form>
+      </Modal>
     </div>
   )
+}
+
+function sameTrimmed(a: string, b: string): boolean {
+  return a.trim() === b.trim()
 }

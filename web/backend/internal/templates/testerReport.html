@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.S.ProfileName}} · {{.S.RunID}} · Throughput Tester report</title>
+<style>
+:root {
+  --bg: #f6f7fb; --paper: #ffffff; --ink: #0f172a; --ink-2: #475569; --ink-3: #94a3b8;
+  --line: #e2e8f0; --line-2: #f1f5f9; --accent: #4338ca; --accent-soft: #eef2ff;
+  --tx: #ea580c; --rx: #0f766e; --ok: #15803d; --ok-soft: #dcfce7; --bad: #b91c1c; --bad-soft: #fee2e2;
+  --warn: #a16207; --warn-soft: #fef9c3; --chip: #f1f5f9;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --paper: #161b26; --ink: #e6e9f0; --ink-2: #aab3c5; --ink-3: #6b7489;
+    --line: #283041; --line-2: #1f2633; --accent: #a5b4fc; --accent-soft: #252a4a;
+    --tx: #fb923c; --rx: #2dd4bf; --ok: #4ade80; --ok-soft: #14301f; --bad: #f87171; --bad-soft: #3a1a1a;
+    --warn: #facc15; --warn-soft: #3a3110; --chip: #1f2633;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 var(--sans); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; display: flex; flex-direction: column; gap: 22px; }
+h1 { margin: 0; font-size: 1.7rem; line-height: 1.25; }
+h2 { margin: 0 0 14px; font-size: 1.05rem; }
+h3 { margin: 18px 0 8px; font-size: .9rem; color: var(--ink-2); }
+.eyebrow { font: 600 .72rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 10px; color: var(--ink-2); font-size: .85rem; }
+.meta b { color: var(--ink); font-weight: 600; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 600; vertical-align: middle; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.muted { background: var(--chip); color: var(--ink-2); }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; min-width: 0; }
+.error { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 10px 14px; margin: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.tile .k { font-size: .74rem; color: var(--ink-3); }
+.tile .v { font: 600 1.35rem/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+.tile .s { font-size: .76rem; color: var(--ink-2); }
+.tile .v.ul { color: var(--accent); }
+.tile .v.dl { color: var(--rx); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+@media (max-width: 520px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.legend { display: flex; gap: 14px; font-size: .78rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.legend .tx { background: repeating-linear-gradient(90deg, var(--tx) 0 4px, transparent 4px 7px); }
+.legend .rx { background: var(--rx); }
+.chart { position: relative; height: 210px; margin-top: 8px; }
+.chart svg { display: block; width: 100%; height: 100%; }
+.chart .grid { stroke: var(--line-2); }
+.chart .axis { fill: var(--ink-3); font: 10px var(--mono); }
+.chart .lineTx { fill: none; stroke: var(--tx); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chart .lineRx { fill: none; stroke: var(--rx); stroke-width: 2.2; }
+.chart .cursor { stroke: var(--ink-3); stroke-width: 1; }
+.tip { position: absolute; top: 4px; pointer-events: none; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font: 11px/1.5 var(--mono); box-shadow: 0 4px 14px rgb(0 0 0 / .12); white-space: nowrap; }
+.empty { color: var(--ink-3); font-size: .85rem; padding: 40px 0; text-align: center; }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line-2); text-align: right; white-space: nowrap; }
+th { font-size: .72rem; font-weight: 600; color: var(--ink-3); background: var(--line-2); position: sticky; top: 0; }
+th:first-child, td:first-child, td.l, th.l { text-align: left; }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+td.mono, .mono { font-family: var(--mono); font-size: .8rem; }
+td.bad, .bad-t { color: var(--bad); font-weight: 600; }
+td.ok { color: var(--ok); }
+td.text { white-space: normal; text-align: left; min-width: 16em; color: var(--ink-2); }
+.causes { margin: 6px 0 0; padding-left: 18px; font-size: .84rem; color: var(--ink-2); }
+.causes b { color: var(--ink); font-family: var(--mono); }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; margin: 0; font-size: .84rem; }
+.kv dt { color: var(--ink-3); font-family: var(--mono); font-size: .78rem; }
+.kv dd { margin: 0; font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px 28px; }
+.settings h3 { margin-top: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { background: var(--chip); border-radius: 8px; padding: 4px 10px; font-size: .82rem; }
+.chip b { font-family: var(--mono); }
+.hint { color: var(--ink-3); font-size: .8rem; margin: 10px 0 0; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+nav.toc a { font-size: .8rem; color: var(--ink-2); text-decoration: none; border: 1px solid var(--line); background: var(--paper); border-radius: 7px; padding: 3px 10px; }
+nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+footer { color: var(--ink-3); font-size: .78rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+button.link:hover { text-decoration: underline; }
+section { scroll-margin-top: 12px; }
+@media print {
+  body { background: #fff; }
+  .wrap { padding: 0; }
+  .card, .tile { break-inside: avoid; }
+  nav.toc, footer button { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">fru-lab · Throughput Tester report</div>
+  <h1 style="margin-top:8px">{{.S.ProfileName}} <span class="pill {{.ResultClass}}">{{.Result}}</span></h1>
+  <div class="meta">
+    <span>Run <b class="mono">{{.S.RunID}}</b></span>
+    <span>Started <b><time datetime="{{if .S.StartedAt}}{{.S.StartedAt.Format "2006-01-02T15:04:05Z07:00"}}{{end}}">{{time .S.StartedAt}}</time></b></span>
+    <span>Stopped <b><time datetime="{{if .S.StoppedAt}}{{.S.StoppedAt.Format "2006-01-02T15:04:05Z07:00"}}{{end}}">{{time .S.StoppedAt}}</time></b></span>
+    <span>Duration <b class="mono">{{dash .Duration}}</b></span>
+    <span>Traffic <b class="mono">{{dash .TrafficTime}}</b></span>
+    <span>Engine <b class="mono">{{dash .S.Dataplane.Engine}}</b></span>
+  </div>
+  {{if .S.Error}}<p class="error" style="margin-top:14px">{{.S.Error}}</p>{{end}}
+  <nav class="toc" style="margin-top:16px" aria-label="Sections">
+    <a href="#throughput">Throughput</a><a href="#control">Control plane</a><a href="#dataplane">Data plane</a>
+    <a href="#gnbs">gNBs</a><a href="#ues">UEs</a><a href="#settings">Settings</a>
+  </nav>
+</header>
+
+{{$ul := index .Directions 0}}{{$dl := index .Directions 1}}
+<div class="tiles">
+  <div class="tile"><div class="k">UL received · average</div><div class="v ul">{{bps $ul.AvgBps}}</div><div class="s">peak {{bps $ul.PeakBps}}</div></div>
+  <div class="tile"><div class="k">DL received · average</div><div class="v dl">{{bps $dl.AvgBps}}</div><div class="s">peak {{bps $dl.PeakBps}}</div></div>
+  <div class="tile"><div class="k">Loss UL / DL</div><div class="v">{{loss $ul.LossRate}}</div><div class="s">DL {{loss $dl.LossRate}}</div></div>
+  <div class="tile"><div class="k">Latency p50 / p99 · UL</div><div class="v">{{ms $ul.Latency.P50Ms}}</div><div class="s">p99 {{ms $ul.Latency.P99Ms}} · DL p50 {{ms $dl.Latency.P50Ms}}</div></div>
+  <div class="tile"><div class="k">Registered</div><div class="v">{{pct .S.Registration.Accepted .S.Registration.Expected}}</div><div class="s">{{int .S.Registration.Accepted}} of {{int .S.Registration.Expected}} UEs · p95 {{ms .S.Registration.P95Ms}}</div></div>
+  <div class="tile"><div class="k">PDU sessions</div><div class="v">{{pct .S.Pdu.Accepted .S.Pdu.Expected}}</div><div class="s">{{int .S.Pdu.Accepted}} of {{int .S.Pdu.Expected}} · {{int .S.Dataplane.ActiveUes}} sent traffic</div></div>
+</div>
+
+<section class="card" id="throughput">
+  <h2>Throughput</h2>
+  <div class="charts">
+    <div>
+      <div class="chart-head"><h3 style="margin:0">Uplink</h3><div class="legend"><span><i class="tx"></i>Tx (sent)</span><span><i class="rx"></i>Rx (back through the UPF)</span></div></div>
+      <div class="chart" data-dir="ul"></div>
+    </div>
+    <div>
+      <div class="chart-head"><h3 style="margin:0">Downlink</h3><div class="legend"><span><i class="tx"></i>Tx (sent)</span><span><i class="rx"></i>Rx (back through the UPF)</span></div></div>
+      <div class="chart" data-dir="dl"></div>
+    </div>
+  </div>
+  <p class="hint">Rates of inner IP packets from the first second of traffic. The first 10 minutes have one point per second; after that each point is the average of 2, 4, 8 … seconds. Hover a chart for exact values.</p>
+</section>
+
+<section class="card" id="control">
+  <h2>Control plane</h2>
+  <div class="tbl"><table>
+    <thead><tr><th class="l">Stage</th><th>Succeeded</th><th>Rejected</th><th>Timed out</th><th>Conn. errors</th><th>Retries</th><th>Not started</th><th>Total time</th><th>Average</th><th>p50</th><th>p95</th><th>p99</th><th>Max</th></tr></thead>
+    <tbody>
+    {{range .Stages}}
+      <tr>
+        <td>{{.Label}}</td>
+        <td class="{{if lt .Accepted .Expected}}bad{{else}}ok{{end}}">{{int .Accepted}} / {{int .Expected}}</td>
+        <td class="{{if gt .Rejected 0}}bad{{end}}">{{int .Rejected}}</td>
+        <td class="{{if gt .TimedOut 0}}bad{{end}}">{{int .TimedOut}}</td>
+        <td class="{{if gt .Failed 0}}bad{{end}}">{{int .Failed}}</td>
+        <td>{{int .Retries}}</td>
+        <td>{{int .Skipped}}</td>
+        <td class="mono">{{ms .TotalTimeMs}}</td>
+        <td class="mono">{{ms .AvgMs}}</td>
+        <td class="mono">{{ms .P50Ms}}</td>
+        <td class="mono">{{ms .P95Ms}}</td>
+        <td class="mono">{{ms .P99Ms}}</td>
+        <td class="mono">{{ms .MaxMs}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table></div>
+  {{range .Stages}}{{if .Causes}}
+    <h3>{{.Label}} · failure causes</h3>
+    <ul class="causes">{{range .Causes}}<li><b>{{int .Count}}</b> × {{.Cause}}</li>{{end}}</ul>
+  {{end}}{{end}}
+  <p class="hint">Times are of successful attempts, from the first try, so retries count. Total time runs from the first attempt to the last one finishing.</p>
+</section>
+
+<section class="card" id="dataplane">
+  <h2>Data plane</h2>
+  <div class="tbl"><table>
+    <thead><tr><th class="l">Direction</th><th>Sent</th><th>Received</th><th>Packets sent</th><th>Packets received</th><th>Loss</th><th>Avg rate</th><th>Peak rate</th><th>Out of order</th><th>Send errors</th><th>Misrouted</th></tr></thead>
+    <tbody>
+    {{range .Directions}}
+      <tr>
+        <td>{{.Label}}</td>
+        <td class="mono">{{bits .TxBytes}}</td>
+        <td class="mono">{{bits .RxBytes}}</td>
+        <td>{{int .TxPackets}}</td>
+        <td>{{int .RxPackets}}</td>
+        <td class="{{if lossBad .LossRate}}bad{{end}}">{{loss .LossRate}}</td>
+        <td class="mono">{{bps .AvgBps}}</td>
+        <td class="mono">{{bps .PeakBps}}</td>
+        <td class="{{if gt .OutOfOrder 0}}bad{{end}}">{{int .OutOfOrder}}</td>
+        <td class="{{if gt .SendErrors 0}}bad{{end}}">{{int .SendErrors}}</td>
+        <td class="{{if gt .Misrouted 0}}bad{{end}}">{{int .Misrouted}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table></div>
+  <h3>One-way latency</h3>
+  <div class="tbl"><table>
+    <thead><tr><th class="l">Direction</th><th>Samples</th><th>Average</th><th>p50</th><th>p99</th><th>Max</th></tr></thead>
+    <tbody>
+    {{range .Directions}}
+      <tr><td>{{.Label}}</td><td>{{int .Latency.Count}}</td><td class="mono">{{ms .Latency.AvgMs}}</td><td class="mono">{{ms .Latency.P50Ms}}</td><td class="mono">{{ms .Latency.P99Ms}}</td><td class="mono">{{ms .Latency.MaxMs}}</td></tr>
+    {{end}}
+    </tbody>
+  </table></div>
+  <p class="hint">Average rate is what came back divided by the traffic time ({{dash .TrafficTime}}). Loss is 1 − received ÷ sent over the whole run. Latency uses one clock: the tester sends and receives.</p>
+</section>
+
+<section class="card" id="gnbs">
+  <h2>gNBs <span class="pill muted">{{len .S.Gnbs}}</span></h2>
+  <div class="tbl" style="max-height: 520px"><table>
+    <thead><tr><th class="l">gNB</th><th class="l">ID</th><th class="l">N2 IP</th><th class="l">N3 IP</th><th>UEs</th><th class="l">State</th><th>N2 setup</th><th>Registered</th><th>PDU</th><th>UL sent</th><th>UL received</th><th>DL sent</th><th>DL received</th><th class="l">Cause</th></tr></thead>
+    <tbody>
+    {{range .S.Gnbs}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td class="l mono">{{.GnbID}}</td>
+        <td class="l mono">{{.N2Ip}}</td>
+        <td class="l mono">{{.N3Ip}}</td>
+        <td>{{if .UeCount}}{{.UeCount}} <span class="mono" style="color:var(--ink-3)">#{{.UeFirst}}–{{.UeLast}}</span>{{else}}0{{end}}</td>
+        <td class="l {{if or (eq .State "failed") (eq .State "lost")}}bad{{end}}">{{.State}}</td>
+        <td class="mono">{{ms .LatencyMs}}</td>
+        <td class="{{if lt .Registered .UeCount}}bad{{end}}">{{int .Registered}}</td>
+        <td>{{int .Established}}</td>
+        <td class="mono">{{bits .UlTxBytes}}</td>
+        <td class="mono">{{bits .UlRxBytes}}</td>
+        <td class="mono">{{bits .DlTxBytes}}</td>
+        <td class="mono">{{bits .DlRxBytes}}</td>
+        <td class="text">{{dash .Cause}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="card" id="ues">
+  <h2>UEs</h2>
+  <div class="chips">{{range .UeStates}}<span class="chip">{{.Key}} <b>{{.Value}}</b></span>{{else}}<span class="chip">No UEs</span>{{end}}</div>
+  {{if .S.FailedUes}}
+    <h3>Failed UEs <span class="pill bad">{{int .S.Ues.Failed}}</span></h3>
+    <div class="tbl" style="max-height: 420px"><table>
+      <thead><tr><th class="l">SUPI</th><th class="l">gNB</th><th class="l">Stage</th><th>Attempts</th><th class="l">Cause</th></tr></thead>
+      <tbody>
+      {{range .S.FailedUes}}<tr><td class="mono">{{.Supi}}</td><td class="l">{{.Gnb}}</td><td class="l">{{.Stage}}</td><td>{{.Attempts}}</td><td class="text">{{.Cause}}</td></tr>{{end}}
+      </tbody>
+    </table></div>
+    <p class="hint">The first {{len .S.FailedUes}} failed UEs are listed.</p>
+  {{end}}
+</section>
+
+<section class="card" id="settings">
+  <h2>Settings</h2>
+  <div class="settings">
+    {{range .Settings}}
+      <div>
+        <h3>{{.Title}}</h3>
+        <dl class="kv">{{range .Items}}<dt>{{.Key}}</dt><dd>{{.Value}}</dd>{{end}}</dl>
+      </div>
+    {{end}}
+  </div>
+  <p class="hint">The profile exactly as the run used it. Key and OPc are shortened.</p>
+</section>
+
+<footer>
+  <span>Generated by fru-lab on {{.Generated}}.</span>
+  <button type="button" class="link" id="raw">Download raw data (JSON)</button>
+</footer>
+
+</div>
+
+<script type="application/json" id="report-data">{{.Raw}}</script>
+<script>
+(function () {
+  var report = JSON.parse(document.getElementById('report-data').textContent);
+  var series = (report.snapshot.dataplane && report.snapshot.dataplane.series) || [];
+  var NS = 'http://www.w3.org/2000/svg';
+
+  // show times in the reader's own time zone
+  document.querySelectorAll('time[datetime]').forEach(function (el) {
+    var d = new Date(el.getAttribute('datetime'));
+    if (el.getAttribute('datetime') && !isNaN(d)) el.textContent = d.toLocaleString();
+  });
+
+  function bps(v) {
+    if (!(v > 0)) return '0 bps';
+    var u = ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps'], i = 0;
+    while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
+    return v.toFixed(i ? 2 : 0) + ' ' + u[i];
+  }
+  // axis is a short rate for the axis: 500 Mbps, 1.5 Gbps
+  function axis(v) {
+    if (!(v > 0)) return '0';
+    var u = ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps'], i = 0;
+    while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
+    return (+v.toFixed(2)) + ' ' + u[i];
+  }
+  function clock(s) {
+    s = Math.round(s);
+    var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  }
+  // niceMax rounds up to 1, 2 or 5 × 10^n for the axis
+  function niceMax(v) {
+    if (!(v > 0)) return 1;
+    var p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+  }
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  function draw(box) {
+    var dir = box.getAttribute('data-dir');
+    box.textContent = '';
+    if (series.length === 0) {
+      box.innerHTML = '<div class="empty">No traffic was recorded.</div>';
+      return;
+    }
+    var W = box.clientWidth || 600, H = box.clientHeight || 210, L = 64, R = 10, T = 10, B = 24;
+    var tx = series.map(function (p) { return p[dir + 'TxBps']; });
+    var rx = series.map(function (p) { return p[dir + 'RxBps']; });
+    var tMax = series[series.length - 1].t || 1;
+    var yMax = niceMax(Math.max.apply(null, tx.concat(rx)));
+    var x = function (t) { return L + (t / tMax) * (W - L - R); };
+    var y = function (v) { return T + (1 - v / yMax) * (H - T - B); };
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': dir.toUpperCase() + ' throughput over time' }, box);
+    for (var i = 0; i <= 4; i++) {
+      var v = (yMax / 4) * i, yy = y(v);
+      el('line', { x1: L, x2: W - R, y1: yy, y2: yy, class: 'grid' }, svg);
+      el('text', { x: L - 6, y: yy + 3, 'text-anchor': 'end', class: 'axis' }, svg).textContent = axis(v);
+    }
+    for (var j = 0; j <= 5; j++) {
+      var t = (tMax / 5) * j;
+      el('text', { x: x(t), y: H - 6, 'text-anchor': j === 0 ? 'start' : j === 5 ? 'end' : 'middle', class: 'axis' }, svg).textContent = clock(t);
+    }
+    function path(vals) {
+      return vals.map(function (v, k) { return (k ? 'L' : 'M') + x(series[k].t).toFixed(1) + ',' + y(v).toFixed(1); }).join('');
+    }
+    el('path', { d: path(tx), class: 'lineTx' }, svg);
+    el('path', { d: path(rx), class: 'lineRx' }, svg);
+
+    var cursor = el('line', { y1: T, y2: H - B, class: 'cursor', visibility: 'hidden' }, svg);
+    var tip = document.createElement('div');
+    tip.className = 'tip';
+    tip.hidden = true;
+    box.appendChild(tip);
+    svg.addEventListener('mousemove', function (ev) {
+      var r = svg.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W;
+      var t = ((px - L) / (W - L - R)) * tMax, k = 0, best = Infinity;
+      series.forEach(function (p, n) { var d = Math.abs(p.t - t); if (d < best) { best = d; k = n; } });
+      var cx = x(series[k].t);
+      cursor.setAttribute('x1', cx); cursor.setAttribute('x2', cx); cursor.setAttribute('visibility', 'visible');
+      tip.innerHTML = clock(series[k].t) + '<br>Tx ' + bps(tx[k]) + '<br>Rx ' + bps(rx[k]);
+      tip.hidden = false;
+      var left = (cx / W) * r.width;
+      tip.style.left = (left > r.width / 2 ? left - tip.offsetWidth - 10 : left + 10) + 'px';
+    });
+    svg.addEventListener('mouseleave', function () { cursor.setAttribute('visibility', 'hidden'); tip.hidden = true; });
+  }
+
+  var boxes = document.querySelectorAll('.chart[data-dir]');
+  function drawAll() { boxes.forEach(draw); }
+  drawAll();
+  var pending;
+  window.addEventListener('resize', function () { clearTimeout(pending); pending = setTimeout(drawAll, 150); });
+  window.addEventListener('beforeprint', drawAll);
+
+  document.getElementById('raw').addEventListener('click', function () {
+    var url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'tester-' + report.snapshot.runId + '.json';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>
+</body>
+</html>

@@ -75,14 +75,25 @@ export default function TesterHistoryPage() {
   // toggle keeps at most two runs selected: picking a third drops the oldest pick.
   const toggle = (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(-2)))
 
-  const download = async (r: TesterHistorySummary, kind: 'json' | 'csv') => {
+  // report fetches a run's HTML report (the API needs the JWT header, so
+  // a plain link cannot) and opens it in a new tab or saves it.
+  const report = async (r: TesterHistorySummary, how: 'view' | 'download') => {
+    // opened before the request, while the click still counts as the
+    // user's, so pop-up blockers let it through
+    const tab = how === 'view' ? window.open('', '_blank') : null
     try {
-      const response = kind === 'json'
-        ? await api.testerHistoryGet(r.runId, { responseType: 'blob' })
-        : await api.testerHistorySeriesCsv(r.runId, { responseType: 'blob' })
-      save(response.data as unknown as Blob, `tester-${r.runId}.${kind}`)
+      const response = await api.testerHistoryReportHtml(r.runId, { responseType: 'blob' })
+      const blob = new Blob([response.data as unknown as Blob], { type: 'text/html' })
+      if (tab) {
+        const url = URL.createObjectURL(blob)
+        tab.location.href = url
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      } else {
+        save(blob, `tester-${r.runId}.html`)
+      }
     } catch (error) {
-      addError(extractErrorMessage(error, `Failed to export run ${r.runId}`))
+      tab?.close()
+      addError(extractErrorMessage(error, `Failed to load the report of run ${r.runId}`))
     }
   }
 
@@ -98,7 +109,7 @@ export default function TesterHistoryPage() {
         <header className={styles.header}>
           <div>
             <h2 className={styles.title}>Throughput Tester · History</h2>
-            <p className={styles.subtitle}>The last 50 finished runs. Tick two to compare them side by side.</p>
+            <p className={styles.subtitle}>The last 50 finished runs. Tick two to compare them side by side; View opens a run&apos;s full report, Download saves it as one HTML file that opens offline.</p>
           </div>
         </header>
 
@@ -141,7 +152,7 @@ export default function TesterHistoryPage() {
                     <th>Started</th>
                     <th>Profile</th>
                     <th>Result</th>
-                    <th>Export</th>
+                    <th>Report</th>
                     {METRICS.map(([label]) => <th key={label}>{label}</th>)}
                   </tr>
                 </thead>
@@ -160,8 +171,8 @@ export default function TesterHistoryPage() {
                         </span>
                       </td>
                       <td>
-                        <button type="button" className={styles.linkButton} onClick={() => download(r, 'json')}>JSON</button>
-                        <button type="button" className={styles.linkButton} onClick={() => download(r, 'csv')}>CSV</button>
+                        <button type="button" className={styles.linkButton} onClick={() => report(r, 'view')}>View</button>
+                        <button type="button" className={styles.linkButton} onClick={() => report(r, 'download')}>Download</button>
                       </td>
                       {METRICS.map(([label, f]) => <td key={label} className={styles.mono}>{f(r)}</td>)}
                     </tr>

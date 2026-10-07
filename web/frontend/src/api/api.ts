@@ -502,6 +502,11 @@ export interface TesterStartErrorResponse {
     'message': string;
     'errors': Array<TesterFieldError>;
 }
+export interface TesterStoredProfile {
+    'id': string;
+    'updatedAt': string;
+    'profile': TesterProfile;
+}
 /**
  * Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
  */
@@ -1534,7 +1539,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON export)
+         * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1605,16 +1610,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
-         * @summary One finished run\'s throughput time series (CSV export)
+         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+         * @summary One finished run\'s report as a self-contained HTML page
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerHistorySeriesCsv: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        testerHistoryReportHtml: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'runId' is not null or undefined
-            assertParamExists('testerHistorySeriesCsv', 'runId', runId)
-            const localVarPath = `/api/tester/history/{runId}/series.csv`
+            assertParamExists('testerHistoryReportHtml', 'runId', runId)
+            const localVarPath = `/api/tester/history/{runId}/report.html`
                 .replace('{runId}', encodeURIComponent(String(runId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -1631,7 +1636,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
-            localVarHeaderParameter['Accept'] = 'text/csv,application/json';
+            localVarHeaderParameter['Accept'] = 'text/html,application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -1716,13 +1721,94 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Returns the last profile saved from the setup page. 204 when none has been saved yet.
-         * @summary Get the saved Throughput Tester profile
+         * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
+         * @summary Save a new Throughput Tester profile
+         * @param {TesterProfile} testerProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/profile`;
+        testerProfileCreate: async (testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'testerProfile' is not null or undefined
+            assertParamExists('testerProfileCreate', 'testerProfile', testerProfile)
+            const localVarPath = `/api/tester/profiles`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Delete a saved profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerProfileDelete', 'id', id)
+            const localVarPath = `/api/tester/profiles/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary One saved profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerProfileGet', 'id', id)
+            const localVarPath = `/api/tester/profiles/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1750,16 +1836,54 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
-         * @summary Save the Throughput Tester profile
+         * Every saved profile, sorted by name.
+         * @summary List the saved Throughput Tester profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/tester/profiles`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Same name rules as creating one; keeping its own name is fine.
+         * @summary Replace a saved profile
+         * @param {string} id 
          * @param {TesterProfile} testerProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfilePut: async (testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        testerProfileUpdate: async (id: string, testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerProfileUpdate', 'id', id)
             // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerProfilePut', 'testerProfile', testerProfile)
-            const localVarPath = `/api/tester/profile`;
+            assertParamExists('testerProfileUpdate', 'testerProfile', testerProfile)
+            const localVarPath = `/api/tester/profiles/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2249,7 +2373,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON export)
+         * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2273,16 +2397,16 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
-         * @summary One finished run\'s throughput time series (CSV export)
+         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+         * @summary One finished run\'s report as a self-contained HTML page
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistorySeriesCsv(runId, options);
+        async testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryReportHtml(runId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistorySeriesCsv']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryReportHtml']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -2311,28 +2435,68 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Returns the last profile saved from the setup page. 204 when none has been saved yet.
-         * @summary Get the saved Throughput Tester profile
+         * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
+         * @summary Save a new Throughput Tester profile
+         * @param {TesterProfile} testerProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerProfileGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterProfile>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileGet(options);
+        async testerProfileCreate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStoredProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileCreate(testerProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Delete a saved profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerProfileDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary One saved profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerProfileGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStoredProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileGet(id, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
-         * @summary Save the Throughput Tester profile
+         * Every saved profile, sorted by name.
+         * @summary List the saved Throughput Tester profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerProfileList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterStoredProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Same name rules as creating one; keeping its own name is fine.
+         * @summary Replace a saved profile
+         * @param {string} id 
          * @param {TesterProfile} testerProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerProfilePut(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfilePut(testerProfile, options);
+        async testerProfileUpdate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStoredProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileUpdate(id, testerProfile, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfilePut']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileUpdate']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -2628,7 +2792,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON export)
+         * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2646,14 +2810,14 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerHistoryList(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
-         * @summary One finished run\'s throughput time series (CSV export)
+         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+         * @summary One finished run\'s report as a self-contained HTML page
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.testerHistorySeriesCsv(runId, options).then((request) => request(axios, basePath));
+        testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.testerHistoryReportHtml(runId, options).then((request) => request(axios, basePath));
         },
         /**
          * Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
@@ -2675,23 +2839,54 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerNetworkPing(testerPingRequest, options).then((request) => request(axios, basePath));
         },
         /**
-         * Returns the last profile saved from the setup page. 204 when none has been saved yet.
-         * @summary Get the saved Throughput Tester profile
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterProfile> {
-            return localVarFp.testerProfileGet(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
-         * @summary Save the Throughput Tester profile
+         * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
+         * @summary Save a new Throughput Tester profile
          * @param {TesterProfile} testerProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfilePut(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.testerProfilePut(testerProfile, options).then((request) => request(axios, basePath));
+        testerProfileCreate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterStoredProfile> {
+            return localVarFp.testerProfileCreate(testerProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Delete a saved profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.testerProfileDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary One saved profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterStoredProfile> {
+            return localVarFp.testerProfileGet(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Every saved profile, sorted by name.
+         * @summary List the saved Throughput Tester profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterStoredProfile>> {
+            return localVarFp.testerProfileList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Same name rules as creating one; keeping its own name is fine.
+         * @summary Replace a saved profile
+         * @param {string} id 
+         * @param {TesterProfile} testerProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerProfileUpdate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterStoredProfile> {
+            return localVarFp.testerProfileUpdate(id, testerProfile, options).then((request) => request(axios, basePath));
         },
         /**
          * Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
@@ -2996,7 +3191,7 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
-     * @summary One finished run\'s full report (JSON export)
+     * @summary One finished run\'s full report (JSON)
      * @param {string} runId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -3016,14 +3211,14 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
-     * @summary One finished run\'s throughput time series (CSV export)
+     * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+     * @summary One finished run\'s report as a self-contained HTML page
      * @param {string} runId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistorySeriesCsv(runId, options).then((request) => request(this.axios, this.basePath));
+    public testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistoryReportHtml(runId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -3048,24 +3243,58 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Returns the last profile saved from the setup page. 204 when none has been saved yet.
-     * @summary Get the saved Throughput Tester profile
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerProfileGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileGet(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
-     * @summary Save the Throughput Tester profile
+     * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
+     * @summary Save a new Throughput Tester profile
      * @param {TesterProfile} testerProfile 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerProfilePut(testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfilePut(testerProfile, options).then((request) => request(this.axios, this.basePath));
+    public testerProfileCreate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerProfileCreate(testerProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Delete a saved profile
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerProfileDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerProfileDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary One saved profile
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerProfileGet(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerProfileGet(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Every saved profile, sorted by name.
+     * @summary List the saved Throughput Tester profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerProfileList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerProfileList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Same name rules as creating one; keeping its own name is fine.
+     * @summary Replace a saved profile
+     * @param {string} id 
+     * @param {TesterProfile} testerProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerProfileUpdate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerProfileUpdate(id, testerProfile, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
