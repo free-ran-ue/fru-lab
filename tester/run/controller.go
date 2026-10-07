@@ -37,7 +37,7 @@ type Deps struct {
 	Log    loggergoModel.LoggerInterface
 	Now    func() time.Time
 	NewID  func() string
-	// NewDataplane builds the traffic engine; nil = dataplane.New.
+	// NewDataplane builds the traffic engine; nil = dataplane.Select.
 	NewDataplane func(dataplane.Config) Dataplane
 	// MaxDurationUnit is what one unit of Traffic.MaxDurationMin lasts;
 	// zero = time.Minute (tests shorten it).
@@ -85,7 +85,7 @@ func NewController(deps Deps) *Controller {
 		deps.NewID = func() string { return deps.Now().UTC().Format("20060102-150405") }
 	}
 	if deps.NewDataplane == nil {
-		deps.NewDataplane = func(c dataplane.Config) Dataplane { return dataplane.New(c) }
+		deps.NewDataplane = func(c dataplane.Config) Dataplane { return dataplane.Select(c) }
 	}
 	if deps.MaxDurationUnit == 0 {
 		deps.MaxDurationUnit = time.Minute
@@ -613,6 +613,7 @@ func (r *run) startDataplane() error {
 		SinkIP: n6.Sink().Addr(), Port: uint16(t.Port), PacketSize: t.PacketSize,
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
+		Engine:  t.Engine, N3Interface: r.profile.Network.N3.Interface, N6Interface: n6.Interface,
 	})
 	if err := dp.Start(); err != nil {
 		return fmt.Errorf("start data plane: %w", err)

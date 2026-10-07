@@ -40,6 +40,10 @@ type Traffic struct {
 	// DlBatchMs sends each UE this many milliseconds of downlink in a row,
 	// so UDP GSO can send them as one; 0 = one packet per UE in turn.
 	DlBatchMs int `json:"dlBatchMs"`
+	// Engine is how the data plane moves packets: "socket" (UDP sockets,
+	// also when empty), "afxdp" (AF_XDP on the N3 and N6 interfaces) or
+	// "auto" (AF_XDP when both are NICs, else sockets).
+	Engine string `json:"engine"`
 }
 
 type Scale struct {

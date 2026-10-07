@@ -1003,7 +1003,7 @@ ul.tight li { margin: 3px 0; }
         <tr><th>層級</th><th>技術</th><th>粗估上限（單機、1400 B 封包）</th><th>代價</th></tr>
         <tr><td><strong>1</strong> <span class="pill ok">PoC</span></td><td>一般 UDP socket + 批次送收 + UDP GSO／GRO</td><td>數 Gbps；加 GSO 後發送端每核心約 19 Gbps（實測，見 FAQ Q2）</td><td>無特殊權限，最好除錯</td></tr>
         <tr><td><strong>2</strong></td><td>AF_PACKET (PACKET_MMAP)</td><td>約 10 Gbps</td><td>需 raw socket 權限，自己組 Ethernet / IP 標頭、自己處理 ARP</td></tr>
-        <tr><td><strong>3</strong></td><td>AF_XDP</td><td>數十 Gbps</td><td>需網卡驅動支援、綁核，開發成本最高</td></tr>
+        <tr><td><strong>3</strong></td><td>AF_XDP</td><td>數十 Gbps</td><td>驅動支援時零複製最快，不支援時退回複製或通用模式（任何網卡都能跑）；要自己組 Ethernet／IP 標頭、處理 ARP、綁核，開發成本最高（已實作為 <code>afxdp</code> 引擎，見 FAQ Q5 與第 13 節）</td></tr>
       </table>
     </div>
     <p class="m-note" style="font-size:.85rem">以上是粗估，實際數字要在你的主機上量。依 Q4，PoC 只做層級 1，發送器保留可替換的介面。</p>
@@ -1645,6 +1645,52 @@ ul.tight li { margin: 3px 0; }
       <li>CPU 綁核仍未做。</li>
     </ul>
   </div>
+  <div class="log-entry">
+    <div class="log-head"><h3>資料面 AF_XDP 引擎</h3><span class="pill draft">功能完成 · 待實體網卡實測</span></div>
+    <div class="log-meta">
+      <span>2026-10-07</span>
+      <span>分支 refactor/af-xdp</span>
+      <span>依據：FAQ Q5</span>
+    </div>
+
+    <h4>交付內容</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>位置</th><th>內容</th></tr>
+        <tr><td class="mono">tester/xdp</td><td>AF_XDP socket（UMEM 4096 個 2 KB frame，一半收一半送；fill／RX／TX／completion 各 2048，need_wakeup；先試零複製，不行改複製模式）。XDP 程式用 cilium/ebpf 的 asm 直接組（機器上不用 clang）：只把「目的 IP + UDP port 在允許表裡」的 IPv4／UDP 導到該佇列的 socket，其他（SCTP、ARP、ICMP、其他 UDP）照常交給 kernel。先掛 driver 模式，不行改 generic。下一跳 MAC 用 netlink 查路由與鄰居表，查不到先送一個 UDP 觸發 ARP</td></tr>
+        <tr><td class="mono">tester/dataplane</td><td>原本的引擎拆出共用的 <code>core</code>（UE 流量、步調、統計、Snapshot），socket 引擎和新的 <code>XDPEngine</code> 都用它。XDP 引擎每張網卡每個 RX 佇列一個 socket；UL 在 UMEM 裡直接組 Ethernet／IPv4／UDP／GTP-U，DL 組 Ethernet／IPv4／UDP，外層 UDP checksum 填 0。允許表：各 gNB N3 IP:2152 與 sink:port。<code>Select</code> 依設定選引擎</td></tr>
+        <tr><td class="mono">tester/profile、run</td><td>新設定 <code>traffic.engine</code>：空白或 <code>socket</code> = socket 引擎；<code>afxdp</code> = AF_XDP，失敗就讓 run 失敗；<code>auto</code> = N3、N6 都是實體網卡才用 AF_XDP，否則或 AF_XDP 開不起來時改用 socket，原因寫在 Snapshot</td></tr>
+        <tr><td class="mono">web</td><td>Setup 頁 Traffic 卡「Data plane engine」（預設 auto）；Run 頁資料面卡顯示「Engine: …」，例如 <code>af_xdp (ens1f0 zero-copy, 24 queues; …)</code> 或 <code>socket (auto: …)</code>。docker-compose 的 fru-tester 加上 <code>NET_ADMIN</code>、<code>BPF</code>、<code>IPC_LOCK</code></td></tr>
+      </table>
+    </div>
+
+    <h4>驗證結果</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>項目</th><th>結果</th></tr>
+        <tr><td>XDP 程式與 socket（root、veth + netns）</td><td><span class="pill ok">通過</span> verifier 接受；允許的 UDP 進 socket，其他 UDP 照常到 kernel；整個 frame 送得出去</td></tr>
+        <tr><td>AF_XDP 引擎端對端（veth + netns 裡的假 UPF）</td><td><span class="pill ok">通過</span> UL／DL 送出 = 收到、0 亂序、0 送出錯誤，每個 gNB 的計數一致；結束後網卡上沒有殘留 XDP 程式。連跑 5 次與 -race 都通過</td></tr>
+        <tr><td>auto 在非實體網卡上</td><td><span class="pill ok">通過</span> 回到 socket，Engine 顯示原因</td></tr>
+        <tr><td>其他</td><td>fru-tester 全部套件 -race 通過，lint 0，前端 build、後端測試通過</td></tr>
+        <tr><td>效能</td><td><span class="pill draft">尚未量</span> veth 只能用 generic／複製模式，量不出 AF_XDP 的好處（veth 上 AF_XDP 約 0.7 M pps；socket 的 5.1 M pps 也偏高，因為 iptables 把整塊 GSO 一起丟掉）。要在兩台機器的 XL710（i40e，支援零複製）上實測</td></tr>
+      </table>
+    </div>
+
+    <h4>和設計不同的地方、實作時做的決定</h4>
+    <ul class="tight">
+      <li><b>UL 和 DL 在同一張網卡時共用 socket</b>：一個佇列只能有一個 socket，所以 TX 加了一把鎖，填 frame 和送出在同一個呼叫裡完成；不加時兩邊搶 TX 空位，測試出現掉包與重複。</li>
+      <li><b>沒有先做「只收」</b>：Q5 建議先做收包，實作時收送一起做，因為兩邊共用 UMEM 與 socket，分兩次反而多一層過渡。</li>
+      <li><b>auto 只看網卡種類</b>：Docker 同一台的環境（bridge、veth）一律用 socket，符合 Q5「主要用在兩台機器」。</li>
+      <li><b>沒有綁核</b>：每個佇列一條 goroutine，由 Go 排程；要不要綁核等實測再決定。</li>
+    </ul>
+
+    <h4>留到之後處理</h4>
+    <ul class="tight">
+      <li>兩台機器實測：Engine 選 <code>afxdp</code>，看 Run 頁是否為 zero-copy、佇列數，以及同樣 UL／DL 下 tester 的 CPU。</li>
+      <li>大於一個 frame（2 KB）的封包（巨型幀）目前不支援。</li>
+      <li>網卡雙埠合計約 48G 的上限（PCIe 3.0 x8）不受引擎影響。</li>
+    </ul>
+  </div>
 </section>
 
 
@@ -1744,7 +1790,7 @@ ul.tight li { margin: 3px 0; }
       <dt>為什麼不用 TUN 介面或真的 UE 協定堆疊？</dt>
       <dd>要模擬幾千個 UE，每個 UE 一個 TUN、每個封包進出 kernel 一次，成本太高，也管不動那麼多介面。要量的是 UPF 的使用者面轉發，只需要「對的封包格式、對的 TEID、對的 UE IP」，用模板直接組就夠了，也能精準控制速率。</dd>
       <dt>為什麼不用 raw socket、DPDK 或 AF_XDP？</dt>
-      <dd>一般 UDP socket 加上多 socket、批次送收、UDP GSO／GRO，任何 Linux 機器都能跑，不綁網卡、不用大頁記憶體；網卡支援硬體卸載就自動用上。GSO 之前在 6 vCPU 測試機上就能收送 6.5 Gbps（掉包 0.3% 以下）；加了 GSO 之後發送端每核心約 19 Gbps（見 Q2、Q4）。依你的要求不用 DPDK；AF_XDP 仍列在第 12 節「之後」。</dd>
+      <dd>一般 UDP socket 加上多 socket、批次送收、UDP GSO／GRO，任何 Linux 機器都能跑，不綁網卡、不用大頁記憶體；網卡支援硬體卸載就自動用上。GSO 之前在 6 vCPU 測試機上就能收送 6.5 Gbps（掉包 0.3% 以下）；加了 GSO 之後發送端每核心約 19 Gbps（見 Q2、Q4）。依你的要求不用 DPDK；AF_XDP 已經做成另一個資料面引擎（Setup 頁「Data plane engine」，見 Q5 與第 13 節），socket 引擎保留當預設與後備。</dd>
       <dt>怎麼確定封包真的經過 UPF，不是在本機繞回來？</dt>
       <dd>UL 送出去的是 GTP-U，只有 UPF 拆掉外層後 sink 才會收到內層的 UDP；DL 回來時是 GTP-U，而且 TEID 必須是 gNB 配發的那一個，否則記為 misrouted。DL 的路由也是明確指向 UPF 的 N6 IP。</dd>
       <dt>UPF 做了 NAT，怎麼知道封包是哪個 UE 的？</dt>
@@ -1878,6 +1924,77 @@ ul.tight li { margin: 3px 0; }
       <li>下一步：在高效能機器上用 Bench 分頁量「每核心能送多少、加核心是否線性成長」，再用真實核網跑一次，看瓶頸是在 tester 的收包還是 UPF，再評估 40G。</li>
     </ul>
   </div>
+
+  <div class="faq">
+    <h3>Q5 · 不用 DPDK，怎麼用更少的 CPU 打到更高的流量？</h3>
+    <div class="short"><b>簡答：</b>tester 吃 CPU，主因是<b>每個封包都要走一遍 Linux 的網路堆疊</b>，收包尤其重。UDP GSO 只省掉了「送」那一半。Landslide 用 DPDK 讓網卡直接把封包交給程式，不經 kernel、不複製、用輪詢，所以 5 顆核心就夠。不用 DPDK、又要任何機器都能跑，最接近的做法是 <b>AF_XDP</b>：Linux 內建，不用把網卡從 kernel 拿走、不用大頁記憶體；網卡驅動支援時是零複製，速度和 DPDK 同一個等級，不支援時自動退回比較慢的模式，功能一樣。這正好符合「網卡只決定能跑多快」的要求。建議順序：先量測、再做低風險的調整，最後把 AF_XDP 做成資料面的另一個引擎，現在的 socket 引擎保留當後備。</div>
+
+    <div class="callout done"><div class="lbl">實作狀態 · 2026-10-07</div>AF_XDP 引擎已實作（分支 <code>refactor/af-xdp</code>），收送都走 AF_XDP。Setup 頁可選 <code>auto</code>／<code>socket</code>／<code>afxdp</code>，Run 頁會顯示實際用了哪個引擎與模式。在 veth 上功能測試通過；效能要在兩台實體網卡（i40e 零複製）上量，詳見第 13 節。</div>
+
+    <h4>為什麼 tester 這麼吃 CPU</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>每個封包要經過的</th><th>送（UL 的 GTP-U、DL 的 UDP）</th><th>收（UPF 送回來的）</th></tr>
+        <tr><td>系統呼叫</td><td>GSO：一次交出數十到數百個封包</td><td>recvmmsg：一次最多 32 則訊息；沒有 GRO 合併時就是 32 個封包</td></tr>
+        <tr><td>kernel 網路堆疊（路由、netfilter、UDP、socket 佇列）</td><td>GSO 時一整塊走一次</td><td><b>每個封包各走一次</b>，除非 GRO 先合併</td></tr>
+        <tr><td>記憶體複製</td><td>程式 → kernel，一整塊一次</td><td>kernel → 程式，每個封包 1400 bytes</td></tr>
+        <tr><td>中斷、softirq、Go 的執行緒排程</td><td>每 1 ms 醒一次</td><td>每批一次；執行緒多時排程成本也高</td></tr>
+      </table>
+    </div>
+    <p>送的部分已經很便宜：Bench 每核心可送 170–370 萬 pps（看 CPU）。所以上下行各 40G 時，大部分 CPU 應該花在<b>收包</b>上（推測，要用 perf 確認）。第二輪的四項調整（多個 N3 IP、發送線數、延遲抽樣、veth GRO）實測沒有明顯效果、已撤回。這也說明剩下的成本主要是 kernel 逐封包的處理，只在堆疊上方調整，很難有數量級的改善。</p>
+
+    <h4>Landslide（DPDK）為什麼 5 顆核心就夠</h4>
+    <ul class="tight">
+      <li>網卡直接交給使用者程式，封包不經 kernel 的網路堆疊。</li>
+      <li>專門的核心持續輪詢網卡，不靠中斷。</li>
+      <li>封包放在預先配置的大頁記憶體裡，網卡和程式共用，不用複製。</li>
+      <li>一顆核心負責固定的網卡佇列，沒有執行緒排程、沒有鎖。</li>
+      <li>代價就是你不想要的部分：網卡要 DPDK 支援、要從 kernel 解除綁定（那張網卡 kernel 就不能用了）、要設定大頁記憶體。</li>
+    </ul>
+
+    <h4>不用 DPDK 的選項</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>做法</th><th>省掉什麼</th><th>任何機器都能用？</th><th>預估效果</th><th>代價</th></tr>
+        <tr><td><b>1. 調整現有架構</b>：發送、讀取執行緒數配合網卡佇列數，綁核，放在網卡同一個 NUMA，開 busy poll</td><td>排程、跨核心與跨 NUMA 搬資料、部分中斷</td><td>是</td><td>約 1.2–1.5 倍（推估）</td><td>低；需要 root 設定</td></tr>
+        <tr><td><b>2. 確認 UDP GRO 真的有合併</b>：實體網卡預設開 GRO，tester 的 socket 已開 UDP_GRO</td><td>收包的堆疊與系統呼叫（一次讀一整塊）</td><td>是</td><td>有合併時收包可快數倍；沒合併等於沒有</td><td>幾乎沒有，主要是量測確認</td></tr>
+        <tr><td>3. io_uring</td><td>系統呼叫</td><td>kernel 5.x 以上</td><td>小（tester 已經批次送收）</td><td>不建議</td></tr>
+        <tr><td>4. AF_PACKET（PACKET_MMAP）</td><td>socket 層</td><td>是</td><td>小到中</td><td>仍要走大半堆疊，不建議</td></tr>
+        <tr><td><b>5. AF_XDP</b></td><td>整個 kernel 網路堆疊；零複製時連收包複製都省掉</td><td><b>是</b>：驅動支援時零複製，否則複製模式；任何網卡（含 veth）都有通用模式</td><td>零複製時每核心數百萬到上千萬 pps（推估，要實測）</td><td>中高：自己組 Ethernet／IP 標頭、查 ARP、寫一個很小的 XDP 程式、一個佇列一個 socket；需要 root</td></tr>
+        <tr><td>6. DPDK</td><td>全部</td><td>否（網卡要支援、要解綁、要大頁記憶體）</td><td>最高</td><td>已排除</td></tr>
+      </table>
+    </div>
+
+    <h4>AF_XDP 在 tester 裡會怎麼做</h4>
+    <ul class="tight">
+      <li><b>只接管資料面</b>：在 N3、N6 網卡掛一個很小的 XDP 程式，只把「送到 gNB 的 N3 IP:2152」和「送到 sink:port」的 UDP 交給 tester。SCTP（N2）、ARP、ping 和其他流量照常交給 kernel。網卡不用解綁，同一張網卡上的其他服務不受影響。</li>
+      <li><b>送</b>：tester 直接在和網卡共用的記憶體（UMEM）裡組完整的 Ethernet／IPv4／UDP 封包（UL 再加 GTP-U），交給網卡，不經路由、不經 socket。外層 UDP checksum 填 0（IPv4 允許），IP checksum 在模板裡算好。目的 MAC 從 kernel 的鄰居表查（UPF N3、UPF N6 的 MAC），查不到時先用一般 socket 送一個封包或 ping，觸發 ARP。</li>
+      <li><b>收</b>：網卡把封包直接寫進 UMEM，tester 讀描述符、解析標頭、計數，不複製，不經 UDP 和 socket。</li>
+      <li><b>執行緒</b>：一個網卡佇列一條工作線，綁在網卡同一個 NUMA 的核心上；用 <code>ethtool -L</code> 把佇列數調成要用的核心數。流量高時輪詢，低時休眠（need_wakeup），不會空轉。</li>
+      <li><b>三種模式自動選</b>：零複製（i40e、ice、mlx5、ixgbe 等主流驅動）→ 複製模式 → 通用模式（任何網卡）。Run 頁顯示實際用了哪一種。</li>
+      <li><b>現在的 socket 引擎保留</b>：Setup 頁可以選「資料面引擎：自動／AF_XDP／Socket」。tester 和 UPF 在同一台的 Docker 環境（封包走 bridge 和 veth）用 AF_XDP 幫助有限，維持 socket 引擎；主要用在兩台機器、實體網卡的情況。</li>
+      <li>tester 仍然會把 gNB 的 N3 IP 和 sink 加到網卡上，讓 kernel 回應 UPF 的 ARP。</li>
+    </ul>
+
+    <h4>估計：上下行各 40G（1400 bytes，送 714 萬 pps、收 714 萬 pps）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>資料面引擎</th><th>tester 大約要幾顆核心</th><th>依據</th></tr>
+        <tr><td>現在的 socket 引擎</td><td>十幾到二十幾顆，大部分在收包</td><td>Bench 發送端每核心 170–370 萬 pps；收包沒合併時每個封包都走一次堆疊（待 perf 確認）</td></tr>
+        <tr><td>AF_XDP 複製模式</td><td>約 6–10 顆</td><td>省掉 socket 和大部分堆疊，但還要複製</td></tr>
+        <tr><td>AF_XDP 零複製</td><td>約 3–5 顆</td><td>和 Landslide 的等級接近</td></tr>
+      </table>
+    </div>
+    <p class="m-note" style="font-size:.85rem">以上是推估，要實測。網卡與 PCIe 的上限另外算，例如雙埠 XL710 插在 PCIe 3.0 x8 時，兩個埠合計每個方向約 48G。</p>
+
+    <h4>建議順序</h4>
+    <ol class="tight">
+      <li><b>先量</b>：在 tester 那台跑上下行各 40G 時，用 <code>perf record -a -g</code> 和 <code>mpstat</code> 分出 kernel 收包、複製、Go 程式、排程各佔多少；並量「每次讀到幾個封包」，確認 GRO 有沒有合併。</li>
+      <li><b>低風險調整</b>（上表 1、2）：執行緒數配合佇列、綁核、讓網卡中斷和 tester 在同一個 NUMA，看能省多少。</li>
+      <li><b>AF_XDP 引擎</b>：先做收包（最吃 CPU 的部分），再做發送；每一步都用 Bench 和兩台實測比較 CPU 與吞吐。</li>
+    </ol>
+  </div>
 </section>
 
 </div>
+

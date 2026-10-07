@@ -306,6 +306,7 @@ export default function TesterSetupPage() {
                 <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
                 <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />
                 <Field label="Downlink batch (ms per UE, 0 = off)" path="traffic.dlBatchMs" numeric {...fieldProps} />
+                <Field label="Data plane engine" path="traffic.engine" options={['auto', 'socket', 'afxdp']} {...fieldProps} />
               </div>
               <p className={styles.hint}>
                 Every UE starts sending as soon as its PDU session is up. At full scale: uplink
@@ -316,6 +317,11 @@ export default function TesterSetupPage() {
                 {' '}With a max run time the run stops itself, exactly as if you pressed Stop.
                 {' '}Downlink batch sends each UE that many milliseconds of packets in a row, so the kernel can take them in one
                 send (UDP GSO); larger saves CPU but makes each UE&apos;s downlink burstier.
+                {' '}<b>Data plane engine</b>: <span className={styles.mono}>socket</span> sends and receives through the
+                kernel&apos;s UDP sockets; <span className={styles.mono}>afxdp</span> moves whole frames through AF_XDP on the N3 and
+                N6 interfaces, skipping the kernel&apos;s IP and UDP code, for far less CPU per packet (zero-copy when the NIC
+                driver supports it); <span className={styles.mono}>auto</span> uses AF_XDP when both interfaces are NICs and falls
+                back to sockets otherwise. The Run page shows which one ran.
               </p>
             </section>
 
