@@ -158,7 +158,7 @@ func TestHistoryEmptyListIsAnArray(t *testing.T) {
 	}
 }
 
-func TestHistoryJSONAndCSVExports(t *testing.T) {
+func TestHistoryJSONAndHTMLExports(t *testing.T) {
 	store := &memRuns{}
 	_, _ = store.SaveTesterRun("20261002-150405", []byte(sampleReport), 50)
 	h := historyRouter(store)
@@ -171,19 +171,18 @@ func TestHistoryJSONAndCSVExports(t *testing.T) {
 		t.Fatalf("json disposition %q", cd)
 	}
 
-	rec = get(t, h, "/api/tester/history/20261002-150405/series.csv")
-	want := "t,ulTxBps,ulRxBps,dlTxBps,dlRxBps\n1,8,8,40,40\n2,8,7.5,40,40\n"
-	if rec.Code != http.StatusOK || rec.Body.String() != want {
-		t.Fatalf("csv: %d %q", rec.Code, rec.Body)
+	rec = get(t, h, "/api/tester/history/20261002-150405/report.html")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "20261002-150405") {
+		t.Fatalf("report: %d %.200q", rec.Code, rec.Body)
 	}
-	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/csv") {
-		t.Fatalf("csv type %q", ct)
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Fatalf("report type %q", ct)
 	}
 
 	if rec := get(t, h, "/api/tester/history/nope"); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown run: %d", rec.Code)
 	}
-	if rec := get(t, h, "/api/tester/history/nope/series.csv"); rec.Code != http.StatusNotFound {
-		t.Fatalf("unknown run csv: %d", rec.Code)
+	if rec := get(t, h, "/api/tester/history/nope/report.html"); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown run report: %d", rec.Code)
 	}
 }

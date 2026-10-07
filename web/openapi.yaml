@@ -1073,7 +1073,7 @@ paths:
                   $ref: '#/components/schemas/TesterHistorySummary'
   /api/tester/history/{runId}:
     get:
-      summary: One finished run's full report (JSON export)
+      summary: One finished run's full report (JSON)
       operationId: testerHistoryGet
       security:
         - bearerAuth: []
@@ -1096,10 +1096,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
-  /api/tester/history/{runId}/series.csv:
+  /api/tester/history/{runId}/report.html:
     get:
-      summary: One finished run's throughput time series (CSV export)
-      operationId: testerHistorySeriesCsv
+      summary: One finished run's report as a self-contained HTML page
+      description: Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+      operationId: testerHistoryReportHtml
       security:
         - bearerAuth: []
       parameters:
@@ -1110,9 +1111,9 @@ paths:
             type: string
       responses:
         '200':
-          description: 't,ulTxBps,ulRxBps,dlTxBps,dlRxBps, one row per chart point'
+          description: The HTML report
           content:
-            text/csv:
+            text/html:
               schema:
                 type: string
         '404':

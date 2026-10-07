@@ -563,7 +563,9 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <div class="compare">
         <div>
           <h3>History</h3>
-          <p>最近 50 個已結束的 run（fru-lab 保存）。勾兩筆可以並排比較；<b>JSON</b> 下載完整報告（設定與最終數字），<b>CSV</b> 下載吞吐時序。fru-tester 自己只保留最近 10 個，fru-lab 關著時如果結束了超過 10 個，較舊的不會進到 History。</p>
+          <p>最近 50 個已結束的 run（fru-lab 保存）。勾兩筆可以並排比較。每一筆的 <b>View</b> 在新分頁打開完整的測試報告，<b>Download</b> 把同一份報告存成一個 HTML 檔，不用連線、不用 fru-lab 也能打開，可以直接寄給別人或列印。fru-tester 自己只保留最近 10 個，fru-lab 關著時如果結束了超過 10 個，較舊的不會進到 History。</p>
+          <p>報告內容：結果與時間、引擎；UL／DL 平均與最高接收速率、掉包、延遲、註冊與 PDU 成功率；UL／DL 吞吐圖（滑鼠移上去看每一點的數字）；每個控制面階段的成功／拒絕／逾時／重試與耗時分佈、失敗原因；資料面收送量、掉包、亂序、送出錯誤、延遲；每個 gNB 的狀態與流量；失敗的 UE；這次 run 用的完整設定（K、OPc 只顯示頭尾）。最下面的 <b>Download raw data (JSON)</b> 可以拿到原始資料。</p>
+          <p class="hint">報告裡的平均速率是「收到的量 ÷ 流量時間」，流量時間從第一個 UE 開始打流量算起，不含 N2、註冊、PDU 建立和收尾的時間。</p>
         </div>
         <div>
           <h3>Bench</h3>

@@ -1539,7 +1539,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON export)
+         * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1610,16 +1610,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
-         * @summary One finished run\'s throughput time series (CSV export)
+         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+         * @summary One finished run\'s report as a self-contained HTML page
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerHistorySeriesCsv: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        testerHistoryReportHtml: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'runId' is not null or undefined
-            assertParamExists('testerHistorySeriesCsv', 'runId', runId)
-            const localVarPath = `/api/tester/history/{runId}/series.csv`
+            assertParamExists('testerHistoryReportHtml', 'runId', runId)
+            const localVarPath = `/api/tester/history/{runId}/report.html`
                 .replace('{runId}', encodeURIComponent(String(runId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -1636,7 +1636,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
-            localVarHeaderParameter['Accept'] = 'text/csv,application/json';
+            localVarHeaderParameter['Accept'] = 'text/html,application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -2373,7 +2373,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON export)
+         * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2397,16 +2397,16 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
-         * @summary One finished run\'s throughput time series (CSV export)
+         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+         * @summary One finished run\'s report as a self-contained HTML page
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistorySeriesCsv(runId, options);
+        async testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryReportHtml(runId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistorySeriesCsv']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryReportHtml']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -2792,7 +2792,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON export)
+         * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2810,14 +2810,14 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerHistoryList(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
-         * @summary One finished run\'s throughput time series (CSV export)
+         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+         * @summary One finished run\'s report as a self-contained HTML page
          * @param {string} runId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.testerHistorySeriesCsv(runId, options).then((request) => request(axios, basePath));
+        testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.testerHistoryReportHtml(runId, options).then((request) => request(axios, basePath));
         },
         /**
          * Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
@@ -3191,7 +3191,7 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * 
-     * @summary One finished run\'s full report (JSON export)
+     * @summary One finished run\'s full report (JSON)
      * @param {string} runId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -3211,14 +3211,14 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
-     * @summary One finished run\'s throughput time series (CSV export)
+     * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
+     * @summary One finished run\'s report as a self-contained HTML page
      * @param {string} runId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistorySeriesCsv(runId, options).then((request) => request(this.axios, this.basePath));
+    public testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistoryReportHtml(runId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

@@ -28,9 +28,9 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**logout**](#logout) | **POST** /api/logout | Logout|
 |[**testerBenchGet**](#testerbenchget) | **GET** /api/tester/bench | Latest data plane bench|
 |[**testerBenchStart**](#testerbenchstart) | **POST** /api/tester/bench | Start a data plane bench|
-|[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON export)|
+|[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON)|
 |[**testerHistoryList**](#testerhistorylist) | **GET** /api/tester/history | Finished runs, newest first|
-|[**testerHistorySeriesCsv**](#testerhistoryseriescsv) | **GET** /api/tester/history/{runId}/series.csv | One finished run\&#39;s throughput time series (CSV export)|
+|[**testerHistoryReportHtml**](#testerhistoryreporthtml) | **GET** /api/tester/history/{runId}/report.html | One finished run\&#39;s report as a self-contained HTML page|
 |[**testerNetworkInterfaces**](#testernetworkinterfaces) | **GET** /api/tester/network/interfaces | Interfaces on fru-tester\&#39;s host|
 |[**testerNetworkPing**](#testernetworkping) | **POST** /api/tester/network/ping | Ping test of one network|
 |[**testerProfileCreate**](#testerprofilecreate) | **POST** /api/tester/profiles | Save a new Throughput Tester profile|
@@ -1353,9 +1353,10 @@ This endpoint does not have any parameters.
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerHistorySeriesCsv**
-> string testerHistorySeriesCsv()
+# **testerHistoryReportHtml**
+> string testerHistoryReportHtml()
 
+Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
 
 ### Example
 
@@ -1370,7 +1371,7 @@ const apiInstance = new DefaultApi(configuration);
 
 let runId: string; // (default to undefined)
 
-const { status, data } = await apiInstance.testerHistorySeriesCsv(
+const { status, data } = await apiInstance.testerHistoryReportHtml(
     runId
 );
 ```
@@ -1393,13 +1394,13 @@ const { status, data } = await apiInstance.testerHistorySeriesCsv(
 ### HTTP request headers
 
  - **Content-Type**: Not defined
- - **Accept**: text/csv, application/json
+ - **Accept**: text/html, application/json
 
 
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-|**200** | t,ulTxBps,ulRxBps,dlTxBps,dlRxBps, one row per chart point |  -  |
+|**200** | The HTML report |  -  |
 |**404** | No such run |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
