@@ -274,3 +274,18 @@ func TestPingTargetChecksOnlyItsOwnNetwork(t *testing.T) {
 	require.ErrorAs(t, err, &verr)
 	require.Equal(t, []FieldError{{Field: "network.n3.upfIp", Message: `"x" is not an IPv4 address`}}, verr.Errors)
 }
+
+func TestExpandChecksTheEngine(t *testing.T) {
+	for _, ok := range []string{"", "auto", "socket", "afxdp"} {
+		p := sampleProfile()
+		p.Traffic.Engine = ok
+		_, err := Expand(p, nil)
+		require.NoError(t, err, ok)
+	}
+	p := sampleProfile()
+	p.Traffic.Engine = "dpdk"
+	_, err := Expand(p, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "traffic.engine", Message: `must be "auto", "socket" or "afxdp"`}}, verr.Errors)
+}

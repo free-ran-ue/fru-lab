@@ -47,6 +47,12 @@ func newFakeUPF(t *testing.T, sink netip.AddrPort, dropEvery uint64) *fakeUPF {
 	require.NoError(t, err)
 	n6, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.100"), Port: 0})
 	require.NoError(t, err)
+	return runFakeUPF(t, n3, n6, sink, dropEvery)
+}
+
+// runFakeUPF serves uplink arriving on n3 and downlink arriving on n6.
+func runFakeUPF(t *testing.T, n3, n6 *net.UDPConn, sink netip.AddrPort, dropEvery uint64) *fakeUPF {
+	t.Helper()
 	u := &fakeUPF{n3: n3, n6: n6, sink: sink, ues: map[uint32]ueRoute{}, dropEvery: dropEvery, dlFrom: map[netip.AddrPort]bool{}, ulFrom: map[netip.AddrPort]bool{}}
 	go u.uplink()
 	go u.downlink()

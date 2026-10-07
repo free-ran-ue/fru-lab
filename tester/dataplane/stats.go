@@ -46,6 +46,9 @@ type GnbTraffic struct {
 }
 
 type Snapshot struct {
+	// Engine is how packets are sent and received: "socket" (UDP sockets)
+	// or "af_xdp" followed by each interface's mode.
+	Engine    string       `json:"engine"`
 	ActiveUes int          `json:"activeUes"`
 	Ul        DirSnapshot  `json:"ul"`
 	Dl        DirSnapshot  `json:"dl"`
@@ -140,7 +143,7 @@ type counters struct {
 	ulTxP, ulRxP, dlTxP, dlRxP uint64 // packets
 }
 
-func (e *Engine) read() counters {
+func (e *core) read() counters {
 	c := counters{at: e.cfg.Now()}
 	ulS, ulR := e.ul.workers()
 	dlS, dlR := e.dl.workers()
@@ -151,7 +154,7 @@ func (e *Engine) read() counters {
 	return c
 }
 
-func (e *Engine) sample(ctx context.Context) {
+func (e *core) sample(ctx context.Context) {
 	defer e.sampler.Done()
 	e.mu.Lock()
 	e.prev = e.read()
@@ -168,7 +171,7 @@ func (e *Engine) sample(ctx context.Context) {
 	}
 }
 
-func (e *Engine) takeSample() {
+func (e *core) takeSample() {
 	now := e.read()
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -191,7 +194,7 @@ func (e *Engine) takeSample() {
 	e.history.add(p)
 }
 
-func (e *Engine) Snapshot() Snapshot {
+func (e *core) Snapshot() Snapshot {
 	e.mu.Lock()
 	last, pps := e.last, e.lastPps
 	series := e.history.points()
@@ -202,6 +205,7 @@ func (e *Engine) Snapshot() Snapshot {
 		Dl:        dirSnapshot(&e.dl, last.DlTxBps, last.DlRxBps, pps[2], pps[3]),
 		Gnbs:      make([]GnbTraffic, len(e.cfg.GnbN3IPs)),
 		Series:    series,
+		Engine:    e.engine,
 	}
 	for _, f := range []struct {
 		d  *dirStats

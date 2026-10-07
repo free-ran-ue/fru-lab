@@ -187,7 +187,7 @@ footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--lin
       <h2>開始之前</h2>
       <ul>
         <li><b>SCTP 模組</b>：跑 fru-tester 的主機要先 <code>sudo modprobe sctp</code>（要開機自動載入：<code>echo sctp | sudo tee /etc/modules-load.d/sctp.conf</code>）。</li>
-        <li><b>權限</b>：fru-tester 用 root 或 <code>CAP_NET_ADMIN</code> 執行。run 開始時它會在網卡上加每個 gNB 的 IP、加 UE pool 的路由，結束時移除。</li>
+        <li><b>權限</b>：fru-tester 用 root 或 <code>CAP_NET_ADMIN</code> 執行。run 開始時它會在網卡上加每個 gNB 的 IP、加 UE pool 的路由，結束時移除。要用 AF_XDP 資料面引擎，還要 <code>CAP_BPF</code> 與 <code>CAP_IPC_LOCK</code>（或直接用 root）。</li>
         <li><b>IP 規劃</b>：挑一段沒人用的 CIDR 和起始 IP。fru-tester 會跳過網路與廣播位址、AMF 與 UPF 的 IP、以及<b>這台主機上</b>已經有的 IP。它看不到別台機器、Docker bridge 上的容器、k8s pod 用掉的 IP（例如 fru-lab 部署的 gNB 容器 <code>10.0.1.2</code>），所以起始 IP 要從遠一點的地方開始，例如 <code>10.0.1.100</code>。</li>
         <li><b>訂閱資料</b>：fru-tester 不會建訂閱。每個 UE 都要在核網裡有：plan preview 顯示的 SUPI（每個 gNB 一列，列出第一個與最後一個 SUPI）、UE 樣板的 K、OPc、AMF、SQN，以及 gNB 樣板有宣告的切片（S-NSSAI）。fru-lab 的 Subscribers 頁可以一次新增大量 UE（IMSI 逐一加 1），但它管的是 fru-lab 自己部署的核網；別的核網要在那個核網的 webconsole 建。</li>
         <li><b>free5GC 的兩個設定</b>：SMF 的 <code>urrThreshold</code> 要調大（fru-lab 的範本是 10 GB），否則高速率時 UPF 每一兩個封包就報一次用量，DL 會斷；CHF 的 <code>cgf.enable</code> 要是 <code>false</code>，否則 PDU session 會卡 10 秒後逾時。fru-lab 的範本已經這樣設，其他核網或舊版要自己改。</li>
@@ -206,7 +206,7 @@ make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），�
         </div>
         <div>
           <h3>Docker Compose</h3>
-          <p><code>docker/docker-compose.yaml</code> 讓 fru-tester 用 host network 執行，權限是 <code>NET_ADMIN</code>（加 gNB IP 和路由）。fru-lab 透過 <code>http://host.docker.internal:9100</code> 連到它。</p>
+          <p><code>docker/docker-compose.yaml</code> 讓 fru-tester 用 host network 執行，權限是 <code>NET_ADMIN</code>（加 gNB IP 和路由），以及 AF_XDP 引擎用的 <code>BPF</code>、<code>IPC_LOCK</code>（掛 XDP 程式、鎖住封包記憶體）。fru-lab 透過 <code>http://host.docker.internal:9100</code> 連到它。</p>
           <p class="hint">tester API 會在 host 的所有網卡上聽，所以 <code>docker/tester.yaml</code> 和 <code>docker/config.yaml</code> 的 <code>apiToken</code> 都要改掉預設值。兩個 image 用 <code>make docker</code> 建。</p>
         </div>
       </div>
@@ -455,6 +455,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
           <tr><td class="f">UDP port<span class="path">traffic.port</span></td><td class="r">1–65535／9200</td><td>sink 和 UE 用的 UDP port。</td><td colspan="2">和主機上其他程式衝突時才需要改。</td></tr>
           <tr><td class="f">Max run time<span class="path">traffic.maxDurationMin</span></td><td class="r">0–10080 分鐘，0 = 不限／0</td><td>開始後多久自動 Stop，流程和按 Stop 一樣。</td><td colspan="2">長時間 run 的圖會自動壓縮，不會變慢。</td></tr>
           <tr><td class="f">Downlink batch<span class="path">traffic.dlBatchMs</span></td><td class="r">0–10 ms，0 = 關／1</td><td>每個 UE 連續送這麼多時間量的 DL 封包，讓 kernel 用一次 UDP GSO 送出（DL 的目的地是各 UE，只能合同一個 UE 的封包）。UL 不需要：同一個 gNB 的 UL 都送往 UPF，本來就會合併。</td><td class="up">一次合更多封包，tester 送 DL 更省 CPU；但每個 UE 的 DL 變得一陣一陣，同一台時容易瞬間塞滿某顆 CPU 的佇列。</td><td class="down">流量最平均，但 tester 送 DL 最吃 CPU。每 UE 10 Mbps 時 1 ms 不到一個封包，等於沒合併。</td></tr>
+          <tr><td class="f">Data plane engine<span class="path">traffic.engine</span></td><td class="r">auto／socket／afxdp，預設 auto</td><td>資料面怎麼收送封包。<b>socket</b>：一般 UDP socket（GSO／GRO），任何環境都能跑。<b>afxdp</b>：在 N3、N6 網卡掛一個小的 XDP 程式，只把 gNB N3 IP:2152 與 sink:port 的 UDP 交給 tester，其他（SCTP、ARP、ping）照常給 kernel；網卡驅動支援時零複製（i40e、ice、mlx5、ixgbe 等），不支援時自動改用複製或通用模式；開不起來時 run 失敗。<b>auto</b>：N3、N6 都是實體網卡才用 AF_XDP，否則（Docker bridge、veth、lo）或 AF_XDP 開不起來時改用 socket。實際用了哪一個看 Run 頁的 Engine。</td><td class="up">AF_XDP 零複製時不經 kernel 網路堆疊，同樣流量用的 CPU 少很多，適合兩台機器、實體網卡。</td><td class="down">socket 引擎每個收到的封包都走一次 kernel 堆疊，高流量時較吃 CPU；同一台、走 Docker bridge 時用它就好。</td></tr>
           </table></div>
       </div>
 
@@ -491,7 +492,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <ul>
         <li><b>同一台時 UE 多、每個打少比較穩</b>：UPF 的工作跟著 tester 發送線所在的 CPU 跑，UE 越多分得越平均；每個 UE 速率低，封包也比較平均，不容易一次塞滿某顆 CPU 的收包佇列（可再調大 <code>sysctl -w net.core.netdev_max_backlog=10000</code>）。實測：96 CPU、10 gNB × 1000 UE × 30 Mbps，上下行各 30 Gbps。</li>
         <li><b>DL 要更高就加 gNB</b>：每個 gNB 的 DL 是一條連線、一條讀取線，讓每個 gNB 的 DL 約在 2–3 Gbps 以內。</li>
-        <li><b>兩台時</b>：tester 那台不缺 CPU，Downlink batch 可以調到 2 ms，讓 DL 一次合更多封包。</li>
+        <li><b>兩台時</b>：tester 那台不缺 CPU，Downlink batch 可以調到 2 ms，讓 DL 一次合更多封包。Data plane engine 用 <code>auto</code> 或 <code>afxdp</code>，Run 頁的 Engine 要看到 <code>zero-copy</code> 才是最省 CPU 的模式。</li>
         <li><b>任何情況</b>：每個 UE 單一方向不要超過約 3 Gbps（UPF 單核上限）；收 UDP 的網卡要依 port 分流（<code>ethtool -N &lt;網卡&gt; rx-flow-hash udp4 sdfn</code>）。</li>
         <li>跑的時候在 UPF 那台用 <code>mpstat -P ALL 1</code> 看工作有沒有分散；只有少數核心滿載，就是分流或連線數不夠。</li>
       </ul>
@@ -525,6 +526,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </ul>
       <h3>Data plane 卡片</h3>
       <ul>
+        <li><b>Engine</b>：實際使用的資料面引擎。<code>socket</code>；<code>socket (auto: …)</code> 表示選了 auto 但改用 socket，括號裡是原因；<code>af_xdp (ens1f0 zero-copy, 24 queues; …)</code> 列出每張網卡的模式（zero-copy 最快；copy mode 要複製；generic mode 表示驅動不支援原生 XDP，最慢）與佇列數。</li>
         <li><b>Sent／received</b>：最近一秒的速率。received 是真正經過 UPF 回來的量，也就是 UPF 實際轉送的速率。</li>
         <li><b>Packets per second</b>、<b>Total sent／received</b>：總量算內層 IP 封包，單位是 bits（Mb、Gb）。</li>
         <li><b>Loss</b>：到目前為止的 <code>1 − received ÷ sent</code>。</li>
@@ -591,7 +593,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（refactor/dp-performance，2026-10-03）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（refactor/af-xdp，2026-10-07）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 

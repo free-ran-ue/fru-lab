@@ -1413,7 +1413,7 @@ components:
     TesterTraffic:
       type: object
       description: Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
-      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs]
+      required: [ulMbps, dlMbps, packetSize, port, maxDurationMin, dlBatchMs, engine]
       properties:
         ulMbps:
           type: number
@@ -1439,6 +1439,11 @@ components:
           type: integer
           description: Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
           example: 1
+        engine:
+          type: string
+          enum: ['', auto, socket, afxdp]
+          description: How the data plane moves packets. socket = UDP sockets (also when empty). afxdp = AF_XDP on the N3 and N6 interfaces, skipping the kernel's IP/UDP/socket code (zero-copy when the driver supports it, else copy or generic mode). auto = AF_XDP when both interfaces are NICs and it starts, else sockets.
+          example: auto
     TesterUeTemplate:
       type: object
       description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
@@ -1708,8 +1713,12 @@ components:
           $ref: '#/components/schemas/TesterDataplaneSnapshot'
     TesterDataplaneSnapshot:
       type: object
-      required: [activeUes, ul, dl, gnbs, series]
+      required: [engine, activeUes, ul, dl, gnbs, series]
       properties:
+        engine:
+          type: string
+          description: 'How packets move, e.g. "socket", "socket (auto: docker-cn-ran is a bridge, not a NIC)" or "af_xdp (ens2f1 zero-copy, 8 queues)".'
+          example: af_xdp (ens2f1 zero-copy, 8 queues)
         activeUes:
           type: integer
         ul:

@@ -195,6 +195,7 @@ function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
         <h3 className={styles.cardTitle}>Data plane</h3>
         <span className={`${styles.pill} ${dp.activeUes ? styles.pillActive : styles.pillMuted}`}>{dp.activeUes} UEs sending</span>
       </div>
+      {dp.engine && <p className={styles.hint} style={{ marginTop: 0 }}>Engine: <span className={styles.mono}>{dp.engine}</span></p>}
       <div className={styles.dirRow}>
         <DirectionPanel dir="ul" d={dp.ul} series={dp.series} />
         <DirectionPanel dir="dl" d={dp.dl} series={dp.series} />

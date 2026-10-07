@@ -5,6 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**engine** | **string** | How packets move, e.g. \&quot;socket\&quot;, \&quot;socket (auto: docker-cn-ran is a bridge, not a NIC)\&quot; or \&quot;af_xdp (ens2f1 zero-copy, 8 queues)\&quot;. | [default to undefined]
 **activeUes** | **number** |  | [default to undefined]
 **ul** | [**TesterTrafficDirection**](TesterTrafficDirection.md) |  | [default to undefined]
 **dl** | [**TesterTrafficDirection**](TesterTrafficDirection.md) |  | [default to undefined]
@@ -17,6 +18,7 @@ Name | Type | Description | Notes
 import { TesterDataplaneSnapshot } from './api';
 
 const instance: TesterDataplaneSnapshot = {
+    engine,
     activeUes,
     ul,
     dl,

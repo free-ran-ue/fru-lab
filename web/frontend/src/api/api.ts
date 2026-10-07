@@ -162,6 +162,10 @@ export interface TesterCauseCount {
     'count': number;
 }
 export interface TesterDataplaneSnapshot {
+    /**
+     * How packets move, e.g. \"socket\", \"socket (auto: docker-cn-ran is a bridge, not a NIC)\" or \"af_xdp (ens2f1 zero-copy, 8 queues)\".
+     */
+    'engine': string;
     'activeUes': number;
     'ul': TesterTrafficDirection;
     'dl': TesterTrafficDirection;
@@ -526,7 +530,21 @@ export interface TesterTraffic {
      * Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
      */
     'dlBatchMs': number;
+    /**
+     * How the data plane moves packets. socket = UDP sockets (also when empty). afxdp = AF_XDP on the N3 and N6 interfaces, skipping the kernel\'s IP/UDP/socket code (zero-copy when the driver supports it, else copy or generic mode). auto = AF_XDP when both interfaces are NICs and it starts, else sockets.
+     */
+    'engine': TesterTrafficEngineEnum;
 }
+
+export const TesterTrafficEngineEnum = {
+    Empty: '',
+    Auto: 'auto',
+    Socket: 'socket',
+    Afxdp: 'afxdp',
+} as const;
+
+export type TesterTrafficEngineEnum = typeof TesterTrafficEngineEnum[keyof typeof TesterTrafficEngineEnum];
+
 /**
  * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
  */

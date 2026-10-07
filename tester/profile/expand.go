@@ -235,6 +235,11 @@ func validateTraffic(p Profile, verr *ValidationError) {
 	if t.MaxDurationMin < 0 || t.MaxDurationMin > 7*24*60 {
 		verr.add("traffic.maxDurationMin", "must be between 0 (no limit) and 10080 (7 days)")
 	}
+	switch t.Engine {
+	case "", "auto", "socket", "afxdp":
+	default:
+		verr.add("traffic.engine", `must be "auto", "socket" or "afxdp"`)
+	}
 	if t.DlBatchMs < 0 || t.DlBatchMs > 10 {
 		verr.add("traffic.dlBatchMs", "must be between 0 (off) and 10")
 	}
