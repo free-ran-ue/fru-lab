@@ -226,6 +226,9 @@ func (d *fakeDialer) Dial(localIP, amfIP string, amfPort int, timeout time.Durat
 	d.counts[localIP]++
 	n := d.counts[localIP]
 	d.mu.Unlock()
+	if d.script == nil { // the test never lets N2 get this far, but it may race
+		return nil, errors.New("no AMF in this test")
+	}
 	reply, dialErr := d.script(localIP, n)
 	if dialErr != nil {
 		return nil, dialErr

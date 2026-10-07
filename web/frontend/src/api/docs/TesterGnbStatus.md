@@ -5,6 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**cpUeCount** | **number** | Of ueCount, how many are in the control-plane loop. | [default to undefined]
 **index** | **number** |  | [default to undefined]
 **name** | **string** |  | [default to undefined]
 **gnbId** | **string** |  | [default to undefined]
@@ -28,6 +29,7 @@ Name | Type | Description | Notes
 import { TesterGnbStatus } from './api';
 
 const instance: TesterGnbStatus = {
+    cpUeCount,
     index,
     name,
     gnbId,

@@ -31,6 +31,11 @@ var testerReportTmpl = template.Must(template.New("report").Funcs(template.FuncM
 	"dash":    dash,
 	"time":    func(t *time.Time) string { return formatTime(t) },
 	"lossBad": func(r float64) bool { return r >= 0.001 },
+	"rate":    func(v float64) string { return fmt.Sprintf("%.1f/s", v) },
+	"okPct": func(s reportStage) string {
+		n := s.Accepted + s.Rejected + s.TimedOut + s.Failed
+		return formatPct(s.Accepted, n)
+	},
 }).Parse(testerReportTemplate))
 
 type reportStage struct {
@@ -105,6 +110,26 @@ type reportPoint struct {
 	DlRxBps float64 `json:"dlRxBps"`
 }
 
+// reportCpLoop is the control-plane test (absent in older reports).
+type reportCpLoop struct {
+	Ues            int         `json:"ues"`
+	State          string      `json:"state"`
+	DurationSec    float64     `json:"durationSec"`
+	Cycles         int64       `json:"cycles"`
+	Registration   reportStage `json:"registration"`
+	Deregistration reportStage `json:"deregistration"`
+	Cleanup        reportStage `json:"cleanup"`
+	Series         []struct {
+		T, RegPerSec, DeregPerSec, FailPerSec float64
+	} `json:"series"`
+	// filled in by newReportView
+	Procedures []reportStage `json:"-"`
+	RegAvg     float64       `json:"-"` // accepted registrations per second
+	DeregAvg   float64       `json:"-"`
+	RegPeak    float64       `json:"-"`
+	Duration   string        `json:"-"`
+}
+
 type reportSnapshot struct {
 	RunID          string      `json:"runId"`
 	ProfileName    string      `json:"profileName"`
@@ -143,6 +168,7 @@ type reportSnapshot struct {
 		} `json:"gnbs"`
 		Series []reportPoint `json:"series"`
 	} `json:"dataplane"`
+	CpLoop reportCpLoop `json:"cpLoop"`
 }
 
 // reportSetting is one line of the profile section.
@@ -205,7 +231,8 @@ func newReportView(s reportSnapshot, profile json.RawMessage, now time.Time) rep
 		label string
 	}{
 		{&s.N2, "N2 setup"}, {&s.Registration, "Registration"}, {&s.Pdu, "PDU session"},
-		{&s.Deregistration, "UE deregistration"}, {&s.N2Release, "gNB SCTP close"},
+		{&s.Deregistration, map[bool]string{false: "UE deregistration", true: "Throughput UE deregistration"}[s.CpLoop.Ues > 0]},
+		{&s.CpLoop.Cleanup, "Control-plane UE deregistration"}, {&s.N2Release, "gNB SCTP close"},
 	} {
 		if st.stage.Expected == 0 && st.stage.Attempted == 0 {
 			continue // e.g. cleanup that never ran
@@ -254,6 +281,19 @@ func newReportView(s reportSnapshot, profile json.RawMessage, now time.Time) rep
 	} {
 		if kv.n > 0 {
 			v.UeStates = append(v.UeStates, reportSetting{kv.k, formatInt(kv.n)})
+		}
+	}
+
+	if cp := &v.S.CpLoop; cp.Ues > 0 {
+		cp.Registration.Label, cp.Deregistration.Label = "Registration", "Deregistration"
+		cp.Procedures = []reportStage{cp.Registration, cp.Deregistration}
+		if cp.DurationSec > 0 {
+			cp.RegAvg = float64(cp.Registration.Accepted) / cp.DurationSec
+			cp.DeregAvg = float64(cp.Deregistration.Accepted) / cp.DurationSec
+			cp.Duration = formatDuration(cp.DurationSec)
+		}
+		for _, p := range cp.Series {
+			cp.RegPeak = math.Max(cp.RegPeak, p.RegPerSec)
 		}
 	}
 

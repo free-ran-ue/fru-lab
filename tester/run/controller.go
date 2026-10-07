@@ -309,6 +309,12 @@ type run struct {
 	regStage         *procStage
 	pduStage         *procStage
 	teids            gnb.TeidAllocator
+	cp               *cpLoop // the control-plane test
+	// tpDone is closed once every throughput UE has a final PDU outcome
+	// (tpLeft, under mu, counts those still without one); the
+	// control-plane loop starts then.
+	tpDone chan struct{}
+	tpLeft int
 
 	stop context.CancelFunc
 	ctx  context.Context
@@ -354,6 +360,7 @@ type ueRun struct {
 	deregStart    time.Time
 	regDone       bool // has a final registration outcome (or was skipped)
 	pduDone       bool
+	cpCycled      bool // a control-plane UE that finished at least one cycle
 	ueIP          string
 	pduSetup      *gnb.PduSetup
 
@@ -374,12 +381,14 @@ func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify 
 	cleanupCtx, abortCleanup := context.WithCancel(context.Background())
 	r := &run{
 		cleanupCtx: cleanupCtx, abortCleanup: abortCleanup,
-		dereg:     metrics.NewStage("deregistration", len(plan.Ues)),
+		dereg:     metrics.NewStage("deregistration", p.Scale.Throughput()),
 		n2Release: metrics.NewStage("n2Release", len(plan.Gnbs)),
 		id:        id, profile: p, plan: plan, deps: deps, notify: notify,
 		n2:        metrics.NewStage("n2", len(plan.Gnbs)),
-		reg:       metrics.NewStage("registration", len(plan.Ues)),
-		pdu:       metrics.NewStage("pdu", len(plan.Ues)),
+		reg:       metrics.NewStage("registration", p.Scale.Throughput()),
+		pdu:       metrics.NewStage("pdu", p.Scale.Throughput()),
+		tpDone:    make(chan struct{}),
+		tpLeft:    p.Scale.Throughput(),
 		ctx:       ctx,
 		stop:      cancel,
 		done:      make(chan struct{}),
@@ -395,8 +404,13 @@ func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify 
 		r.gnbs[i] = GnbStatus{GnbSpec: spec, State: GnbPending}
 	}
 	for i, spec := range plan.Ues {
-		r.ues[i] = ueRun{spec: spec, state: UePending}
+		// control-plane UEs are never part of the registration and PDU stages
+		r.ues[i] = ueRun{spec: spec, state: UePending, regDone: spec.Cp, pduDone: spec.Cp}
 	}
+	if r.tpLeft == 0 {
+		close(r.tpDone)
+	}
+	r.cp = newCpLoop(r)
 	r.summary.Pending = len(plan.Ues)
 	r.regStage = newProcStage(p.Rates.Registration, len(plan.Ues), r.attemptRegistration)
 	r.pduStage = newProcStage(p.Rates.Pdu, len(plan.Ues), r.attemptPdu)
@@ -451,8 +465,9 @@ func (r *run) snapshot() Snapshot {
 		RunID: r.id, ProfileName: r.profile.Name, State: r.st, Error: r.errMsg,
 		N2: r.n2.Snapshot(), Registration: r.reg.Snapshot(), Pdu: r.pdu.Snapshot(),
 		Deregistration: r.dereg.Snapshot(), N2Release: r.n2Release.Snapshot(), StopReason: r.stopReason,
-		Gnbs: append([]GnbStatus(nil), r.gnbs...),
-		Ues:  r.summary,
+		Gnbs:   append([]GnbStatus(nil), r.gnbs...),
+		Ues:    r.summary,
+		CpLoop: r.cp.snapshot(r.deps.Now()),
 		// copy into a non-nil slice: an empty list must encode as [] (the
 		// Run page reads failedUes.length; null blanked it)
 		FailedUes: append([]UeFailure{}, r.failures...),
@@ -498,6 +513,8 @@ func (r *run) execute() {
 		go func() { defer pipelines.Done(); r.pduStage.run(r.ctx) }()
 		r.setState(StateN2)
 		r.runN2()
+		pipelines.Add(1)
+		go func() { defer pipelines.Done(); r.runCpLoop() }()
 	}
 	if r.ctx.Err() == nil {
 		r.setState(StateRunning)
@@ -522,6 +539,9 @@ func (r *run) execute() {
 func (r *run) skipUnfinished() {
 	r.regStage.drain()
 	r.pduStage.drain()
+	if r.cp.stage != nil {
+		r.cp.stage.drain()
+	}
 	r.mu.Lock()
 	for i := range r.gnbs {
 		if s := r.gnbs[i].State; s == GnbPending || s == GnbConnecting {
@@ -535,8 +555,12 @@ func (r *run) skipUnfinished() {
 			r.reg.Skip()
 		}
 		if !u.pduDone {
-			u.pduDone = true
+			r.markPduDone(i)
 			r.pdu.Skip()
+		}
+		if u.spec.Cp && u.state == UePending && u.cpCycled {
+			r.setUeState(i, UeDeregistered) // between cycles: its last one deregistered it
+			continue
 		}
 		switch u.state {
 		case UePending, UeRegistering, UeRegistered, UeEstablishing:
@@ -721,7 +745,7 @@ func (r *run) deregisterAll() {
 		u := &r.ues[i]
 		assoc := r.assocs[u.spec.Gnb]
 		if u.link == nil || assoc == nil || assoc.Err() != nil || r.cleanupCtx.Err() != nil {
-			r.dereg.Skip()
+			r.deregStage(i).Skip()
 			continue
 		}
 		todo = append(todo, i)
@@ -747,13 +771,22 @@ func (r *run) deregisterAll() {
 	}
 	stage.run(ctx)
 	for _, i := range stage.drain() { // aborted before they were sent (or retried)
-		r.dereg.Skip()
+		r.deregStage(i).Skip()
 		r.mu.Lock()
 		r.detach(i)
 		r.setCleanupState(i, UeCancelled)
 		r.mu.Unlock()
 	}
 	r.notify()
+}
+
+// deregStage is the cleanup stage that counts UE i's deregistration:
+// throughput and control-plane UEs are counted apart.
+func (r *run) deregStage(i int) *metrics.Stage {
+	if r.ues[i].spec.Cp {
+		return r.cp.cleanup
+	}
+	return r.dereg
 }
 
 // setCleanupState moves a UE to st during cleanup, except one that
@@ -777,6 +810,7 @@ func (r *run) detach(i int) {
 // attemptDeregistration is the deregistration stage's callback.
 func (r *run) attemptDeregistration(i int) bool {
 	rates := r.profile.Rates.Deregistration
+	stage := r.deregStage(i)
 	r.mu.Lock()
 	u := &r.ues[i]
 	u.deregAttempts++
@@ -787,7 +821,7 @@ func (r *run) attemptDeregistration(i int) bool {
 	assoc, link := r.assocs[u.spec.Gnb], u.link
 	r.setCleanupState(i, UeDeregistering)
 	r.mu.Unlock()
-	r.dereg.Begin(attempt > 1)
+	stage.Begin(attempt > 1)
 	r.notify()
 
 	out := procedure.Deregister(assoc, link, u.nas, time.Duration(rates.TimeoutMs)*time.Millisecond, r.cleanupCtx.Done())
@@ -799,7 +833,7 @@ func (r *run) attemptDeregistration(i int) bool {
 
 	if r.cleanupCtx.Err() != nil && out.Result != metrics.Accepted {
 		// a second Stop skipped the rest of cleanup while this one waited
-		r.dereg.Finish(metrics.Failed, latency, "cleanup skipped")
+		stage.Finish(metrics.Failed, latency, "cleanup skipped")
 		r.mu.Lock()
 		r.detach(i)
 		r.setCleanupState(i, UeCancelled)
@@ -808,7 +842,7 @@ func (r *run) attemptDeregistration(i int) bool {
 		return false
 	}
 	if out.Result == metrics.Accepted {
-		r.dereg.Finish(metrics.Accepted, latency, "")
+		stage.Finish(metrics.Accepted, latency, "")
 		r.mu.Lock()
 		r.detach(i)
 		r.setCleanupState(i, UeDeregistered)
@@ -817,11 +851,11 @@ func (r *run) attemptDeregistration(i int) bool {
 		return false
 	}
 	if attempt <= rates.Retries && r.cleanupCtx.Err() == nil && out.Result != metrics.Rejected {
-		r.dereg.Retrying() // same link: it still carries the AMF UE NGAP ID
+		stage.Retrying() // same link: it still carries the AMF UE NGAP ID
 		r.notify()
 		return true
 	}
-	r.dereg.Finish(out.Result, latency, out.Cause)
+	stage.Finish(out.Result, latency, out.Cause)
 	r.mu.Lock()
 	r.detach(i)
 	r.setCleanupState(i, UeFailed)
@@ -943,7 +977,7 @@ func (r *run) startGnb(i int, conn gnb.Conn, id gnb.Identity) {
 	r.mu.Unlock()
 	go r.watchAssociation(i, conn, assoc)
 	for u := range r.ues {
-		if r.ues[u].spec.Gnb == i {
+		if r.ues[u].spec.Gnb == i && !r.ues[u].spec.Cp {
 			r.regStage.enqueue(u)
 		}
 	}
@@ -974,13 +1008,29 @@ func (r *run) skipGnbUes(gi int) {
 		if u.spec.Gnb != gi {
 			continue
 		}
-		u.regDone, u.pduDone = true, true
-		r.reg.Skip()
-		r.pdu.Skip()
+		if !u.spec.Cp {
+			u.regDone = true
+			r.markPduDone(i)
+			r.reg.Skip()
+			r.pdu.Skip()
+		}
 		r.setUeState(i, UeSkipped)
 	}
 	r.mu.Unlock()
 	r.notify()
+}
+
+// markPduDone records that throughput UE i has its final PDU outcome;
+// the last one releases the control-plane loop. r.mu must be held.
+func (r *run) markPduDone(i int) {
+	u := &r.ues[i]
+	if u.pduDone {
+		return
+	}
+	u.pduDone = true
+	if r.tpLeft--; r.tpLeft == 0 {
+		close(r.tpDone)
+	}
 }
 
 func (r *run) recordFailure(i int, stage, cause string, attempts int) {
@@ -1047,7 +1097,8 @@ func (r *run) attemptRegistration(i int) bool {
 	r.reg.Finish(out.Result, latency, out.Cause)
 	r.pdu.Skip()
 	r.mu.Lock()
-	u.regDone, u.pduDone = true, true
+	u.regDone = true
+	r.markPduDone(i)
 	r.setUeState(i, UeFailed)
 	r.recordFailure(i, "registration", out.Cause, attempt)
 	r.mu.Unlock()
@@ -1077,7 +1128,7 @@ func (r *run) attemptPdu(i int) bool {
 	if out.Result == metrics.Accepted {
 		r.pdu.Finish(metrics.Accepted, latency, "")
 		r.mu.Lock()
-		u.pduDone = true
+		r.markPduDone(i)
 		u.ueIP, u.pduSetup = out.UeIP.String(), out.Pdu
 		r.setUeState(i, UeEstablished)
 		r.gnbs[u.spec.Gnb].Established++
@@ -1097,7 +1148,7 @@ func (r *run) attemptPdu(i int) bool {
 	}
 	r.pdu.Finish(out.Result, latency, out.Cause)
 	r.mu.Lock()
-	u.pduDone = true
+	r.markPduDone(i)
 	r.setUeState(i, UeFailed)
 	r.recordFailure(i, "pdu", out.Cause, attempt)
 	r.mu.Unlock()

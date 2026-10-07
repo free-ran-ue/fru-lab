@@ -214,10 +214,18 @@ export default function TesterSetupPage() {
   }, [profile, isLoading, addError])
 
   function handleChange(path: string, value: string | number) {
-    setProfile((prev) => setPath(prev, path, value))
+    setProfile((prev) => {
+      const next = setPath(prev, path, value)
+      // "every UE carries traffic" keeps holding when the UE count changes
+      if (path === 'scale.ueCount' && prev.scale.throughputUeCount === prev.scale.ueCount) {
+        next.scale.throughputUeCount = next.scale.ueCount
+      }
+      return next
+    })
   }
 
   const isDirty = JSON.stringify(profile) !== savedJson
+  const cpUes = Math.max(0, (profile.scale.ueCount || 0) - (profile.scale.throughputUeCount || 0))
   const list = profiles ?? []
   const savedName = list.find((p) => p.id === currentId)?.profile.name ?? ''
   const nameError = profile.name.trim() === ''
@@ -361,9 +369,13 @@ export default function TesterSetupPage() {
                   onNew={() => { if (leave()) openNew(list) }} />
                 <Field label="gNB count" path="scale.gnbCount" numeric {...fieldProps} />
                 <Field label="UE count" path="scale.ueCount" numeric {...fieldProps} />
+                <Field label="Throughput UEs" path="scale.throughputUeCount" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>
                 UEs fill gNBs in order: each gNB takes up to {plan ? plan.uesPerGnb : '⌈UEs ÷ gNBs⌉'} UEs and the last one may be partly filled.
+                {' '}{cpUes > 0
+                  ? <>UEs #1–{profile.scale.throughputUeCount} establish a PDU session and carry traffic; the other <b>{cpUes.toLocaleString()}</b> are the control-plane test: once every throughput UE is done they register and deregister in a loop until Stop, with no PDU session.</>
+                  : <>Every UE carries traffic; lower Throughput UEs to run a control-plane test with the rest.</>}
               </p>
             </section>
 
@@ -461,9 +473,9 @@ export default function TesterSetupPage() {
                 <Field label="Data plane engine" path="traffic.engine" options={['auto', 'socket', 'afxdp']} {...fieldProps} />
               </div>
               <p className={styles.hint}>
-                Every UE starts sending as soon as its PDU session is up. At full scale: uplink
-                {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>,
-                downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.ueCount, profile.traffic.packetSize)}</span>.
+                Every throughput UE starts sending as soon as its PDU session is up. At full scale: uplink
+                {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.throughputUeCount, profile.traffic.packetSize)}</span>,
+                downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.throughputUeCount, profile.traffic.packetSize)}</span>.
                 0 turns a direction off. The packet size can go up to the network&apos;s MTU minus 44 bytes of GTP-U (1456 at
                 MTU 1500); bigger packets carry more for the same packets per second.
                 {' '}With a max run time the run stops itself, exactly as if you pressed Stop.
@@ -511,6 +523,20 @@ export default function TesterSetupPage() {
             </section>
 
             <section className={styles.card}>
+              <h3 className={styles.cardTitle}>Control-plane loop{cpUes === 0 && <span className={styles.dirtyTag} style={{ background: '#f1f5f9', color: '#64748b' }}>off: no control-plane UEs</span>}</h3>
+              <div className={styles.fieldGrid}>
+                <Field label="Registrations per second" path="rates.cpLoop.ratePerSec" numeric {...fieldProps} />
+                <Field label="Max UEs in a cycle" path="rates.cpLoop.maxInFlight" numeric {...fieldProps} />
+                <Field label="Timeout per procedure (ms)" path="rates.cpLoop.timeoutMs" numeric {...fieldProps} />
+                <Field label="Stay registered (ms)" path="rates.cpLoop.holdMs" numeric {...fieldProps} />
+              </div>
+              <p className={styles.hint}>
+                Each cycle registers a control-plane UE (full authentication), keeps it registered, then deregisters it, and the UE queues for its next cycle.
+                A failed procedure is counted with its cause and the UE simply tries again later. Max UEs in a cycle includes the time they stay registered.
+              </p>
+            </section>
+
+            <section className={styles.card}>
               <h3 className={styles.cardTitle}>Plan preview</h3>
               {!validation && <p className={styles.hint}>Checking…</p>}
               {validation && !validation.valid && (
@@ -530,7 +556,7 @@ export default function TesterSetupPage() {
                           <td className={styles.mono}>{g.gnbId}</td>
                           <td className={styles.mono}>{g.n2Ip}/{plan.n2Prefix}</td>
                           <td className={styles.mono}>{g.n3Ip}/{plan.n3Prefix}</td>
-                          <td>{g.ueCount ? `${g.ueCount} (#${g.ueFirst}–${g.ueLast})` : '0'}</td>
+                          <td>{g.ueCount ? `${g.ueCount} (#${g.ueFirst}–${g.ueLast})` : '0'}{g.cpUeCount > 0 && <span className={styles.pingNote}> · {g.cpUeCount} control-plane</span>}</td>
                           <td className={styles.mono}>{g.ueCount ? `${g.firstSupi} … ${g.lastSupi.slice(-4)}` : '—'}</td>
                         </tr>
                       ))}

@@ -22,6 +22,9 @@ docs/TesterBenchResult.md
 docs/TesterBenchSettings.md
 docs/TesterBenchStep.md
 docs/TesterCauseCount.md
+docs/TesterCpLoopRate.md
+docs/TesterCpLoopSnapshot.md
+docs/TesterCpPoint.md
 docs/TesterDataplaneSnapshot.md
 docs/TesterFieldError.md
 docs/TesterGnbSpec.md

@@ -161,6 +161,73 @@ export interface TesterCauseCount {
     'cause': string;
     'count': number;
 }
+/**
+ * Paces the control-plane loop - at most ratePerSec registrations start per second and at most maxInFlight UEs are in a cycle at once. A cycle registers, stays registered holdMs, then deregisters; each procedure is bounded by timeoutMs. No retries - a failed cycle is counted and the UE tries again later. Only checked when there are control-plane UEs.
+ */
+export interface TesterCpLoopRate {
+    'ratePerSec': number;
+    'maxInFlight': number;
+    'timeoutMs': number;
+    /**
+     * 0..3600000
+     */
+    'holdMs': number;
+}
+/**
+ * The control-plane test. registration and deregistration count every attempt of every cycle (expected is 0, a loop has no end); latencies are of accepted procedures.
+ */
+export interface TesterCpLoopSnapshot {
+    'ues': number;
+    /**
+     * off = no control-plane UEs; waiting = throughput UEs are still being set up.
+     */
+    'state': TesterCpLoopSnapshotStateEnum;
+    'startedAt'?: string | null;
+    /**
+     * How long the loop has run.
+     */
+    'durationSec': number;
+    /**
+     * Control-plane UEs registered right now.
+     */
+    'registered': number;
+    /**
+     * Cycles whose registration and deregistration were both accepted.
+     */
+    'cycles': number;
+    'registration': TesterStageSnapshot;
+    'deregistration': TesterStageSnapshot;
+    /**
+     * After Stop, the control-plane UEs still registered deregister (expected = every control-plane UE; the others are skipped). The throughput UEs\' cleanup is the run snapshot\'s deregistration.
+     */
+    'cleanup': TesterStageSnapshot;
+    /**
+     * Per-second rates from the loop\'s start, in at most 600 points (like the data plane\'s).
+     */
+    'series': Array<TesterCpPoint>;
+}
+
+export const TesterCpLoopSnapshotStateEnum = {
+    Off: 'off',
+    Waiting: 'waiting',
+    Running: 'running',
+    Stopped: 'stopped',
+} as const;
+
+export type TesterCpLoopSnapshotStateEnum = typeof TesterCpLoopSnapshotStateEnum[keyof typeof TesterCpLoopSnapshotStateEnum];
+
+export interface TesterCpPoint {
+    /**
+     * Seconds since the loop started.
+     */
+    't': number;
+    'regPerSec': number;
+    'deregPerSec': number;
+    /**
+     * Procedures that did not succeed.
+     */
+    'failPerSec': number;
+}
 export interface TesterDataplaneSnapshot {
     /**
      * How packets move, e.g. \"socket\", \"socket (auto: docker-cn-ran is a bridge, not a NIC)\" or \"af_xdp (ens2f1 zero-copy, 8 queues)\".
@@ -183,6 +250,10 @@ export interface TesterFieldError {
     'message': string;
 }
 export interface TesterGnbSpec {
+    /**
+     * Of ueCount, how many are in the control-plane loop.
+     */
+    'cpUeCount': number;
     'index': number;
     'name': string;
     'gnbId': string;
@@ -201,6 +272,10 @@ export interface TesterGnbSpec {
     'lastSupi': string;
 }
 export interface TesterGnbStatus {
+    /**
+     * Of ueCount, how many are in the control-plane loop.
+     */
+    'cpUeCount': number;
     'index': number;
     'name': string;
     'gnbId': string;
@@ -415,10 +490,15 @@ export interface TesterProfileRates {
     'registration': TesterProcedureRate;
     'pdu': TesterProcedureRate;
     'deregistration': TesterProcedureRate;
+    'cpLoop': TesterCpLoopRate;
 }
 export interface TesterProfileScale {
     'gnbCount': number;
     'ueCount': number;
+    /**
+     * How many UEs, the first ones, establish a PDU session and carry traffic (0..ueCount). The rest are the control-plane test - they register and deregister in a loop (rates.cpLoop) once every throughput UE is done. fru-tester treats an absent value as ueCount.
+     */
+    'throughputUeCount': number;
 }
 export interface TesterRunReport {
     'profile': TesterProfile;
@@ -447,6 +527,7 @@ export interface TesterRunSnapshot {
      */
     'failedUes': Array<TesterUeFailure>;
     'dataplane': TesterDataplaneSnapshot;
+    'cpLoop': TesterCpLoopSnapshot;
 }
 
 export const TesterRunSnapshotStateEnum = {
