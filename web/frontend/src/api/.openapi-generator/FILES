@@ -29,6 +29,8 @@ docs/TesterGnbStatus.md
 docs/TesterGnbTraffic.md
 docs/TesterHistorySummary.md
 docs/TesterLatency.md
+docs/TesterPingRequest.md
+docs/TesterPingResult.md
 docs/TesterPlan.md
 docs/TesterProcedureRate.md
 docs/TesterProfile.md

@@ -870,6 +870,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/tester/network/ping:
+    post:
+      summary: Ping test of one network
+      description: Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR's prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF's N3 or the UPF's N6 three times, and removes the address again. Only that network's fields are checked. Not while a run is active.
+      operationId: testerNetworkPing
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterPingRequest'
+      responses:
+        '200':
+          description: Test done; received may be 0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterPingResult'
+        '400':
+          description: That network's settings are wrong (errors lists the fields), or an unknown plane
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run or another ping test is active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/bench:
     get:
       summary: Latest data plane bench
@@ -1839,6 +1871,45 @@ components:
           format: int64
         dlLossRate:
           type: number
+    TesterPingRequest:
+      type: object
+      required: [plane, profile]
+      properties:
+        plane:
+          type: string
+          enum: [n2, n3, n6]
+        profile:
+          $ref: '#/components/schemas/TesterProfile'
+    TesterPingResult:
+      type: object
+      required: [plane, interface, source, target, added, sent, received, rttMs, error]
+      properties:
+        plane:
+          type: string
+          enum: [n2, n3, n6]
+        interface:
+          type: string
+        source:
+          type: string
+          description: The address the test used, with its prefix length.
+          example: 10.0.1.100/24
+        target:
+          type: string
+          description: The AMF (N2), the UPF's N3 or the UPF's N6 address.
+        added:
+          type: boolean
+          description: The source was added to the interface for the test and removed again.
+        sent:
+          type: integer
+        received:
+          type: integer
+        rttMs:
+          type: array
+          items:
+            type: number
+        error:
+          type: string
+          description: Why the test could not run (e.g. the address could not be added) or a send error such as no route to host; empty otherwise.
     TesterBenchSettings:
       type: object
       required: [packetSize, stepSeconds, gso]

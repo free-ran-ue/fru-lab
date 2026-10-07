@@ -24,6 +24,9 @@ type fakeCtrl struct {
 	snap        run.Snapshot
 	changed     chan struct{}
 	reports     []run.Report
+	ping        run.PingResult
+	pingErr     error
+	pingPlane   string
 }
 
 func (f *fakeCtrl) Validate(profile.Profile) (*profile.Plan, error) {
@@ -37,6 +40,10 @@ func (f *fakeCtrl) Stop() (run.Snapshot, error)                 { return f.snap,
 func (f *fakeCtrl) Snapshot() run.Snapshot                      { return f.snap }
 func (f *fakeCtrl) Changed() <-chan struct{}                    { return f.changed }
 func (f *fakeCtrl) Reports() []run.Report                       { return f.reports }
+func (f *fakeCtrl) Ping(_ profile.Profile, plane string) (run.PingResult, error) {
+	f.pingPlane = plane
+	return f.ping, f.pingErr
+}
 
 // fakeBench stands in for *bench.Runner.
 type fakeBench struct {
@@ -204,4 +211,30 @@ func TestARunCannotStartDuringABench(t *testing.T) {
 	rec := do(t, h, http.MethodPost, "/api/run", `{}`, "t")
 	require.Equal(t, http.StatusConflict, rec.Code)
 	require.Contains(t, rec.Body.String(), "bench")
+}
+
+func TestPingStatusCodes(t *testing.T) {
+	body := `{"plane":"n3","profile":{"name":"x"}}`
+	ctrl := &fakeCtrl{ping: run.PingResult{Plane: "n3", Sent: 3, Received: 3, RttMs: []float64{0.1, 0.2, 0.3}}}
+	rec := do(t, newTestRouter(ctrl, "t"), http.MethodPost, "/api/network/ping", body, "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "n3", ctrl.pingPlane)
+	var res run.PingResult
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &res))
+	require.Equal(t, 3, res.Received)
+
+	verr := &profile.ValidationError{Errors: []profile.FieldError{{Field: "network.n3.upfIp", Message: "bad"}}}
+	for err, code := range map[error]int{
+		verr:                    http.StatusBadRequest,
+		profile.ErrUnknownPlane: http.StatusBadRequest,
+		run.ErrRunActive:        http.StatusConflict,
+		run.ErrPingActive:       http.StatusConflict,
+	} {
+		rec := do(t, newTestRouter(&fakeCtrl{pingErr: err}, "t"), http.MethodPost, "/api/network/ping", body, "t")
+		require.Equal(t, code, rec.Code, err.Error())
+	}
+	rec = do(t, newTestRouter(&fakeCtrl{pingErr: verr}, "t"), http.MethodPost, "/api/network/ping", body, "t")
+	require.Contains(t, rec.Body.String(), `"field":"network.n3.upfIp"`)
+	require.Equal(t, http.StatusBadRequest, do(t, newTestRouter(&fakeCtrl{}, "t"), http.MethodPost, "/api/network/ping", `{"plane":"n2","extra":1}`, "t").Code)
+	require.Equal(t, http.StatusConflict, do(t, newTestRouter(&fakeCtrl{startErr: run.ErrPingActive}, "t"), http.MethodPost, "/api/run", `{}`, "t").Code)
 }

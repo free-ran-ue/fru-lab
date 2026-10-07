@@ -30,7 +30,9 @@ var (
 
 // Deps are the controller's side effects, injected so tests can fake them.
 type Deps struct {
-	Addrs  netcfg.AddrManager
+	Addrs netcfg.AddrManager
+	// Pinger sends the Setup page's ping tests; nil = netcfg.ICMPPinger.
+	Pinger netcfg.Pinger
 	Dialer gnb.Dialer
 	Log    loggergoModel.LoggerInterface
 	Now    func() time.Time
@@ -70,6 +72,7 @@ type Controller struct {
 
 	mu      sync.Mutex
 	current *run
+	pinging bool          // a ping test holds addresses on the host; no run may start
 	past    []*run        // finished runs before current, oldest first, at most keptReports
 	changed chan struct{} // closed and replaced on every state change
 }
@@ -86,6 +89,9 @@ func NewController(deps Deps) *Controller {
 	}
 	if deps.MaxDurationUnit == 0 {
 		deps.MaxDurationUnit = time.Minute
+	}
+	if deps.Pinger == nil {
+		deps.Pinger = netcfg.ICMPPinger{}
 	}
 	return &Controller{deps: deps, changed: make(chan struct{})}
 }
@@ -188,6 +194,10 @@ func (c *Controller) Start(p profile.Profile) (Snapshot, error) {
 		c.mu.Unlock()
 		return Snapshot{}, ErrRunActive
 	}
+	if c.pinging {
+		c.mu.Unlock()
+		return Snapshot{}, ErrPingActive
+	}
 	c.mu.Unlock()
 
 	plan, err := c.Validate(p)
@@ -200,6 +210,10 @@ func (c *Controller) Start(p profile.Profile) (Snapshot, error) {
 	if c.current != nil && !c.current.state().Finished() {
 		c.mu.Unlock()
 		return Snapshot{}, ErrRunActive
+	}
+	if c.pinging {
+		c.mu.Unlock()
+		return Snapshot{}, ErrPingActive
 	}
 	if c.current != nil {
 		c.past = append(c.past, c.current)

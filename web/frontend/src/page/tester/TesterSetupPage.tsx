@@ -9,6 +9,7 @@ import type { TesterFieldError, TesterPlan, TesterProfile, TesterValidateRespons
 import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
 import { formatBps } from './testerFormat'
 import styles from './tester.module.css'
+import PingTest from './PingTest'
 import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
 
@@ -244,6 +245,7 @@ export default function TesterSetupPage() {
                 <Field label="AMF port" path="network.n2.amfPort" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>fru-tester adds one IP per gNB to this interface when the run starts and removes them when it stops. IPs already on the host and the AMF IP are skipped.</p>
+              <PingTest plane="n2" label="Ping AMF" profile={profile} />
             </section>
 
             <section className={styles.card}>
@@ -256,6 +258,7 @@ export default function TesterSetupPage() {
                 <Field label="UPF port" path="network.n3.upfPort" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it.</p>
+              <PingTest plane="n3" label="Ping UPF (N3)" profile={profile} />
             </section>
 
             <section className={styles.card}>
@@ -272,6 +275,7 @@ export default function TesterSetupPage() {
                 the run, which also gives the host a route to that subnet. Downlink is sent from it to each UE&apos;s IP; the tester
                 routes the UE pool via the UPF N6 IP for the run. Both are removed afterwards.
               </p>
+              <PingTest plane="n6" label="Ping UPF (N6)" profile={profile} />
             </section>
 
             <section className={styles.card}>

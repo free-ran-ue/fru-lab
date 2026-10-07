@@ -289,7 +289,7 @@ make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），�
         </div>
 
         <h4>1. 找出 B 的哪張網卡接到哪個網路</h4>
-        <p>每張網卡先暫時加一個 IP、ping 對面的 pod，通了就知道是哪個網路，再拿掉。用 <code>.6.250</code> 這種不會和 gNB 撞到的 IP。</p>
+        <p>每張網卡先暫時加一個 IP、ping 對面的 pod，通了就知道是哪個網路，再拿掉。用 <code>.6.250</code> 這種不會和 gNB 撞到的 IP。網卡對應確定、Setup 頁填好之後，也可以直接按 N2、N3、N6 卡片上的 <b>Ping</b> 按鈕確認（見「Setup 頁欄位」的 ping 測試）。</p>
         <div class="where">在 B 上</div>
         <div class="code"><button class="copy" type="button">複製</button><pre>ip -br link   <span class="cmt"># LOWER_UP 代表線有接上</span>
 
@@ -420,6 +420,10 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
 
       <div class="block fields" id="f-network">
         <h3><span class="tag n2">N2</span><span class="tag n3">N3</span><span class="tag n6">N6</span> 網路</h3>
+        <div class="why">
+          <p><b>Ping 測試：</b>每張網路卡片下方有一個按鈕（<b>Ping AMF</b>、<b>Ping UPF (N3)</b>、<b>Ping UPF (N6)</b>），不用開始 run 就能確認這個網路設好後通不通。按下去時，fru-tester 會用 run 會用的位址，也就是第一個 gNB 的 IP 加上 CIDR 的遮罩（N6 用 sink 和它的遮罩）。主機沒有這個位址就暫時加到卡片設定的網卡上，ping 對端 3 次（N2 是 AMF、N3 是 UPF N3 IP、N6 是 UPF N6 IP），再把位址移除。</p>
+          <p>只檢查這張卡片自己的欄位，其他卡片沒填好也能測。結果會顯示回應數與平均延遲；沒有回應時檢查線路、對端是否在同一個網段、核網那一側的 VLAN，以及對端是否允許 ping。run 進行中不能測；測試進行中也不能開始 run。</p>
+        </div>
         <div class="tbl"><table>
           <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
           <tr class="grp"><td colspan="5"><span class="tag n2">N2 · gNB ↔ AMF</span></td></tr>
@@ -569,6 +573,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <h3>排錯</h3>
       <div class="tbl"><table>
         <tr><th>症狀</th><th>先檢查</th></tr>
+        <tr><td>不確定網路有沒有設對</td><td>Setup 頁 N2、N3、N6 卡片的 Ping 按鈕：用 run 會用的位址 ping AMF、UPF N3、UPF N6，不用開始 run。</td></tr>
         <tr><td>N2 一直逾時</td><td>有沒有 <code>modprobe sctp</code>；AMF 的 <code>ngapIpList</code>；<code>tcpdump -ni &lt;N2 網卡&gt; sctp</code> 有沒有 INIT 出去、INIT ACK 回來；兩台時先 ping AMF。</td></tr>
         <tr><td>Registration 失敗 <code>5gmm(N)</code></td><td>訂閱資料（IMSI 範圍、K、OPc、SQN）；PLMN、TAC、切片和 AMF 設定一致。<code>5gmm(62)</code> 是切片不對。</td></tr>
         <tr><td>PDU 逾時</td><td>SMF 與 UPF 的 PFCP 有沒有連上；CHF 的 <code>cgf.enable</code>；重開順序。</td></tr>

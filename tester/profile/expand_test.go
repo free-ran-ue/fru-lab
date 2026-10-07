@@ -234,3 +234,43 @@ func TestExpandWantsTheSinkWithItsPrefix(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, netip.MustParsePrefix("172.26.6.1/16"), p.Network.N6.Sink())
 }
+
+func TestPingTargetUsesTheFirstGnbIPOrTheSink(t *testing.T) {
+	p := sampleProfile()
+	n2, err := PingTargetFor(p, PlaneN2, []netip.Addr{netip.MustParseAddr("10.0.1.3")})
+	require.NoError(t, err)
+	// .1 is the AMF and .3 is on the host, as in TestExpandFillsGnbsInOrder
+	require.Equal(t, PingTarget{Interface: p.Network.N2.Interface, Source: netip.MustParsePrefix("10.0.1.2/24"), Peer: netip.MustParseAddr("10.0.1.1")}, n2)
+
+	n3, err := PingTargetFor(p, PlaneN3, nil)
+	require.NoError(t, err)
+	require.Equal(t, netip.MustParseAddr(p.Network.N3.UpfIP), n3.Peer)
+	require.Equal(t, p.Network.N3.Interface, n3.Interface)
+
+	n6, err := PingTargetFor(p, PlaneN6, nil)
+	require.NoError(t, err)
+	require.Equal(t, PingTarget{Interface: "ens21", Source: netip.MustParsePrefix("10.0.3.2/24"), Peer: netip.MustParseAddr("10.0.3.1")}, n6)
+
+	_, err = PingTargetFor(p, "n4", nil)
+	require.ErrorIs(t, err, ErrUnknownPlane)
+}
+
+// A ping test checks only its own network's fields: a broken UE template
+// or another network does not stop it.
+func TestPingTargetChecksOnlyItsOwnNetwork(t *testing.T) {
+	p := sampleProfile()
+	p.Ue.Key = "nope"
+	p.Network.N6.SinkIP = "10.0.3.2"
+	_, err := PingTargetFor(p, PlaneN2, nil)
+	require.NoError(t, err)
+
+	_, err = PingTargetFor(p, PlaneN6, nil)
+	var verr *ValidationError
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, "network.n6.sinkIp", verr.Errors[0].Field)
+
+	p.Network.N3.UpfIP = "x"
+	_, err = PingTargetFor(p, PlaneN3, nil)
+	require.ErrorAs(t, err, &verr)
+	require.Equal(t, []FieldError{{Field: "network.n3.upfIp", Message: `"x" is not an IPv4 address`}}, verr.Errors)
+}

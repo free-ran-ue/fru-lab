@@ -272,6 +272,51 @@ export interface TesterLatency {
     'p99Ms': number;
     'maxMs': number;
 }
+export interface TesterPingRequest {
+    'plane': TesterPingRequestPlaneEnum;
+    'profile': TesterProfile;
+}
+
+export const TesterPingRequestPlaneEnum = {
+    N2: 'n2',
+    N3: 'n3',
+    N6: 'n6',
+} as const;
+
+export type TesterPingRequestPlaneEnum = typeof TesterPingRequestPlaneEnum[keyof typeof TesterPingRequestPlaneEnum];
+
+export interface TesterPingResult {
+    'plane': TesterPingResultPlaneEnum;
+    'interface': string;
+    /**
+     * The address the test used, with its prefix length.
+     */
+    'source': string;
+    /**
+     * The AMF (N2), the UPF\'s N3 or the UPF\'s N6 address.
+     */
+    'target': string;
+    /**
+     * The source was added to the interface for the test and removed again.
+     */
+    'added': boolean;
+    'sent': number;
+    'received': number;
+    'rttMs': Array<number>;
+    /**
+     * Why the test could not run (e.g. the address could not be added) or a send error such as no route to host; empty otherwise.
+     */
+    'error': string;
+}
+
+export const TesterPingResultPlaneEnum = {
+    N2: 'n2',
+    N3: 'n3',
+    N6: 'n6',
+} as const;
+
+export type TesterPingResultPlaneEnum = typeof TesterPingResultPlaneEnum[keyof typeof TesterPingResultPlaneEnum];
+
 export interface TesterPlan {
     'gnbs': Array<TesterGnbSpec>;
     'uesPerGnb': number;
@@ -1564,6 +1609,45 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
+         * @summary Ping test of one network
+         * @param {TesterPingRequest} testerPingRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerNetworkPing: async (testerPingRequest: TesterPingRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'testerPingRequest' is not null or undefined
+            assertParamExists('testerNetworkPing', 'testerPingRequest', testerPingRequest)
+            const localVarPath = `/api/tester/network/ping`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerPingRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Returns the last profile saved from the setup page. 204 when none has been saved yet.
          * @summary Get the saved Throughput Tester profile
          * @param {*} [options] Override http request option.
@@ -2134,6 +2218,19 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
+         * @summary Ping test of one network
+         * @param {TesterPingRequest} testerPingRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerNetworkPing(testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterPingResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerNetworkPing(testerPingRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerNetworkPing']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Returns the last profile saved from the setup page. 204 when none has been saved yet.
          * @summary Get the saved Throughput Tester profile
          * @param {*} [options] Override http request option.
@@ -2477,6 +2574,16 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
             return localVarFp.testerHistorySeriesCsv(runId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
+         * @summary Ping test of one network
+         * @param {TesterPingRequest} testerPingRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerNetworkPing(testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterPingResult> {
+            return localVarFp.testerNetworkPing(testerPingRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * Returns the last profile saved from the setup page. 204 when none has been saved yet.
@@ -2828,6 +2935,17 @@ export class DefaultApi extends BaseAPI {
      */
     public testerHistorySeriesCsv(runId: string, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).testerHistorySeriesCsv(runId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
+     * @summary Ping test of one network
+     * @param {TesterPingRequest} testerPingRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerNetworkPing(testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerNetworkPing(testerPingRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
