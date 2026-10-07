@@ -1667,7 +1667,7 @@ ul.tight li { margin: 3px 0; }
         <tr><td>UL TEID、UPF N3 IP</td><td>AMF 送來的 PDU Session Resource Setup Request（UPF 那一端的隧道）</td><td>UL 的 GTP-U 標頭與目的位址（UPF:2152）</td></tr>
         <tr><td>DL TEID</td><td>由 tester 的 gNB 自己配發，放在 PDU Session Resource Setup Response 回給核網</td><td>驗證 DL 是從正確的隧道回來</td></tr>
         <tr><td>gNB N3 IP</td><td>Setup 頁的 N3 CIDR 依序分配，run 開始時加到主機網卡上</td><td>UL 從這裡送出、DL 在這裡收</td></tr>
-        <tr><td>Sink IP、UDP port</td><td>Setup 頁的 N6 設定（預設 10.0.1.1、9200）</td><td>UL 的目的地、DL 的來源；UE 端的 port 也是 9200</td></tr>
+        <tr><td>Sink IP、UDP port</td><td>Setup 頁的 N6 設定（預設 10.0.1.1/24、9200；sink 連遮罩一起填，tester 照這個遮罩加到網卡上）</td><td>UL 的目的地、DL 的來源；UE 端的 port 也是 9200</td></tr>
       </table>
     </div>
 

@@ -552,9 +552,11 @@ func (r *run) configureIPs() error {
 	if err != nil {
 		return err
 	}
-	sink := netip.MustParseAddr(nw.N6.SinkIP)
-	if !slices.Contains(hostIPs, sink) {
-		if err := r.addAddr(nw.N6.Interface, netip.PrefixFrom(sink, 32)); err != nil {
+	// the sink goes on with its own prefix length, so the host also gets a
+	// route to that subnet (the UPF's N6 IP is usually in it)
+	sink := nw.N6.Sink()
+	if !slices.Contains(hostIPs, sink.Addr()) {
+		if err := r.addAddr(nw.N6.Interface, sink); err != nil {
 			return fmt.Errorf("configure N6 sink: %w", err)
 		}
 	}
@@ -589,7 +591,7 @@ func (r *run) startDataplane() error {
 	}
 	dp := r.deps.NewDataplane(dataplane.Config{
 		RunID: runIDHash(r.id), UeCount: len(r.plan.Ues), GnbN3IPs: n3,
-		SinkIP: netip.MustParseAddr(n6.SinkIP), Port: uint16(t.Port), PacketSize: t.PacketSize,
+		SinkIP: n6.Sink().Addr(), Port: uint16(t.Port), PacketSize: t.PacketSize,
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
 	})

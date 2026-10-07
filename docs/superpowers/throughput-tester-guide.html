@@ -246,7 +246,7 @@ make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），�
             <label for="v-n6">B 的 N6 網卡<input id="v-n6" value="ens2f2" spellcheck="false" autocomplete="off"></label>
             <label for="v-pool">SMF 的 UE IP pool<input id="v-pool" value="10.60.0.0/16" spellcheck="false" autocomplete="off"></label>
           </div>
-          <p class="hint">預設值只是範例。網卡名稱用 <code>ip -br link</code> 查，UE pool 看 SMF 設定（free5GC 是 <code>smfcfg.yaml</code> 的 <code>pools</code>）。下面的 IP 以這組為例：AMF N2 <code>172.22.49.140</code>、UPF N3 <code>172.23.49.140</code>、UPF N6 <code>172.26.49.140</code>，三個網段都是 /16；gNB 從 <code>172.22.6.1</code>、<code>172.23.6.1</code> 開始，sink 是 <code>172.26.6.1</code>。</p>
+          <p class="hint">預設值只是範例。網卡名稱用 <code>ip -br link</code> 查，UE pool 看 SMF 設定（free5GC 是 <code>smfcfg.yaml</code> 的 <code>pools</code>）。下面的 IP 以這組為例：AMF N2 <code>172.22.49.140</code>、UPF N3 <code>172.23.49.140</code>、UPF N6 <code>172.26.49.140</code>，三個網段都是 /16；gNB 從 <code>172.22.6.1</code>、<code>172.23.6.1</code> 開始，sink 是 <code>172.26.6.1/16</code>。</p>
         </div>
         <div class="diagram" role="img" aria-label="A 主機的 AMF 與 UPF pod 透過三條網路線連到 B 主機的三張網卡">
           <svg viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg">
@@ -283,7 +283,7 @@ make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），�
             <text class="d-nic" x="476" y="180" data-v="n3">ens2f1</text>
             <text class="d-ip t3" x="476" y="200">gNB 172.23.6.1, .6.2 …</text>
             <text class="d-nic" x="476" y="250" data-v="n6">ens2f2</text>
-            <text class="d-ip t6" x="476" y="270">sink 172.26.6.1</text>
+            <text class="d-ip t6" x="476" y="270">sink 172.26.6.1/16</text>
             <text class="d-sub" x="476" y="290" data-v="route">路由 10.60.0.0/16 via 172.26.49.140</text>
           </svg>
         </div>
@@ -301,27 +301,29 @@ sudo ip addr del 172.22.6.250/16 dev <span data-v="n2">ens2f0</span>
 sudo ip link set <span data-v="n3">ens2f1</span> up
 sudo ip addr add 172.23.6.250/16 dev <span data-v="n3">ens2f1</span>
 ping -c 3 -I <span data-v="n3">ens2f1</span> 172.23.49.140
-sudo ip addr del 172.23.6.250/16 dev <span data-v="n3">ens2f1</span></pre></div>
+sudo ip addr del 172.23.6.250/16 dev <span data-v="n3">ens2f1</span>
+
+sudo ip link set <span data-v="n6">ens2f2</span> up
+sudo ip addr add 172.26.6.250/16 dev <span data-v="n6">ens2f2</span>
+ping -c 3 -I <span data-v="n6">ens2f2</span> 172.26.49.140
+sudo ip addr del 172.26.6.250/16 dev <span data-v="n6">ens2f2</span></pre></div>
 
         <h4>2. B 主機的準備</h4>
         <div class="where">在 B 上</div>
         <div class="code"><button class="copy" type="button">複製</button><pre>sudo modprobe sctp
 echo sctp | sudo tee /etc/modules-load.d/sctp.conf
 
-<span class="cmt"># N2、N3 只要 up，不用加 IP：run 開始時 tester 會用 CIDR 的遮罩加 gNB IP</span>
+<span class="cmt"># 三張網卡只要 up，不用加 IP：run 開始時 tester 會用 CIDR 的遮罩加 gNB IP，</span>
+<span class="cmt"># sink 也照 Setup 頁填的遮罩（172.26.6.1/16）加到 N6 網卡上，結束時移除</span>
 sudo ip link set <span data-v="n2">ens2f0</span> up
 sudo ip link set <span data-v="n3">ens2f1</span> up
 sudo ip link set <span data-v="n6">ens2f2</span> up
-
-<span class="cmt"># N6 的 sink IP 要手動加，而且要帶 /16</span>
-sudo ip addr add 172.26.6.1/16 dev <span data-v="n6">ens2f2</span>
-ping -c 3 172.26.49.140
 
 <span class="cmt"># UDP 依 port 分流（只有 IP SA / IP DA 時才要改），兩台的 N3、N6 都要</span>
 ethtool -n <span data-v="n3">ens2f1</span> rx-flow-hash udp4
 sudo ethtool -N <span data-v="n3">ens2f1</span> rx-flow-hash udp4 sdfn</pre></div>
         <div class="why">
-          <p><b>為什麼 sink IP 要自己先加成 /16：</b>主機上沒有 sink IP 時，tester 只會把它加成 /32，主機就沒有到 172.26.0.0/16 的路由，tester 要加的「UE pool 經由 172.26.49.140」會因為閘道不可達而失敗。先手動加，tester 看到主機已經有這個 IP 就不會再加。N2、N3 網卡上不要放 172.22.6.x、172.23.6.x 的 IP，否則 gNB 不會從 .6.1 開始。</p>
+          <p><b>Sink IP 要帶遮罩：</b>Setup 頁填 <code>172.26.6.1/16</code>，tester 加到 N6 網卡上時用同一個遮罩，主機才會有到 172.26.0.0/16 的路由，「UE pool 經由 172.26.49.140」這條路由才加得上去。遮罩要涵蓋 UPF 的 N6 IP。N2、N3、N6 網卡上不要預先放 172.22.6.x、172.23.6.x、172.26.6.1，否則 tester 會跳過這些 IP。</p>
         </div>
 
         <h4>3. 核網那一邊要確認的事</h4>
@@ -353,7 +355,7 @@ kubectl exec -n &lt;namespace&gt; &lt;amf-pod&gt; -- cat /free5gc/config/amfcfg.
             <tr><td>UPF IP / port</td><td class="val">172.23.49.140 / 2152</td></tr>
             <tr class="grp"><td colspan="2"><span class="tag n6">N6</span></td></tr>
             <tr><td>Local interface</td><td class="val" data-v="n6">ens2f2</td></tr>
-            <tr><td>Sink IP / UPF N6 IP</td><td class="val">172.26.6.1 / 172.26.49.140</td></tr>
+            <tr><td>Sink IP (CIDR) / UPF N6 IP</td><td class="val">172.26.6.1/16 / 172.26.49.140</td></tr>
             <tr><td>UE IP pool</td><td class="val" data-v="pool">10.60.0.0/16</td></tr>
           </table>
         </div>
@@ -368,7 +370,7 @@ sudo tcpdump -ni <span data-v="n3">ens2f1</span> udp port 2152 -c 5
 sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
 
         <h4>6. 固定下來（重開機後還在）</h4>
-        <div class="where">在 B 上：/etc/netplan/60-tester.yaml，再 sudo chmod 600 該檔、sudo netplan apply</div>
+        <div class="where">在 B 上：/etc/netplan/60-tester.yaml，再 sudo chmod 600 該檔、sudo netplan apply（只讓網卡開機時 up；IP 都由 tester 在 run 期間加）</div>
         <div class="code"><button class="copy" type="button">複製</button><pre>network:
   version: 2
   ethernets:
@@ -377,8 +379,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
     <span data-v="n3">ens2f1</span>:
       dhcp4: false
     <span data-v="n6">ens2f2</span>:
-      dhcp4: false
-      addresses: [172.26.6.1/16]</pre></div>
+      dhcp4: false</pre></div>
       </div>
     </section>
 
@@ -431,7 +432,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
           <tr><td class="f">UPF IP / port<span class="path">network.n3.upfIp / upfPort</span></td><td class="r">10.0.1.5 / 2152</td><td>UL 送往的 UPF 位址。PDU 建立時核網有給 UPF 位址就用核網給的，這裡是沒給時的預設。</td><td colspan="2">—</td></tr>
           <tr class="grp"><td colspan="5"><span class="tag n6">N6 · data network side</span></td></tr>
           <tr><td class="f">Local interface<span class="path">network.n6.interface</span></td><td class="r">docker-cn-ran</td><td>sink IP 所在、UE pool 路由走的網卡。它的 MTU 也限制封包大小。</td><td colspan="2">—</td></tr>
-          <tr><td class="f">Sink IP<span class="path">network.n6.sinkIp</span></td><td class="r">10.0.1.1</td><td>UL 的終點（UPF 解封裝後送到這裡），也是 DL 的來源。主機沒有這個 IP 時，tester 會把它加成 /32。</td><td colspan="2">sink 和 UPF N6 不在主機已有的網段時，要自己先把 sink IP 加成帶遮罩的 IP（見兩台步驟 2）。</td></tr>
+          <tr><td class="f">Sink IP (CIDR)<span class="path">network.n6.sinkIp</span></td><td class="r">IP/遮罩／10.0.1.1/24</td><td>UL 的終點（UPF 解封裝後送到這裡），也是 DL 的來源。要連遮罩一起填，例如 <code>172.26.6.1/16</code>。主機沒有這個 IP 時，tester 照這個遮罩加到 N6 網卡上，主機就有到這個網段的路由，結束時移除。</td><td colspan="2">遮罩要涵蓋 UPF N6 IP，DL 的路由才加得上去。只填 IP、或填網段本身的位址（例如 172.26.0.0/16）驗證會擋下。</td></tr>
           <tr><td class="f">UPF N6 IP<span class="path">network.n6.upfIp</span></td><td class="r">10.0.1.5</td><td>DL 的下一跳：run 期間 tester 加一條「UE pool 經由這個 IP」的路由。</td><td colspan="2">—</td></tr>
           <tr><td class="f">UE IP pool<span class="path">network.n6.uePool</span></td><td class="r">10.60.0.0/16</td><td>SMF 發給 UE 的 IP 範圍，要和 SMF 設定一樣。</td><td colspan="2">主機上已經有一條到這個網段、但閘道不同的路由時，tester 不覆蓋，run 會失敗並說明。</td></tr>
         </table></div>
@@ -575,7 +576,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <tr><td>PDU 成功但 DL Rx 是 0 或一直斷</td><td>tester 主機上 <code>ip route get &lt;UE IP&gt;</code> 要經 UPF N6 IP；UPF 往 gNB N3 的路由；SMF 的 <code>urrThreshold</code>。</td></tr>
         <tr><td>Misrouted 不為 0</td><td>UPF 把 DL 送到錯的隧道或錯的 gNB，是 UPF 的轉送問題。</td></tr>
         <tr><td>run 一開始失敗：already routed</td><td>主機上已有一條到 UE pool、閘道不同的路由，先 <code>ip route del</code>。</td></tr>
-        <tr><td>run 一開始失敗：加路由失敗</td><td>UPF N6 IP 不在任何直連網段：把 sink IP 用帶遮罩的方式手動加在 N6 網卡上。</td></tr>
+        <tr><td>run 一開始失敗：加路由失敗</td><td>UPF N6 IP 不在任何直連網段：Setup 頁 Sink IP 的遮罩要涵蓋 UPF N6 IP（例如 sink 172.26.6.1/16、UPF N6 172.26.49.140）。</td></tr>
         <tr><td>Setup 說 packet size 太大</td><td>上限是 N3 網卡 MTU − 44 和 N6 網卡 MTU；調小封包或兩台一起調大 MTU。</td></tr>
         <tr><td>UL 掉包、高速率時一陣一陣</td><td><code>cat /proc/net/softnet_stat</code> 第 2 欄（每顆 CPU 佇列滿了丟的封包）、<code>nstat -az | grep UdpRcvbufErrors</code>；同一台時降每 UE 速率、加 UE、調大 <code>netdev_max_backlog</code>。</td></tr>
         <tr><td>CPU 很高但吞吐上不去</td><td><code>sudo perf record -a -g -- sleep 10</code>，再 <code>perf report --sort dso</code> 看 gtp5g、kernel、fru-tester 各佔多少；<code>[gtp5g]</code> 大就是 UPF 本身的上限。</td></tr>

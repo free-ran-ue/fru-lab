@@ -334,10 +334,13 @@ export interface TesterProfileNetworkN3 {
     'upfPort': number;
 }
 /**
- * Data-network side. Uplink is addressed to sinkIp (added to the interface if the host lacks it); downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
+ * Data-network side. Uplink is addressed to the sink; downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
  */
 export interface TesterProfileNetworkN6 {
     'interface': string;
+    /**
+     * The sink\'s address with its prefix length, as it goes on the interface (e.g. 172.26.6.1/16). If the host does not have the address, the tester adds it to the interface for the run with that prefix, which also gives the host a route to the subnet; it is removed afterwards.
+     */
     'sinkIp': string;
     'upfIp': string;
     'uePool': string;

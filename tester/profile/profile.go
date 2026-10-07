@@ -2,6 +2,8 @@
 // and turns it into the concrete per-gNB settings a run needs.
 package profile
 
+import "net/netip"
+
 // Profile is what the setup page edits and what a run starts from. Field
 // names are the JSON contract shared with fru-lab's frontend.
 type Profile struct {
@@ -81,8 +83,10 @@ type Network struct {
 }
 
 // N6Network is the data-network side. Uplink leaves the UPF addressed to
-// SinkIP (added to Interface if the host does not have it); downlink is
-// sent from SinkIP to the UEs' IPs, which the tester routes via UpfIP
+// SinkIP, an address with its prefix length such as 172.26.6.1/16 (added
+// to Interface as it is if the host does not have it, so the host gets a
+// route to the UPF's N6 subnet); downlink is sent from it to the UEs'
+// IPs, which the tester routes via UpfIP
 // (UePool via UpfIP dev Interface) for the duration of the run (Q16).
 type N6Network struct {
 	Interface string `json:"interface"`
@@ -90,6 +94,9 @@ type N6Network struct {
 	UpfIP     string `json:"upfIp"`
 	UePool    string `json:"uePool"`
 }
+
+// Sink is SinkIP parsed; call it only on a validated profile.
+func (n N6Network) Sink() netip.Prefix { return netip.MustParsePrefix(n.SinkIP) }
 
 // N2Network gives each gNB its own local IP from Cidr, starting at StartIP.
 type N2Network struct {

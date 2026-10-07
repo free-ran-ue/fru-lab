@@ -262,11 +262,16 @@ export default function TesterSetupPage() {
               <h3 className={styles.cardTitle}>N6 · data network side</h3>
               <div className={styles.fieldGrid}>
                 <Field label="Local interface" path="network.n6.interface" {...fieldProps} />
-                <Field label="Sink IP" path="network.n6.sinkIp" {...fieldProps} />
+                <Field label="Sink IP (CIDR)" path="network.n6.sinkIp" {...fieldProps} />
                 <Field label="UPF N6 IP" path="network.n6.upfIp" {...fieldProps} />
                 <Field label="UE IP pool" path="network.n6.uePool" {...fieldProps} />
               </div>
-              <p className={styles.hint}>Uplink leaves the UPF addressed to the sink IP (added to the interface if missing). Downlink is sent from it to each UE's IP; the tester routes the UE pool via the UPF N6 IP for the run and removes the route afterwards.</p>
+              <p className={styles.hint}>
+                Uplink leaves the UPF addressed to the sink IP. Enter it with its prefix length, as it goes on the interface
+                (for example 172.26.6.1/16): if the host does not have it, the tester adds it to the interface with that prefix for
+                the run, which also gives the host a route to that subnet. Downlink is sent from it to each UE&apos;s IP; the tester
+                routes the UE pool via the UPF N6 IP for the run. Both are removed afterwards.
+              </p>
             </section>
 
             <section className={styles.card}>

@@ -220,7 +220,7 @@ func testProfile() profile.Profile {
 		Network: profile.Network{
 			N2: profile.N2Network{Interface: "eth-n2", Cidr: "10.0.1.0/24", StartIP: "10.0.1.10", AmfIP: "10.0.1.1", AmfPort: 38412},
 			N3: profile.N3Network{Interface: "eth-n3", Cidr: "10.0.2.0/24", StartIP: "10.0.2.10", UpfIP: "10.0.2.1", UpfPort: 2152},
-			N6: profile.N6Network{Interface: "eth-n6", SinkIP: "10.0.3.2", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
+			N6: profile.N6Network{Interface: "eth-n6", SinkIP: "10.0.3.2/24", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
 		},
 		Traffic: profile.Traffic{UlMbps: 1, DlMbps: 5, PacketSize: 1400, Port: 9200},
 		// N2-only tests use fakeConn, which never answers NAS: keep the UE
@@ -298,9 +298,9 @@ func TestRunAllGnbsUpThenStopCleansUp(t *testing.T) {
 		"add eth-n2 10.0.1.10/24", "add eth-n3 10.0.2.10/24",
 		"add eth-n2 10.0.1.11/24", "add eth-n3 10.0.2.11/24",
 		"add eth-n2 10.0.1.12/24", "add eth-n3 10.0.2.12/24",
-		"add eth-n6 10.0.3.2/32", "route 10.60.0.0/16 via 10.0.3.1 dev eth-n6",
+		"add eth-n6 10.0.3.2/24", "route 10.60.0.0/16 via 10.0.3.1 dev eth-n6",
 		"unroute 10.60.0.0/16",
-		"remove eth-n6 10.0.3.2/32",
+		"remove eth-n6 10.0.3.2/24",
 		"remove eth-n3 10.0.2.12/24", "remove eth-n2 10.0.1.12/24",
 		"remove eth-n3 10.0.2.11/24", "remove eth-n2 10.0.1.11/24",
 		"remove eth-n3 10.0.2.10/24", "remove eth-n2 10.0.1.10/24",
