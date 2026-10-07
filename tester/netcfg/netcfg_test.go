@@ -72,3 +72,15 @@ func TestInterfaceDetailsListsLoopback(t *testing.T) {
 	require.Contains(t, lo.Addresses, "127.0.0.1/8")
 	require.Equal(t, 65536, lo.Mtu)
 }
+
+func TestFindAddrFindsLoopback(t *testing.T) {
+	iface, prefix, ok, err := Netlink{}.FindAddr(netip.MustParseAddr("127.0.0.1"))
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "lo", iface)
+	require.Equal(t, netip.MustParsePrefix("127.0.0.1/8"), prefix)
+
+	_, _, ok, err = Netlink{}.FindAddr(netip.MustParseAddr("192.0.2.77"))
+	require.NoError(t, err)
+	require.False(t, ok)
+}

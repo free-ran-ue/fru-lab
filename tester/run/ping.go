@@ -3,7 +3,6 @@ package run
 import (
 	"errors"
 	"fmt"
-	"net/netip"
 	"slices"
 	"time"
 
@@ -72,23 +71,22 @@ func (c *Controller) Ping(p profile.Profile, plane string) (PingResult, error) {
 		return PingResult{}, &profile.ValidationError{Errors: []profile.FieldError{{
 			Field: "network." + plane + ".interface", Message: fmt.Sprintf("no interface named %q on this host", target.Interface)}}}
 	}
-	return c.pingFrom(plane, target, hostIPs), nil
+	return c.pingFrom(plane, target), nil
 }
 
-func (c *Controller) pingFrom(plane string, t profile.PingTarget, hostIPs []netip.Addr) (res PingResult) {
+func (c *Controller) pingFrom(plane string, t profile.PingTarget) (res PingResult) {
 	res = PingResult{Plane: plane, Interface: t.Interface, Source: t.Source.String(), Target: t.Peer.String(), Sent: pingCount, RttMs: []float64{}}
-	if !slices.Contains(hostIPs, t.Source.Addr()) {
-		if err := c.deps.Addrs.Add(t.Interface, t.Source); err != nil {
-			res.Sent, res.Error = 0, fmt.Sprintf("could not add %s to %s: %v", t.Source, t.Interface, err)
-			return res
-		}
-		res.Added = true
-		defer func() {
-			if err := c.deps.Addrs.Remove(t.Interface, t.Source); err != nil {
-				res.Error = joinMessages(res.Error, fmt.Sprintf("could not remove %s from %s: %v", t.Source, t.Interface, err))
-			}
-		}()
+	ch, err := placeAddr(c.deps.Addrs, t.Interface, t.Source)
+	if err != nil {
+		res.Sent, res.Error = 0, fmt.Sprintf("could not put %s on %s: %v", t.Source, t.Interface, err)
+		return res
 	}
+	res.Added = ch.added.IsValid()
+	defer func() {
+		if err := ch.undo(c.deps.Addrs); err != nil {
+			res.Error = joinMessages(res.Error, fmt.Sprintf("could not restore %s: %v", t.Interface, err))
+		}
+	}()
 	rtts, err := c.deps.Pinger.Ping(t.Source.Addr(), t.Peer, pingCount, pingTimeout)
 	for _, d := range rtts {
 		res.RttMs = append(res.RttMs, float64(d)/float64(time.Millisecond))

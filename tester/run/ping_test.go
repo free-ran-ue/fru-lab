@@ -62,7 +62,7 @@ func TestPingAddsTheRunsAddressPingsTheCoreAndRemovesIt(t *testing.T) {
 }
 
 func TestPingUsesAnAddressTheHostAlreadyHasAsItIs(t *testing.T) {
-	addrs := &fakeAddrs{host: []netip.Addr{netip.MustParseAddr("10.0.3.2")}}
+	addrs := &fakeAddrs{hostAddrs: []hostAddr{{iface: "eth-n6", prefix: netip.MustParsePrefix("10.0.3.2/24")}}}
 	res, err := pingController(addrs, &fakePinger{}).Ping(testProfile(), profile.PlaneN6)
 	require.NoError(t, err)
 	require.False(t, res.Added)
@@ -74,7 +74,7 @@ func TestPingUsesAnAddressTheHostAlreadyHasAsItIs(t *testing.T) {
 func TestPingReportsAFailedAddOrSend(t *testing.T) {
 	res, err := pingController(&fakeAddrs{failAdd: 1}, &fakePinger{}).Ping(testProfile(), profile.PlaneN2)
 	require.NoError(t, err)
-	require.Equal(t, "could not add 10.0.1.10/24 to eth-n2: operation not permitted", res.Error)
+	require.Equal(t, "could not put 10.0.1.10/24 on eth-n2: operation not permitted", res.Error)
 	require.Zero(t, res.Sent)
 
 	addrs := &fakeAddrs{}

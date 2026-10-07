@@ -16,6 +16,9 @@ import (
 type AddrManager interface {
 	// HostIPv4s lists every IPv4 address already on any interface.
 	HostIPv4s() ([]netip.Addr, error)
+	// FindAddr reports which interface has ip, and with which prefix
+	// length; ok is false when no interface has it.
+	FindAddr(ip netip.Addr) (iface string, prefix netip.Prefix, ok bool, err error)
 	// Interfaces lists the names of every link on the host.
 	Interfaces() ([]string, error)
 	// InterfaceDetails describes every link on the host, for the Setup
@@ -51,6 +54,26 @@ func (Netlink) HostIPv4s() ([]netip.Addr, error) {
 		}
 	}
 	return out, nil
+}
+
+func (Netlink) FindAddr(ip netip.Addr) (string, netip.Prefix, bool, error) {
+	list, err := netlink.AddrList(nil, netlink.FAMILY_V4)
+	if err != nil {
+		return "", netip.Prefix{}, false, fmt.Errorf("list host addresses: %w", err)
+	}
+	for _, a := range list {
+		got, ok := netip.AddrFromSlice(a.IP.To4())
+		if !ok || got != ip || a.IPNet == nil {
+			continue
+		}
+		ones, _ := a.IPNet.Mask.Size()
+		name := ""
+		if link, err := netlink.LinkByIndex(a.LinkIndex); err == nil {
+			name = link.Attrs().Name
+		}
+		return name, netip.PrefixFrom(ip, ones), true, nil
+	}
+	return "", netip.Prefix{}, false, nil
 }
 
 func (Netlink) Interfaces() ([]string, error) {

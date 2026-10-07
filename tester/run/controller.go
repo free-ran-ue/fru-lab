@@ -361,9 +361,12 @@ type ueRun struct {
 	link *gnb.UeLink
 }
 
+// addedAddr is an address the run put on the host; replaced, if valid,
+// is the host's own address with another prefix that it took off first.
 type addedAddr struct {
-	iface  string
-	prefix netip.Prefix
+	iface    string
+	prefix   netip.Prefix
+	replaced netip.Prefix
 }
 
 func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify func()) *run {
@@ -549,6 +552,20 @@ func (r *run) skipUnfinished() {
 // via the UPF's N6 (design Q16). removeIPs undoes exactly what was added.
 func (r *run) configureIPs() error {
 	nw := r.profile.Network
+	// The sink first: it goes on with its own prefix length, so the host
+	// also gets a route to that subnet (the UPF's N6 IP is usually in it).
+	// If it replaces a host address with another prefix, that has to
+	// happen before gNB IPs join the subnet: removing a primary address
+	// takes its subnet's secondaries with it.
+	ch, err := placeAddr(r.deps.Addrs, nw.N6.Interface, nw.N6.Sink())
+	if err != nil {
+		return fmt.Errorf("configure N6 sink: %w", err)
+	}
+	if ch.added.IsValid() {
+		r.mu.Lock()
+		r.added = append(r.added, addedAddr{iface: ch.iface, prefix: ch.added, replaced: ch.replaced})
+		r.mu.Unlock()
+	}
 	for _, g := range r.plan.Gnbs {
 		for _, a := range []struct {
 			iface, ip string
@@ -560,18 +577,6 @@ func (r *run) configureIPs() error {
 			if err := r.addAddr(a.iface, netip.PrefixFrom(netip.MustParseAddr(a.ip), a.bits)); err != nil {
 				return fmt.Errorf("configure %s: %w", g.Name, err)
 			}
-		}
-	}
-	hostIPs, err := r.deps.Addrs.HostIPv4s()
-	if err != nil {
-		return err
-	}
-	// the sink goes on with its own prefix length, so the host also gets a
-	// route to that subnet (the UPF's N6 IP is usually in it)
-	sink := nw.N6.Sink()
-	if !slices.Contains(hostIPs, sink.Addr()) {
-		if err := r.addAddr(nw.N6.Interface, sink); err != nil {
-			return fmt.Errorf("configure N6 sink: %w", err)
 		}
 	}
 	pool, gw := netip.MustParsePrefix(nw.N6.UePool), netip.MustParseAddr(nw.N6.UpfIP)
@@ -651,7 +656,8 @@ func (r *run) removeIPs() {
 		}
 	}
 	for i := len(added) - 1; i >= 0; i-- {
-		if err := r.deps.Addrs.Remove(added[i].iface, added[i].prefix); err != nil {
+		a := added[i]
+		if err := (addrChange{iface: a.iface, added: a.prefix, replaced: a.replaced}).undo(r.deps.Addrs); err != nil {
 			errs = append(errs, err)
 		}
 	}

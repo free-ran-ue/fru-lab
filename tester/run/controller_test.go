@@ -26,16 +26,43 @@ import (
 // fakeAddrs records Add/Remove calls; failAdd makes the Nth Add fail.
 // onAdd, if set, runs after every successful Add.
 type fakeAddrs struct {
-	mu      sync.Mutex
-	host    []netip.Addr
-	onAdd   func()
-	present []netip.Prefix
-	log     []string
-	failAdd int // 1-based; 0 = never
-	adds    int
+	mu   sync.Mutex
+	host []netip.Addr
+	// hostAddrs are addresses already on the host with their interface;
+	// FindAddr sees them, and Remove takes them off
+	hostAddrs []hostAddr
+	onAdd     func()
+	present   []netip.Prefix
+	log       []string
+	failAdd   int // 1-based; 0 = never
+	adds      int
 }
 
-func (f *fakeAddrs) HostIPv4s() ([]netip.Addr, error) { return f.host, nil }
+type hostAddr struct {
+	iface  string
+	prefix netip.Prefix
+}
+
+func (f *fakeAddrs) HostIPv4s() ([]netip.Addr, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := append([]netip.Addr(nil), f.host...)
+	for _, h := range f.hostAddrs {
+		out = append(out, h.prefix.Addr())
+	}
+	return out, nil
+}
+
+func (f *fakeAddrs) FindAddr(ip netip.Addr) (string, netip.Prefix, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, h := range f.hostAddrs {
+		if h.prefix.Addr() == ip {
+			return h.iface, h.prefix, true, nil
+		}
+	}
+	return "", netip.Prefix{}, false, nil
+}
 
 // MTU is 1500, or 9000 for an interface named jumbo.
 func (f *fakeAddrs) MTU(iface string) (int, error) {
@@ -124,6 +151,12 @@ func (f *fakeAddrs) Remove(iface string, p netip.Prefix) error {
 	for i, q := range f.present {
 		if q == p {
 			f.present = append(f.present[:i], f.present[i+1:]...)
+		}
+	}
+	for i, h := range f.hostAddrs {
+		if h.iface == iface && h.prefix == p {
+			f.hostAddrs = append(f.hostAddrs[:i], f.hostAddrs[i+1:]...)
+			break
 		}
 	}
 	f.log = append(f.log, "remove "+iface+" "+p.String())
@@ -300,15 +333,16 @@ func TestRunAllGnbsUpThenStopCleansUp(t *testing.T) {
 	present, log := addrs.snapshot()
 	require.Empty(t, present)
 	require.Equal(t, []string{
+		"add eth-n6 10.0.3.2/24",
 		"add eth-n2 10.0.1.10/24", "add eth-n3 10.0.2.10/24",
 		"add eth-n2 10.0.1.11/24", "add eth-n3 10.0.2.11/24",
 		"add eth-n2 10.0.1.12/24", "add eth-n3 10.0.2.12/24",
-		"add eth-n6 10.0.3.2/24", "route 10.60.0.0/16 via 10.0.3.1 dev eth-n6",
+		"route 10.60.0.0/16 via 10.0.3.1 dev eth-n6",
 		"unroute 10.60.0.0/16",
-		"remove eth-n6 10.0.3.2/24",
 		"remove eth-n3 10.0.2.12/24", "remove eth-n2 10.0.1.12/24",
 		"remove eth-n3 10.0.2.11/24", "remove eth-n2 10.0.1.11/24",
 		"remove eth-n3 10.0.2.10/24", "remove eth-n2 10.0.1.10/24",
+		"remove eth-n6 10.0.3.2/24",
 	}, log)
 }
 
@@ -389,7 +423,7 @@ func TestHostIPsAreSkippedWhenAllocating(t *testing.T) {
 }
 
 func TestIPConfigFailureRollsBackAndFails(t *testing.T) {
-	addrs := &fakeAddrs{failAdd: 5} // gNB-3's N2 IP (each gNB adds N2 then N3)
+	addrs := &fakeAddrs{failAdd: 6} // gNB-3's N2 IP (the sink goes first, then each gNB adds N2 and N3)
 	dialer := newFakeDialer(func(string, int) (func() ([]byte, error), error) { return accept(t), nil })
 	c := newTestController(addrs, dialer)
 
