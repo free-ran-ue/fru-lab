@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/Alonza0314/logger-go/v2 v2.1.0
+	github.com/cilium/ebpf v0.22.0
 	github.com/free-ran-ue/util v0.2.0
 	github.com/free5gc/nas v1.3.0
 	github.com/free5gc/ngap v1.2.0
@@ -46,7 +47,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect

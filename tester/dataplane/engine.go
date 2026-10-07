@@ -52,7 +52,11 @@ type Config struct {
 	// NoGSO and NoGRO turn off UDP GSO and GRO, as on a kernel without
 	// them (before 4.18 and 5.0); the Bench uses NoGSO to show what GSO adds.
 	NoGSO, NoGRO bool
-	Now          func() time.Time
+	// Engine picks how packets move (see Select): EngineSocket (also when
+	// empty), EngineAFXDP, or EngineAuto. AF_XDP needs the interfaces.
+	Engine                   string
+	N3Interface, N6Interface string
+	Now                      func() time.Time
 }
 
 // rcvBuf is the receive buffer asked for on every socket: at ~1 Gbps the
@@ -95,7 +99,11 @@ type flow struct {
 	dlTo           netip.AddrPort // where its downlink goes
 	upfAddr        *net.UDPAddr   // upf and dlTo, made once: a send takes a net.Addr
 	dlAddr         *net.UDPAddr
-	ulHead         []byte       // its G-PDU, IP and UDP headers; the tester header and zeros follow
+	ulHead         []byte // its G-PDU, IP and UDP headers; the tester header and zeros follow
+	ueIP           netip.Addr
+	ulTeid         uint32
+	frameUL        []byte       // AF_XDP: the whole uplink frame up to the tester header
+	frameDL        []byte       // AF_XDP: the whole downlink frame up to the tester header
 	ulSeq, dlSeq   uint32       // sender-owned
 	ulLast, dlLast atomic.Int64 // last seq seen, -1 = none; several readers may see one UE
 }
@@ -119,26 +127,15 @@ func (s *shard) load() []*flow {
 	return append([]*flow(nil), s.flows...)
 }
 
-// Engine runs one run's data plane.
-type Engine struct {
-	cfg   Config
-	n3    []*net.UDPConn // per gNB, :2152: receives downlink
-	ulOut []*net.UDPConn // per uplink shard, on its gNB's N3 IP
-	sinks []*net.UDPConn // SO_REUSEPORT group on the sink IP:port: receives uplink
-	dlOut []*net.UDPConn // per downlink shard, on the sink IP
-	flows []atomic.Pointer[flow]
-
-	ulShards []*shard // ulPerGnb consecutive shards per gNB
-	dlShards []*shard
-	ulPerGnb int
-	ul, dl   dirStats
-	active   atomic.Int64
-	stopped  atomic.Bool
-	gsoOn    atomic.Int64 // senders using UDP GSO
-
-	cancel  context.CancelFunc
+// core is what both data plane engines share: the flows, the counters,
+// the rate history, pacing and how a packet that came back is checked.
+type core struct {
+	cfg     Config
+	flows   []atomic.Pointer[flow]
+	ul, dl  dirStats
+	active  atomic.Int64
+	stopped atomic.Bool
 	senders sync.WaitGroup
-	readers sync.WaitGroup
 	sampler sync.WaitGroup
 
 	mu      sync.Mutex
@@ -147,9 +144,10 @@ type Engine struct {
 	last    Point
 	lastPps [4]float64 // ul tx, ul rx, dl tx, dl rx
 	prev    counters
+	engine  string // what Snapshot reports: "socket", or the AF_XDP setup
 }
 
-func New(cfg Config) *Engine {
+func newCore(cfg Config, engine string) core {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -159,7 +157,29 @@ func New(cfg Config) *Engine {
 	if cfg.Receivers <= 0 {
 		cfg.Receivers = runtime.NumCPU()
 	}
-	e := &Engine{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints)}
+	return core{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints), engine: engine}
+}
+
+// Engine runs one run's data plane over ordinary UDP sockets.
+type Engine struct {
+	core
+	n3    []*net.UDPConn // per gNB, :2152: receives downlink
+	ulOut []*net.UDPConn // per uplink shard, on its gNB's N3 IP
+	sinks []*net.UDPConn // SO_REUSEPORT group on the sink IP:port: receives uplink
+	dlOut []*net.UDPConn // per downlink shard, on the sink IP
+
+	ulShards []*shard // ulPerGnb consecutive shards per gNB
+	dlShards []*shard
+	ulPerGnb int
+	gsoOn    atomic.Int64 // senders using UDP GSO
+
+	cancel  context.CancelFunc
+	readers sync.WaitGroup
+}
+
+func New(cfg Config) *Engine {
+	e := &Engine{core: newCore(cfg, "socket")}
+	cfg = e.cfg
 	gnbs := max(1, len(cfg.GnbN3IPs))
 	e.ulPerGnb = max(1, (cfg.Senders+gnbs-1)/gnbs)
 	for range len(cfg.GnbN3IPs) * e.ulPerGnb {
@@ -267,7 +287,17 @@ func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN
 	if e.stopped.Load() {
 		return // a PDU accept that lands while the run is stopping
 	}
-	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3}
+	f := e.newFlow(ue, gnb, ueIP, ulTeid, dlTeid, upfN3)
+	if e.cfg.StartDelay <= 0 {
+		e.activate(f)
+		return
+	}
+	time.AfterFunc(e.cfg.StartDelay, func() { e.activate(f) })
+}
+
+// newFlow is an established UE's traffic state.
+func (e *core) newFlow(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN3 netip.AddrPort) *flow {
+	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3, ueIP: ueIP, ulTeid: ulTeid}
 	f.ulLast.Store(-1)
 	f.dlLast.Store(-1)
 	f.ulHead = slices.Clone(ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)[:ulHeadLen])
@@ -276,11 +306,7 @@ func (e *Engine) AddUE(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN
 		f.dlTo = e.cfg.DlTarget(ueIP)
 	}
 	f.upfAddr, f.dlAddr = net.UDPAddrFromAddrPort(f.upf), net.UDPAddrFromAddrPort(f.dlTo)
-	if e.cfg.StartDelay <= 0 {
-		e.activate(f)
-		return
-	}
-	time.AfterFunc(e.cfg.StartDelay, func() { e.activate(f) })
+	return f
 }
 
 // activate puts a flow into its senders' shards; a no-op once stopped.
@@ -313,12 +339,12 @@ func growReadBuffer(c *net.UDPConn) {
 // pace sends round-robin over a shard's flows at bps per flow, using a
 // token bucket refilled every millisecond and capped at 10 ms of burst.
 // Downlink gives each flow DlBatch's worth of packets in a row. Packets go
-// out in batches through b (sendmmsg).
-func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
+// out in batches through b.
+func (e *core) pace(ctx context.Context, sh *shard, bps float64, b txBatch) {
 	defer e.senders.Done()
 	pktBits := float64(e.cfg.PacketSize * 8)
 	run := 1 // packets a flow gets in a row
-	if b.dl {
+	if b.downlink() {
 		run = max(1, int(bps*e.cfg.DlBatch.Seconds()/pktBits))
 	}
 	tick := time.NewTicker(time.Millisecond)
@@ -353,6 +379,16 @@ func (e *Engine) pace(ctx context.Context, sh *shard, bps float64, b *batcher) {
 		}
 	}
 }
+
+// txBatch is what pace sends through: packets are added one by one and
+// leave together on flush.
+type txBatch interface {
+	add(f *flow)
+	flush()
+	downlink() bool
+}
+
+func (b *batcher) downlink() bool { return b.dl }
 
 // batcher builds packets in place and sends them with one sendmmsg.
 // Packets are all seg bytes and sit back to back in one arena, so a
@@ -525,20 +561,38 @@ func (b *batcher) count(i int) {
 // reader reads one socket batchSize packets at a time (recvmmsg) and
 // counts what it receives in its own stats.
 type reader struct {
-	e     *Engine
-	pc    *ipv4.PacketConn
-	msgs  []ipv4.Message
-	gro   bool // messages may hold several packets (UDP_GRO)
+	e    *Engine
+	pc   *ipv4.PacketConn
+	msgs []ipv4.Message
+	gro  bool // messages may hold several packets (UDP_GRO)
+	*rxCounter
+}
+
+// rxCounter checks and counts packets that came back, into one reader's
+// own stats; publish ends a batch.
+type rxCounter struct {
+	c     *core
 	stats *workerStats
 	acc   accumulator
 	lat   []time.Duration // the batch's one-way delays
 	now   int64           // when the batch was read, taken once per batch
 }
 
-func (e *Engine) newReader(conn *net.UDPConn, d *dirStats) *reader {
-	r := &reader{e: e, pc: ipv4.NewPacketConn(conn), msgs: make([]ipv4.Message, batchSize),
-		stats: d.addReader(len(e.cfg.GnbN3IPs))}
+func (e *core) newRxCounter(d *dirStats) *rxCounter {
+	r := &rxCounter{c: e, stats: d.addReader(len(e.cfg.GnbN3IPs))}
 	r.acc.gnb = make([]uint64, len(e.cfg.GnbN3IPs))
+	return r
+}
+
+// publish records the batch's latencies and counts.
+func (r *rxCounter) publish() {
+	r.stats.latency.RecordAll(r.lat)
+	r.lat = r.lat[:0]
+	r.acc.publish(r.stats)
+}
+
+func (e *Engine) newReader(conn *net.UDPConn, d *dirStats) *reader {
+	r := &reader{e: e, pc: ipv4.NewPacketConn(conn), msgs: make([]ipv4.Message, batchSize), rxCounter: e.newRxCounter(d)}
 	bufLen := readBufLen
 	if !e.cfg.NoGRO && setGRO(conn) == nil {
 		r.gro, bufLen = true, groBufLen // pages a reader never fills are never touched
@@ -613,9 +667,7 @@ func (r *reader) loop(handle func([]byte)) {
 				b = b[k:]
 			}
 		}
-		r.stats.latency.RecordAll(r.lat)
-		r.lat = r.lat[:0]
-		r.acc.publish(r.stats)
+		r.publish()
 	}
 }
 
@@ -645,8 +697,8 @@ func (r *reader) readN3(g int) {
 // are where it arrived; a UE's downlink in another tunnel or at another
 // gNB is a forwarding fault, counted as misrouted rather than received
 // (this also keeps each flow's dlLast owned by its own gNB's reader).
-func (r *reader) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
-	e := r.e
+func (r *rxCounter) receive(payload []byte, dl bool, ipLen, gnb int, teid uint32) {
+	e := r.c
 	h, ok := parseHeader(payload)
 	if !ok || h.runID != e.cfg.RunID || h.dl != dl || int(h.ue) >= len(e.flows) {
 		return // not ours, or left over from an earlier run

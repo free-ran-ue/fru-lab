@@ -82,9 +82,16 @@ func ulTemplate(teid uint32, ue, sink netip.Addr, port uint16, packetSize int) [
 
 // putIPv4UDP writes IPv4 and UDP headers for a packet of len(b) bytes.
 func putIPv4UDP(b []byte, src, dst netip.Addr, sport, dport uint16) {
+	putIPv4UDPHeader(b, len(b), src, dst, sport, dport)
+}
+
+// putIPv4UDPHeader writes into b[:28] the IPv4 and UDP headers of a
+// packet of total bytes (UDP checksum 0, which IPv4 allows).
+func putIPv4UDPHeader(b []byte, total int, src, dst netip.Addr, sport, dport uint16) {
 	ip := b[:ipv4HeaderLen]
+	clear(ip)
 	ip[0] = 0x45 // v4, 20-byte header
-	binary.BigEndian.PutUint16(ip[2:4], uint16(len(b)))
+	binary.BigEndian.PutUint16(ip[2:4], uint16(total))
 	ip[6] = 0x40 // don't fragment
 	ip[8] = 64   // TTL
 	ip[9] = 17   // UDP
@@ -92,10 +99,11 @@ func putIPv4UDP(b []byte, src, dst netip.Addr, sport, dport uint16) {
 	copy(ip[12:16], s[:])
 	copy(ip[16:20], d[:])
 	binary.BigEndian.PutUint16(ip[10:12], ipChecksum(ip))
-	udp := b[ipv4HeaderLen:]
+	udp := b[ipv4HeaderLen : ipv4HeaderLen+udpHeaderLen]
 	binary.BigEndian.PutUint16(udp[0:2], sport)
 	binary.BigEndian.PutUint16(udp[2:4], dport)
-	binary.BigEndian.PutUint16(udp[4:6], uint16(len(udp)))
+	binary.BigEndian.PutUint16(udp[4:6], uint16(total-ipv4HeaderLen))
+	udp[6], udp[7] = 0, 0
 }
 
 func ipChecksum(h []byte) uint16 {
