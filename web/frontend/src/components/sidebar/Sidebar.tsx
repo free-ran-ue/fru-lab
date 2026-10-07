@@ -30,6 +30,7 @@ export default function Sidebar() {
         <p className={styles.navGroup}>Throughput Tester</p>
         <nav className={styles.nav}>
           <NavLink to="/tester" end className={navItemClassName}>Setup</NavLink>
+          <NavLink to="/tester/profiles" className={navItemClassName}>Profiles</NavLink>
           <NavLink to="/tester/run" className={navItemClassName}>Run</NavLink>
           <NavLink to="/tester/history" className={navItemClassName}>History</NavLink>
           <NavLink to="/tester/bench" className={navItemClassName}>Bench</NavLink>

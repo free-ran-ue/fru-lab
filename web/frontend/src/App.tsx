@@ -9,6 +9,7 @@ import ImagesPage from './page/images/ImagesPage'
 import TesterSetupPage from './page/tester/TesterSetupPage'
 import TesterRunPage from './page/tester/TesterRunPage'
 import TesterHistoryPage from './page/tester/TesterHistoryPage'
+import TesterProfilesPage from './page/tester/TesterProfilesPage'
 import TesterBenchPage from './page/tester/TesterBenchPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -85,6 +86,14 @@ export default function App() {
         element={(
           <RequireAuth>
             <TesterSetupPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/tester/profiles"
+        element={(
+          <RequireAuth>
+            <TesterProfilesPage />
           </RequireAuth>
         )}
       />

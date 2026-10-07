@@ -33,8 +33,11 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerHistorySeriesCsv**](#testerhistoryseriescsv) | **GET** /api/tester/history/{runId}/series.csv | One finished run\&#39;s throughput time series (CSV export)|
 |[**testerNetworkInterfaces**](#testernetworkinterfaces) | **GET** /api/tester/network/interfaces | Interfaces on fru-tester\&#39;s host|
 |[**testerNetworkPing**](#testernetworkping) | **POST** /api/tester/network/ping | Ping test of one network|
-|[**testerProfileGet**](#testerprofileget) | **GET** /api/tester/profile | Get the saved Throughput Tester profile|
-|[**testerProfilePut**](#testerprofileput) | **PUT** /api/tester/profile | Save the Throughput Tester profile|
+|[**testerProfileCreate**](#testerprofilecreate) | **POST** /api/tester/profiles | Save a new Throughput Tester profile|
+|[**testerProfileDelete**](#testerprofiledelete) | **DELETE** /api/tester/profiles/{id} | Delete a saved profile|
+|[**testerProfileGet**](#testerprofileget) | **GET** /api/tester/profiles/{id} | One saved profile|
+|[**testerProfileList**](#testerprofilelist) | **GET** /api/tester/profiles | List the saved Throughput Tester profiles|
+|[**testerProfileUpdate**](#testerprofileupdate) | **PUT** /api/tester/profiles/{id} | Replace a saved profile|
 |[**testerProfileValidate**](#testerprofilevalidate) | **POST** /api/tester/profile/validate | Validate a profile and preview the per-gNB plan|
 |[**testerRunGet**](#testerrunget) | **GET** /api/tester/run | Current run snapshot|
 |[**testerRunStart**](#testerrunstart) | **POST** /api/tester/run | Start a run|
@@ -1501,56 +1504,10 @@ const { status, data } = await apiInstance.testerNetworkPing(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerProfileGet**
-> TesterProfile testerProfileGet()
+# **testerProfileCreate**
+> TesterStoredProfile testerProfileCreate(testerProfile)
 
-Returns the last profile saved from the setup page. 204 when none has been saved yet.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerProfileGet();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**TesterProfile**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**204** | No profile saved yet |  -  |
-|**401** | Unauthorized |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerProfilePut**
-> MessageResponse testerProfilePut(testerProfile)
-
-Stores the profile as-is. Field validation is done by POST /api/tester/profile/validate, not here.
+Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
 
 ### Example
 
@@ -1566,7 +1523,7 @@ const apiInstance = new DefaultApi(configuration);
 
 let testerProfile: TesterProfile; //
 
-const { status, data } = await apiInstance.testerProfilePut(
+const { status, data } = await apiInstance.testerProfileCreate(
     testerProfile
 );
 ```
@@ -1580,7 +1537,211 @@ const { status, data } = await apiInstance.testerProfilePut(
 
 ### Return type
 
+**TesterStoredProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**201** | Created |  -  |
+|**400** | Body is not a JSON object, or the name is empty |  -  |
+|**409** | Another profile already has this name |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfileDelete**
+> MessageResponse testerProfileDelete()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.testerProfileDelete(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
 **MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No such profile |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfileGet**
+> TesterStoredProfile testerProfileGet()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.testerProfileGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**TesterStoredProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No such profile |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfileList**
+> Array<TesterStoredProfile> testerProfileList()
+
+Every saved profile, sorted by name.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerProfileList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<TesterStoredProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerProfileUpdate**
+> TesterStoredProfile testerProfileUpdate(testerProfile)
+
+Same name rules as creating one; keeping its own name is fine.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+let testerProfile: TesterProfile; //
+
+const { status, data } = await apiInstance.testerProfileUpdate(
+    id,
+    testerProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerProfile** | **TesterProfile**|  | |
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**TesterStoredProfile**
 
 ### Authorization
 
@@ -1596,8 +1757,9 @@ const { status, data } = await apiInstance.testerProfilePut(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
-|**400** | Body is not a JSON object |  -  |
-|**401** | Unauthorized |  -  |
+|**400** | Body is not a JSON object, or the name is empty |  -  |
+|**404** | No such profile |  -  |
+|**409** | Another profile already has this name |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

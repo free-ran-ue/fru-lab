@@ -2,6 +2,7 @@ package context
 
 import (
 	"slices"
+	"sync"
 
 	"backend/logger"
 )
@@ -15,6 +16,9 @@ type dbContextIE struct {
 
 type dbContext struct {
 	db DbIf
+
+	// profileMu makes a profile's name check and its write one step.
+	profileMu sync.Mutex
 
 	*logger.BackendLogger
 }
@@ -30,22 +34,6 @@ func newDbContext(dbContextIE *dbContextIE) (*dbContext, error) {
 
 		BackendLogger: dbContextIE.BackendLogger,
 	}, nil
-}
-
-const (
-	testerBucket     = "tester"
-	testerProfileKey = "profile"
-)
-
-// GetTesterProfile returns the saved Throughput Tester profile JSON, or
-// nil if none was saved yet. fru-lab stores it opaquely; fru-tester owns
-// its schema and validation.
-func (d *dbContext) GetTesterProfile() ([]byte, error) {
-	return d.db.Get(testerBucket, testerProfileKey)
-}
-
-func (d *dbContext) PutTesterProfile(profile []byte) error {
-	return d.db.Put(testerBucket, testerProfileKey, profile)
 }
 
 // testerHistoryBucket holds finished Throughput Tester runs (design N7),

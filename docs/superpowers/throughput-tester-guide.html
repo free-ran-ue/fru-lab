@@ -146,6 +146,7 @@ footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--lin
     <a href="#launch">啟動 fru-tester</a>
     <a href="#deploy">部署架構</a>
     <a class="sub" href="#two-hosts">兩台機器：步驟</a>
+    <a href="#profiles">設定檔（Profiles）</a>
     <a href="#fields">Setup 頁欄位</a>
     <a class="sub" href="#f-scale">規模</a>
     <a class="sub" href="#f-template">gNB／UE 樣板</a>
@@ -383,6 +384,20 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </div>
     </section>
 
+    <section id="profiles">
+      <h2>設定檔（Profiles）</h2>
+      <p>fru-lab 可以存很多份設定檔，每份有自己的名稱。名稱不能重複，比對時不分大小寫、忽略前後空白（<code>Basic</code> 和 <code> basic </code> 算同一個）。</p>
+      <div class="tbl"><table>
+        <tr><th>在哪裡</th><th>做什麼</th></tr>
+        <tr><td><b>Setup 頁的 Profile name</b></td><td>直接輸入就是命名或改名。按右邊的 <b>▾</b> 打開選單：選一份已存的設定檔就換成它；<b>+ New profile</b> 從預設值開始一份新的。有還沒存的修改時，切換前會先問要不要丟掉。名稱和別份已存的設定檔一樣時，欄位下面會直接標紅。</td></tr>
+        <tr><td><b>Setup 頁標題旁</b></td><td><code>New profile, not saved</code>：這份還沒存過，這時右上角多一個 <b>Cancel</b>，放棄這份新設定檔，回到之前打開的那一份（沒有的話回到 Profiles 頁），有修改會先確認；<code>Unsaved changes</code>：和上次存的不一樣。</td></tr>
+        <tr><td><b>Save</b></td><td>還沒存過的新設定檔：直接存成新的。已存過的：跳出視窗選 <b>Update current profile</b>（覆蓋目前這份；名稱有改就一起改名）或 <b>Save as new</b>（目前這份不動，另存一份）。另存時名稱已經被用了（包括和目前這份同名），會跳出視窗請你重新命名，預設建議 <code>原名 copy</code>。</td></tr>
+        <tr><td><b>Start run</b></td><td>先存再開始：已存過的設定檔有修改就更新它；新的設定檔就存成新的（名稱重複時一樣先請你重新命名）。</td></tr>
+        <tr><td><b>側邊欄的 Profiles 頁</b></td><td>列出所有設定檔（gNB／UE 數、每 UE 速率、封包大小、資料面引擎、最後更新時間）。<b>+ New profile</b> 打開 Setup 頁的新設定檔；<b>Edit</b> 在 Setup 頁打開那一份；<b>Delete</b> 刪一份；勾選多份後按 <b>Delete selected</b> 一次刪除。刪掉的設定檔不影響 History：每個 run 都留著它當時用的設定。</td></tr>
+      </table></div>
+      <p class="hint">Setup 頁會記得這個瀏覽器上次打開的是哪一份（Profiles 頁標示 <code>open in Setup</code>）。舊版只存一份設定檔，升級後第一次打開時會自動搬進列表，名稱已被使用時改成 <code>basic (2)</code> 這種形式。</p>
+    </section>
+
     <section id="fields">
       <h2>Setup 頁欄位</h2>
       <p>Setup 頁的每一張卡片依序說明。「範圍／預設」的預設是 Console 第一次開啟時的值（對應 fru-lab 的 basic free5GC 範本）。欄位有問題時，錯誤訊息會直接顯示在該欄位下面。</p>
@@ -391,7 +406,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <h3>規模（Scale）</h3>
         <div class="tbl"><table>
           <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
-          <tr><td class="f">Profile name<span class="path">name</span></td><td class="r">不可空白／basic</td><td>設定檔名稱，存在 fru-lab，History 會顯示。</td><td class="up">—</td><td class="down">—</td></tr>
+          <tr><td class="f">Profile name<span class="path">name</span></td><td class="r">不可空白／basic</td><td>設定檔名稱，不能和別份設定檔重複；History 會顯示。也是切換設定檔的選單，見「設定檔」。</td><td class="up">—</td><td class="down">—</td></tr>
           <tr><td class="f">gNB count<span class="path">scale.gnbCount</span></td><td class="r">≥ 1／10</td><td>模擬幾個 gNB。每個 gNB 一條 SCTP、一個 N2 IP、一個 N3 IP。</td><td class="up">AMF 要處理更多 NG Setup；要更多 IP。每個 gNB 分到的 DL 變少，DL 收包分得更開。</td><td class="down">每個 gNB 的 DL 是一條連線（UPF:2152 → gNB:2152），只能由一條讀取線、一顆核心收，約 2–3 Gbps。</td></tr>
           <tr><td class="f">UE count<span class="path">scale.ueCount</span></td><td class="r">≥ 1／1000</td><td>UE 總數。依序填滿 gNB，每個 gNB 容量 = ⌈UE 數 ÷ gNB 數⌉，最後一個可能沒滿。總流量 = UE 數 × 每 UE 速率。</td><td class="up">同樣總量下每個 UE 打得少，UPF 和 tester 的負載分得更平均（同一台時比較穩）；但註冊、PDU 要更久，核網裡 session 也更多。</td><td class="down">要達到同樣總量，每個 UE 得打更大。單一 UE 在 UPF 只會用一顆核心（gtp5g 約 3 Gbps 上限）。</td></tr>
         </table></div>
@@ -477,7 +492,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
 
       <div class="block">
         <h3>Plan preview</h3>
-        <p>按 Start 前先看：每個 gNB 一列，列出它的 ID、名稱、N2 IP、N3 IP、UE 範圍與 SUPI 範圍。拿 SUPI 範圍和核網的訂閱資料對照。<b>Start run</b> 會存檔並打開 Run 頁；同一時間只能有一個 run。</p>
+        <p>按 Start 前先看：每個 gNB 一列，列出它的 ID、名稱、N2 IP、N3 IP、UE 範圍與 SUPI 範圍。拿 SUPI 範圍和核網的訂閱資料對照。<b>Start run</b> 會先存檔（見「設定檔」）再打開 Run 頁；同一時間只能有一個 run。</p>
       </div>
     </section>
 
@@ -593,7 +608,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（refactor/af-xdp，2026-10-07）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（feat/tester-profiles，2026-10-07）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 
