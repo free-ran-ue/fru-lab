@@ -602,7 +602,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <div class="tbl"><table>
         <tr><th>欄位</th><th>意思</th></tr>
         <tr><td><b>Control plane CPUs</b></td><td>例如 <code>0-3</code>。run 期間，N2、註冊、PDU、CP 迴圈、fru-tester 的 API 都只在這些 CPU 上跑。</td></tr>
-        <tr><td><b>Data plane CPUs</b></td><td>例如 <code>24-47</code>。每條發送線、每條收包線（含 AF_XDP 每個佇列）各自固定一個執行緒在這些 CPU 上；發送線和收包線的數量都等於這裡的 CPU 數。</td></tr>
+        <tr><td><b>Data plane CPUs</b></td><td>例如 <code>24-47</code>。每條發送線、每條收包線各自固定一個執行緒，只在這些 CPU 上跑。這裡的 CPU 數（N）決定開幾條，見下表；條數常常比 CPU 多。</td></tr>
       </table></div>
       <ul>
         <li>格式是 Linux 的 CPU 清單：<code>0-3,8,10-11</code>。留空表示那一邊不綁核（和以前一樣）。兩邊不能重疊，CPU 必須是 fru-tester 能用的（在 container 裡就是它的 cpuset）。</li>
@@ -611,6 +611,17 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <li><b>Network interfaces</b> 列出實體網卡的驅動、NUMA node、鄰近的 CPU、收包佇列數、中斷所在的 CPU。資料面 CPU 跨了 NUMA node，或不在任何網卡的鄰近 CPU 上時，會顯示提醒。</li>
         <li>Run 頁標題下面、以及 HTML 報告的開頭都會記下這次 run 用的 CPU 分配。</li>
       </ul>
+      <h3>資料面開幾條執行緒</h3>
+      <p>N 是 Data plane CPUs 的 CPU 數；沒設定時是 fru-tester 能用的 CPU 數。G 是 gNB 數。</p>
+      <div class="tbl"><table>
+        <tr><th>方向</th><th>角色</th><th>socket 模式</th><th>AF_XDP 模式</th></tr>
+        <tr><td>UL</td><td>發送（gNB 往 N3 送）</td><td>每個 gNB ⌈N/G⌉ 條，共 G × ⌈N/G⌉，各自一個 socket 綁在該 gNB 的 N3 IP</td><td>min(N3 網卡佇列數, N)</td></tr>
+        <tr><td>UL</td><td>接收（N6 sink）</td><td>N 條，N 個 socket 用 <code>SO_REUSEPORT</code> 共用 sink 位址，kernel 依 flow 分配</td><td>N6 網卡每個佇列一條</td></tr>
+        <tr><td>DL</td><td>發送（N6 往 UPF 送）</td><td>N 條，各自一個 socket 綁在 sink IP</td><td>min(N6 網卡佇列數, N)</td></tr>
+        <tr><td>DL</td><td>接收（N3 上的 gNB）</td><td>每個 gNB 一條，共 G 條，和 N 無關</td><td>N3 網卡每個佇列一條</td></tr>
+      </table></div>
+      <p>例如 20 個 gNB、資料面 24 顆 CPU 的 socket 模式：UL 發送 40（每個 gNB 2 條）、UL 接收 24、DL 發送 24、DL 接收 20，共 108 條，全在那 24 顆 CPU 上由 kernel 分配。N 取 G 的倍數（例如 20 或 40），UL 發送才不會被往上取整。</p>
+      <p class="hint">socket 模式下每個 gNB 的 DL 只有一條收包線，而且 UPF 送來的 GTP-U 兩端 port 都是 2152，同一個 gNB 的 DL 都會進網卡的同一個佇列；DL 的收包最多分散到 G 顆 CPU。DL 要更多收包並行，就增加 gNB 數。</p>
       <div class="note">
         <p><b>綁核不會讓總用量變少</b>，它讓 CP 和 DP 互不搶 CPU、結果比較穩定、也好解讀。</p>
         <p><b>kernel 收包的那一份跑在網卡中斷所在的 CPU</b>，fru-tester 不會去改中斷設定。請在主機上先把 N3、N6 網卡的中斷設到資料面 CPU（例如用驅動附的 <code>set_irq_affinity</code> 腳本，或調整 <code>/proc/irq/*/smp_affinity_list</code>，並關掉 irqbalance），最好和網卡在同一個 NUMA node。</p>

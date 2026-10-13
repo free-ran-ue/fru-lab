@@ -265,7 +265,7 @@ export default function TesterSystemPage() {
           {warnings.map((w) => <p key={w} className={styles.cpuWarn}>{w}</p>)}
           <p className={styles.hint}>
             <b>Control plane</b>: N2, registration, PDU sessions, the control-plane loop and fru-tester&apos;s API run only on these CPUs during a run.
-            {' '}<b>Data plane</b>: every sender and reader keeps its own thread on these CPUs, one of each per CPU. Leave a list empty to not pin that side.
+            {' '}<b>Data plane</b>: every sender and reader keeps its own thread on these CPUs. With N CPUs and G gNBs the socket engine runs G×⌈N/G⌉ uplink senders, N uplink readers (N6 sink), N downlink senders and G downlink readers (one per gNB); AF_XDP runs one reader per NIC queue and up to N senders per NIC. Leave a list empty to not pin that side.
             {' '}The kernel&apos;s share of receiving runs where the NIC&apos;s interrupts go, which fru-tester does not move: set that on the host so they land on the data plane CPUs.
           </p>
         </section>
