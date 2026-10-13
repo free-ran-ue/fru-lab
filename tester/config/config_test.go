@@ -18,6 +18,9 @@ func write(t *testing.T, body string) string {
 func TestLoadAppliesDefaults(t *testing.T) {
 	cfg, err := Load(write(t, "apiToken: abc\n"))
 	require.NoError(t, err)
+	require.Equal(t, "tester-system.json", filepath.Base(cfg.SystemFile), "next to the config file")
+	require.True(t, filepath.IsAbs(cfg.SystemFile) || filepath.Dir(cfg.SystemFile) != ".")
+	cfg.SystemFile = ""
 	require.Equal(t, &Config{Listen: "0.0.0.0:9100", ApiToken: "abc", Logger: Logger{Level: "info"}}, cfg)
 }
 

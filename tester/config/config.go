@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -14,6 +15,9 @@ type Config struct {
 	Listen   string `yaml:"listen"`
 	ApiToken string `yaml:"apiToken"`
 	Logger   Logger `yaml:"logger"`
+	// SystemFile keeps the System page's CPU allocation; a relative path
+	// is relative to the config file's directory.
+	SystemFile string `yaml:"systemFile"`
 }
 
 type Logger struct {
@@ -31,6 +35,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.ApiToken == "" {
 		return nil, fmt.Errorf("%s: apiToken must be set", path)
+	}
+	if cfg.SystemFile == "" {
+		cfg.SystemFile = "tester-system.json"
+	}
+	if !filepath.IsAbs(cfg.SystemFile) {
+		cfg.SystemFile = filepath.Join(filepath.Dir(path), cfg.SystemFile)
 	}
 	return cfg, nil
 }

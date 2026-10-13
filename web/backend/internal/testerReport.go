@@ -169,6 +169,10 @@ type reportSnapshot struct {
 		Series []reportPoint `json:"series"`
 	} `json:"dataplane"`
 	CpLoop reportCpLoop `json:"cpLoop"`
+	Cpus   struct {
+		CpCpus string `json:"cpCpus"`
+		DpCpus string `json:"dpCpus"`
+	} `json:"cpus"`
 }
 
 // reportSetting is one line of the profile section.

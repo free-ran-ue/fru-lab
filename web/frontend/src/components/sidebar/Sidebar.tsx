@@ -34,6 +34,7 @@ export default function Sidebar() {
           <NavLink to="/tester/run" className={navItemClassName}>Run</NavLink>
           <NavLink to="/tester/history" className={navItemClassName}>History</NavLink>
           <NavLink to="/tester/bench" className={navItemClassName}>Bench</NavLink>
+          <NavLink to="/tester/system" className={navItemClassName}>System</NavLink>
         </nav>
       </div>
 

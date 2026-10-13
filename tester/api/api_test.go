@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"tester/bench"
+	"tester/cpuset"
 	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
@@ -28,6 +29,8 @@ type fakeCtrl struct {
 	ping        run.PingResult
 	pingErr     error
 	pingPlane   string
+	cpus        cpuset.Allocation
+	cpusErr     error
 }
 
 func (f *fakeCtrl) Validate(profile.Profile) (*profile.Plan, error) {
@@ -41,6 +44,14 @@ func (f *fakeCtrl) Stop() (run.Snapshot, error)                 { return f.snap,
 func (f *fakeCtrl) Snapshot() run.Snapshot                      { return f.snap }
 func (f *fakeCtrl) Changed() <-chan struct{}                    { return f.changed }
 func (f *fakeCtrl) Reports() []run.Report                       { return f.reports }
+func (f *fakeCtrl) System() (run.SystemInfo, error)             { return run.SystemInfo{Cpus: f.cpus}, nil }
+func (f *fakeCtrl) SetCpus(a cpuset.Allocation) (cpuset.Allocation, error) {
+	if f.cpusErr != nil {
+		return a, f.cpusErr
+	}
+	f.cpus = a
+	return a, nil
+}
 func (f *fakeCtrl) Interfaces() ([]netcfg.InterfaceInfo, error) {
 	return []netcfg.InterfaceInfo{{Name: "ens20", Kind: "device", State: "up", Mtu: 1500, Addresses: []string{"10.0.2.5/24"}}}, nil
 }
@@ -247,4 +258,26 @@ func TestInterfacesListsTheHostsLinks(t *testing.T) {
 	rec := do(t, newTestRouter(&fakeCtrl{}, "t"), http.MethodGet, "/api/network/interfaces", "", "t")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `[{"name":"ens20","kind":"device","state":"up","mtu":1500,"addresses":["10.0.2.5/24"]}]`, rec.Body.String())
+}
+
+func TestSystemCpusStatusCodes(t *testing.T) {
+	ctrl := &fakeCtrl{}
+	h := newTestRouter(ctrl, "t")
+	rec := do(t, h, http.MethodPut, "/api/system/cpus", `{"cpCpus":"0-1","dpCpus":"2-5"}`, "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, cpuset.Allocation{CpCpus: "0-1", DpCpus: "2-5"}, ctrl.cpus)
+
+	rec = do(t, h, http.MethodGet, "/api/system", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var info run.SystemInfo
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
+	require.Equal(t, ctrl.cpus, info.Cpus)
+
+	require.Equal(t, http.StatusBadRequest, do(t, h, http.MethodPut, "/api/system/cpus", `{"cpus":"0"}`, "t").Code, "unknown field")
+	ctrl.cpusErr = &run.CpuAllocationError{Errors: []cpuset.FieldError{{Field: "dpCpus", Message: "bad"}}}
+	rec = do(t, h, http.MethodPut, "/api/system/cpus", `{"dpCpus":"x"}`, "t")
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), `"field":"dpCpus"`)
+	ctrl.cpusErr = run.ErrRunActive
+	require.Equal(t, http.StatusConflict, do(t, h, http.MethodPut, "/api/system/cpus", `{}`, "t").Code)
 }

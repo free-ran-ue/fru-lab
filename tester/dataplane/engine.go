@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"tester/cpuset"
 	"time"
 
 	"golang.org/x/net/ipv4"
@@ -56,7 +57,10 @@ type Config struct {
 	// empty), EngineAFXDP, or EngineAuto. AF_XDP needs the interfaces.
 	Engine                   string
 	N3Interface, N6Interface string
-	Now                      func() time.Time
+	// Cpus, if set, are the data plane CPUs: every sender and reader
+	// goroutine keeps its own OS thread on them (the System page).
+	Cpus cpuset.Set
+	Now  func() time.Time
 }
 
 // rcvBuf is the receive buffer asked for on every socket: at ~1 Gbps the
@@ -158,6 +162,13 @@ func newCore(cfg Config, engine string) core {
 		cfg.Receivers = runtime.NumCPU()
 	}
 	return core{cfg: cfg, flows: make([]atomic.Pointer[flow], cfg.UeCount), history: newHistory(historyPoints), engine: engine}
+}
+
+// pin keeps the calling goroutine's thread on the data plane CPUs, if
+// any were given. It is called first thing by every long-lived sender
+// and reader goroutine; their threads end with them.
+func (e *core) pin() {
+	_ = cpuset.PinThread(e.cfg.Cpus)
 }
 
 // Engine runs one run's data plane over ordinary UDP sockets.
@@ -342,6 +353,7 @@ func growReadBuffer(c *net.UDPConn) {
 // out in batches through b.
 func (e *core) pace(ctx context.Context, sh *shard, bps float64, b txBatch) {
 	defer e.senders.Done()
+	e.pin()
 	pktBits := float64(e.cfg.PacketSize * 8)
 	run := 1 // packets a flow gets in a row
 	if b.downlink() {
@@ -642,6 +654,7 @@ func groSegment(oob []byte) int {
 // loop hands each packet to handle until the socket is closed.
 func (r *reader) loop(handle func([]byte)) {
 	defer r.e.readers.Done()
+	r.e.pin()
 	for {
 		n, err := r.pc.ReadBatch(r.msgs, 0)
 		if err != nil {

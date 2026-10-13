@@ -228,6 +228,17 @@ export interface TesterCpPoint {
      */
     'failPerSec': number;
 }
+/**
+ * Linux CPU lists such as \"0-3,8\". The control plane (registration, PDU, the control-plane loop, the API) runs on cpCpus for a run; each data plane sender and reader keeps a thread on dpCpus, one of each per CPU. Empty = that side is not pinned.
+ */
+export interface TesterCpuAllocation {
+    'cpCpus': string;
+    'dpCpus': string;
+}
+export interface TesterCpusErrorResponse {
+    'message': string;
+    'errors': Array<TesterFieldError>;
+}
 export interface TesterDataplaneSnapshot {
     /**
      * How packets move, e.g. \"socket\", \"socket (auto: docker-cn-ran is a bridge, not a NIC)\" or \"af_xdp (ens2f1 zero-copy, 8 queues)\".
@@ -366,6 +377,30 @@ export interface TesterLatency {
     'p50Ms': number;
     'p99Ms': number;
     'maxMs': number;
+}
+export interface TesterNicLayout {
+    'name': string;
+    'driver': string;
+    /**
+     * -1 when the kernel does not say (e.g. a VM).
+     */
+    'numaNode': number;
+    /**
+     * CPUs close to the NIC.
+     */
+    'localCpus': string;
+    /**
+     * Receive queues.
+     */
+    'queues': number;
+    /**
+     * CPUs the NIC\'s interrupts are delivered to; the kernel\'s receive work runs there.
+     */
+    'irqCpus': string;
+}
+export interface TesterNumaNode {
+    'node': number;
+    'cpus': string;
 }
 export interface TesterPingRequest {
     'plane': TesterPingRequestPlaneEnum;
@@ -527,6 +562,7 @@ export interface TesterRunSnapshot {
      */
     'failedUes': Array<TesterUeFailure>;
     'dataplane': TesterDataplaneSnapshot;
+    'cpus': TesterCpuAllocation;
     'cpLoop': TesterCpLoopSnapshot;
 }
 
@@ -587,6 +623,25 @@ export interface TesterStoredProfile {
     'id': string;
     'updatedAt': string;
     'profile': TesterProfile;
+}
+export interface TesterSystemInfo {
+    'cpus': TesterCpuAllocation;
+    'topology': TesterTopology;
+}
+export interface TesterTopology {
+    /**
+     * CPUs the kernel runs.
+     */
+    'online': string;
+    /**
+     * Of those, the CPUs fru-tester may use (in a container, its cpuset).
+     */
+    'allowed': string;
+    'nodes': Array<TesterNumaNode>;
+    /**
+     * Physical NICs only.
+     */
+    'interfaces': Array<TesterNicLayout>;
 }
 /**
  * Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
@@ -2139,6 +2194,79 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
                 options: localVarRequestOptions,
             };
         },
+        /**
+         * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
+         * @summary Set the CPU allocation for the next runs
+         * @param {TesterCpuAllocation} testerCpuAllocation 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerSystemCpusPut: async (testerCpuAllocation: TesterCpuAllocation, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'testerCpuAllocation' is not null or undefined
+            assertParamExists('testerSystemCpusPut', 'testerCpuAllocation', testerCpuAllocation)
+            const localVarPath = `/api/tester/system/cpus`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerCpuAllocation, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
+         * @summary The tester host\'s CPU allocation and layout (System page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerSystemGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/tester/system`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
     }
 };
 
@@ -2630,6 +2758,31 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerRunStop']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
+        /**
+         * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
+         * @summary Set the CPU allocation for the next runs
+         * @param {TesterCpuAllocation} testerCpuAllocation 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerSystemCpusPut(testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuAllocation>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemCpusPut(testerCpuAllocation, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemCpusPut']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
+         * @summary The tester host\'s CPU allocation and layout (System page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerSystemGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterSystemInfo>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemGet(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
     }
 };
 
@@ -3006,6 +3159,25 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         testerRunStop(options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
             return localVarFp.testerRunStop(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
+         * @summary Set the CPU allocation for the next runs
+         * @param {TesterCpuAllocation} testerCpuAllocation 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerSystemCpusPut(testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuAllocation> {
+            return localVarFp.testerSystemCpusPut(testerCpuAllocation, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
+         * @summary The tester host\'s CPU allocation and layout (System page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerSystemGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterSystemInfo> {
+            return localVarFp.testerSystemGet(options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -3418,6 +3590,27 @@ export class DefaultApi extends BaseAPI {
      */
     public testerRunStop(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).testerRunStop(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
+     * @summary Set the CPU allocation for the next runs
+     * @param {TesterCpuAllocation} testerCpuAllocation 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerSystemCpusPut(testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerSystemCpusPut(testerCpuAllocation, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
+     * @summary The tester host\'s CPU allocation and layout (System page)
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerSystemGet(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerSystemGet(options).then((request) => request(this.axios, this.basePath));
     }
 }
 

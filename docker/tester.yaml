@@ -5,3 +5,7 @@ apiToken: "frulab-tester"
 
 logger:
   level: "info"
+
+# where the System page's CPU allocation is kept (relative to this file);
+# docker-compose mounts ./frutester-data here so it survives a restart
+systemFile: "data/tester-system.json"

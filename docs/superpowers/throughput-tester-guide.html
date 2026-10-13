@@ -156,6 +156,7 @@ footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--lin
     <a href="#recipes">建議設定</a>
     <a href="#run">Run 頁怎麼看</a>
     <a href="#history">History 與 Bench</a>
+    <a href="#system">System：CPU 分配</a>
     <a href="#limits">已知限制與排錯</a>
   </nav>
 
@@ -595,6 +596,28 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </div>
     </section>
 
+    <section id="system">
+      <h2>System：CPU 分配</h2>
+      <p>側邊欄的 <b>System</b> 頁決定 tester 主機上哪些 CPU 給控制面（CP）、哪些給資料面（DP）。這是<b>主機</b>的設定，和 profile 無關；在 run 開始前設好，run 會沿用開始時的設定，run 進行中不能修改。</p>
+      <div class="tbl"><table>
+        <tr><th>欄位</th><th>意思</th></tr>
+        <tr><td><b>Control plane CPUs</b></td><td>例如 <code>0-3</code>。run 期間，N2、註冊、PDU、CP 迴圈、fru-tester 的 API 都只在這些 CPU 上跑。</td></tr>
+        <tr><td><b>Data plane CPUs</b></td><td>例如 <code>24-47</code>。每條發送線、每條收包線（含 AF_XDP 每個佇列）各自固定一個執行緒在這些 CPU 上；發送線和收包線的數量都等於這裡的 CPU 數。</td></tr>
+      </table></div>
+      <ul>
+        <li>格式是 Linux 的 CPU 清單：<code>0-3,8,10-11</code>。留空表示那一邊不綁核（和以前一樣）。兩邊不能重疊，CPU 必須是 fru-tester 能用的（在 container 裡就是它的 cpuset）。</li>
+        <li><b>CPUs</b> 卡片依 NUMA node 列出每顆 CPU，點一下切換：不綁 → 控制面 → 資料面。橘色小點是網卡中斷所在的 CPU。</li>
+        <li><b>Network interfaces</b> 列出實體網卡的驅動、NUMA node、鄰近的 CPU、收包佇列數、中斷所在的 CPU。資料面 CPU 跨了 NUMA node，或不在任何網卡的鄰近 CPU 上時，會顯示提醒。</li>
+        <li>Run 頁標題下面、以及 HTML 報告的開頭都會記下這次 run 用的 CPU 分配。</li>
+      </ul>
+      <div class="note">
+        <p><b>綁核不會讓總用量變少</b>，它讓 CP 和 DP 互不搶 CPU、結果比較穩定、也好解讀。</p>
+        <p><b>kernel 收包的那一份跑在網卡中斷所在的 CPU</b>，fru-tester 不會去改中斷設定。請在主機上先把 N3、N6 網卡的中斷設到資料面 CPU（例如用驅動附的 <code>set_irq_affinity</code> 腳本，或調整 <code>/proc/irq/*/smp_affinity_list</code>，並關掉 irqbalance），最好和網卡在同一個 NUMA node。</p>
+        <p>fru-tester 只能管自己的執行緒；要讓其他程式也不碰資料面 CPU，要在主機上用 kernel 參數 <code>isolcpus</code> 之類的方式另外設定。同一台跑 5GC 時，UPF 的處理會跟著 tester 送包的 CPU 跑，所以綁住資料面也等於限制了 UPF。</p>
+      </div>
+      <p class="hint">設定存在 tester 主機的檔案裡（<code>tester.yaml</code> 的 <code>systemFile</code>，預設是設定檔旁的 <code>tester-system.json</code>）。Docker 部署時 <code>docker/tester.yaml</code> 指到 <code>data/tester-system.json</code>，compose 把 <code>./frutester-data</code> 掛到那裡，重建 container 也不會遺失。存檔或綁核都不需要額外權限，但只能選 container 被允許使用的 CPU。</p>
+    </section>
+
     <section id="limits">
       <h2>已知限制與排錯</h2>
       <h3>已知限制</h3>
@@ -625,7 +648,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（feat/cp-loop，2026-10-07）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（feat/cpu-isolation，2026-10-13）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 

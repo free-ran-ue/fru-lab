@@ -4,3 +4,5 @@ fru-compose/
 ci-test/
 qdm-system/
 free-ran-ue/
+tester-system.json
+docker/frutester-data/

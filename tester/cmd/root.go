@@ -16,6 +16,7 @@ import (
 	"tester/api"
 	"tester/bench"
 	"tester/config"
+	"tester/cpuset"
 	"tester/gnb"
 	"tester/netcfg"
 	"tester/run"
@@ -52,6 +53,7 @@ func serve(cmd *cobra.Command, _ []string) error {
 		Addrs:  netcfg.Netlink{},
 		Dialer: gnb.SCTPDialer{},
 		Log:    lg.WithTags("RUN"),
+		Cpus:   cpuset.NewStore(cfg.SystemFile),
 	})
 	runner := bench.NewRunner(func() bool { return !ctrl.Snapshot().State.Finished() })
 	srv := &http.Server{Addr: cfg.Listen, Handler: api.NewRouter(ctrl, runner, cfg.ApiToken)}

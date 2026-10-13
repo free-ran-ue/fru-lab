@@ -198,6 +198,7 @@ func (e *XDPEngine) Start() (err error) {
 // one interface can be both.
 func (e *XDPEngine) receive(ctx context.Context, p *xdpPort, s *xdp.Socket) {
 	defer e.readers.Done()
+	e.pin()
 	var ul, dl *rxCounter
 	if p == e.n6 {
 		ul = e.newRxCounter(&e.ul)

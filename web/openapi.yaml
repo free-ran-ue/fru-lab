@@ -1055,6 +1055,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/tester/system:
+    get:
+      summary: The tester host's CPU allocation and layout (System page)
+      description: Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
+      operationId: testerSystemGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterSystemInfo'
+  /api/tester/system/cpus:
+    put:
+      summary: Set the CPU allocation for the next runs
+      description: Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
+      operationId: testerSystemCpusPut
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterCpuAllocation'
+      responses:
+        '200':
+          description: Stored, in canonical form
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpuAllocation'
+        '400':
+          description: Invalid; errors name the field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpusErrorResponse'
+        '409':
+          description: A run is active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/history:
     get:
       summary: Finished runs, newest first
@@ -1782,6 +1828,82 @@ components:
               type: integer
             established:
               type: integer
+    TesterCpuAllocation:
+      type: object
+      description: Linux CPU lists such as "0-3,8". The control plane (registration, PDU, the control-plane loop, the API) runs on cpCpus for a run; each data plane sender and reader keeps a thread on dpCpus, one of each per CPU. Empty = that side is not pinned.
+      required: [cpCpus, dpCpus]
+      properties:
+        cpCpus:
+          type: string
+          example: 0-3
+        dpCpus:
+          type: string
+          example: 24-47
+    TesterCpusErrorResponse:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterFieldError'
+    TesterSystemInfo:
+      type: object
+      required: [cpus, topology]
+      properties:
+        cpus:
+          $ref: '#/components/schemas/TesterCpuAllocation'
+        topology:
+          $ref: '#/components/schemas/TesterTopology'
+    TesterTopology:
+      type: object
+      required: [online, allowed, nodes, interfaces]
+      properties:
+        online:
+          type: string
+          description: CPUs the kernel runs.
+        allowed:
+          type: string
+          description: Of those, the CPUs fru-tester may use (in a container, its cpuset).
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TesterNumaNode'
+        interfaces:
+          type: array
+          description: Physical NICs only.
+          items:
+            $ref: '#/components/schemas/TesterNicLayout'
+    TesterNumaNode:
+      type: object
+      required: [node, cpus]
+      properties:
+        node:
+          type: integer
+        cpus:
+          type: string
+    TesterNicLayout:
+      type: object
+      required: [name, driver, numaNode, localCpus, queues, irqCpus]
+      properties:
+        name:
+          type: string
+        driver:
+          type: string
+        numaNode:
+          type: integer
+          description: -1 when the kernel does not say (e.g. a VM).
+        localCpus:
+          type: string
+          description: CPUs close to the NIC.
+        queues:
+          type: integer
+          description: Receive queues.
+        irqCpus:
+          type: string
+          description: CPUs the NIC's interrupts are delivered to; the kernel's receive work runs there.
     TesterCpLoopSnapshot:
       type: object
       description: The control-plane test. registration and deregistration count every attempt of every cycle (expected is 0, a loop has no end); latencies are of accepted procedures.
@@ -1835,7 +1957,7 @@ components:
           description: Procedures that did not succeed.
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane, cpLoop]
+      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane, cpLoop, cpus]
       properties:
         runId:
           type: string
@@ -1881,6 +2003,8 @@ components:
             $ref: '#/components/schemas/TesterUeFailure'
         dataplane:
           $ref: '#/components/schemas/TesterDataplaneSnapshot'
+        cpus:
+          $ref: '#/components/schemas/TesterCpuAllocation'
         cpLoop:
           $ref: '#/components/schemas/TesterCpLoopSnapshot'
     TesterDataplaneSnapshot:
