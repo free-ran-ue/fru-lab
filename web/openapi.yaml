@@ -1069,6 +1069,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TesterSystemInfo'
+  /api/tester/system/cpuload:
+    get:
+      summary: How busy each CPU of the tester host is (System page)
+      description: Forwarded to fru-tester, which reads /proc/stat. The whole host's load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
+      operationId: testerSystemCpuLoad
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpuLoad'
   /api/tester/system/cpus:
     put:
       summary: Set the CPU allocation for the next runs
@@ -1857,6 +1871,26 @@ components:
           $ref: '#/components/schemas/TesterCpuAllocation'
         topology:
           $ref: '#/components/schemas/TesterTopology'
+    TesterCpuLoad:
+      type: object
+      required: [intervalMs, cpus]
+      properties:
+        intervalMs:
+          type: integer
+          format: int64
+          description: How long the load was measured over.
+        cpus:
+          type: array
+          description: Every online CPU, by number.
+          items:
+            type: object
+            required: [cpu, busy]
+            properties:
+              cpu:
+                type: integer
+              busy:
+                type: number
+                description: Percent of the interval not idle.
     TesterTopology:
       type: object
       required: [online, allowed, nodes, interfaces]

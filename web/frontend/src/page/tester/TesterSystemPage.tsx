@@ -4,13 +4,23 @@ import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterCpuAllocation, TesterFieldError, TesterSystemInfo } from '../../api'
+import type { TesterCpuAllocation, TesterCpuLoad, TesterFieldError, TesterSystemInfo } from '../../api'
 import { formatCpus, parseCpus } from './cpus'
 import styles from './tester.module.css'
 
 type Side = 'cp' | 'dp'
 
 const FINISHED = ['idle', 'stopped', 'failed']
+
+// how often the CPU load and the run state are refreshed
+const LOAD_POLL_MS = 1000
+const RUN_POLL_MS = 5000
+
+// usageColor runs from green (idle) through yellow (half) to red (busy).
+function usageColor(busy: number): { background: string, borderColor: string } {
+  const hue = 120 - 1.2 * Math.min(100, Math.max(0, busy))
+  return { background: `hsl(${hue} 75% 82%)`, borderColor: `hsl(${hue} 60% 45%)` }
+}
 
 // fieldErrorsOf pulls the field errors out of a 400 from PUT /system/cpus.
 function fieldErrorsOf(error: unknown): TesterFieldError[] {
@@ -20,15 +30,20 @@ function fieldErrorsOf(error: unknown): TesterFieldError[] {
 
 // CpuMap shows every CPU by NUMA node, coloured by side; clicking one
 // moves it: unassigned → control plane → data plane → unassigned.
+// nodesOf groups the host's CPUs by NUMA node.
+function nodesOf(info: TesterSystemInfo): { label: string, cpus: number[] }[] {
+  const online = parseCpus(info.topology.online) ?? parseCpus(info.topology.allowed) ?? []
+  return info.topology.nodes.length > 0
+    ? info.topology.nodes.map((n) => ({ label: `NUMA node ${n.node}`, cpus: parseCpus(n.cpus) ?? [] }))
+    : [{ label: 'CPUs', cpus: online }]
+}
+
 function CpuMap({ info, cp, dp, irq, onToggle, disabled }: {
   info: TesterSystemInfo, cp: number[], dp: number[], irq: number[]
   onToggle: (cpu: number) => void, disabled: boolean
 }) {
   const allowed = parseCpus(info.topology.allowed) ?? []
-  const online = parseCpus(info.topology.online) ?? allowed
-  const nodes = info.topology.nodes.length > 0
-    ? info.topology.nodes.map((n) => ({ label: `NUMA node ${n.node}`, cpus: parseCpus(n.cpus) ?? [] }))
-    : [{ label: 'CPUs', cpus: online }]
+  const nodes = nodesOf(info)
   return (
     <div className={styles.cpuMap}>
       {nodes.map((n) => (
@@ -59,6 +74,59 @@ function CpuMap({ info, cp, dp, irq, onToggle, disabled }: {
   )
 }
 
+// CpuUsage is the host's load per CPU, live, by NUMA node, with the
+// average of each side of the saved allocation.
+function CpuUsage({ info, load, cp, dp }: {
+  info: TesterSystemInfo, load: Map<number, number>, cp: number[], dp: number[]
+}) {
+  const avg = (cpus: number[]) => {
+    const v = cpus.map((c) => load.get(c)).filter((b): b is number => b !== undefined)
+    return v.length === 0 ? null : v.reduce((a, b) => a + b, 0) / v.length
+  }
+  const summary = [
+    { label: 'All CPUs', value: avg([...load.keys()]) },
+    { label: 'Control plane', value: cp.length > 0 ? avg(cp) : null, empty: 'not pinned' },
+    { label: 'Data plane', value: dp.length > 0 ? avg(dp) : null, empty: 'not pinned' },
+  ]
+  return (
+    <>
+      <div className={styles.usageSummary}>
+        {summary.map((s) => (
+          <div key={s.label} className={styles.usageStat}>
+            <span>{s.label}</span>
+            <b style={s.value === null ? undefined : { color: `hsl(${120 - 1.2 * s.value} 65% 35%)` }}>
+              {s.value === null ? (load.size === 0 ? '—' : s.empty ?? '—') : `${s.value.toFixed(0)}%`}
+            </b>
+          </div>
+        ))}
+      </div>
+      <div className={styles.cpuMap}>
+        {nodesOf(info).map((n) => (
+          <div key={n.label} className={styles.cpuNode}>
+            <div className={styles.cpuNodeHead}>
+              <b>{n.label}</b>
+              <span className={styles.pingNote}>average {avg(n.cpus)?.toFixed(0) ?? '—'}%</span>
+            </div>
+            <div className={styles.usageGrid}>
+              {n.cpus.map((c) => {
+                const busy = load.get(c)
+                const side = cp.includes(c) ? 'CP' : dp.includes(c) ? 'DP' : ''
+                return (
+                  <div key={c} className={styles.usageCpu} style={busy === undefined ? undefined : usageColor(busy)}
+                    title={`CPU ${c}${side ? ` (${side === 'CP' ? 'control plane' : 'data plane'})` : ''}: ${busy === undefined ? 'no data' : `${busy.toFixed(1)}% busy`}`}>
+                    <span className={styles.usageNum}>{c}{side && <em>{side}</em>}</span>
+                    <b>{busy === undefined ? '—' : `${Math.round(busy)}%`}</b>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 export default function TesterSystemPage() {
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [info, setInfo] = useState<TesterSystemInfo | null>(null)
@@ -67,6 +135,7 @@ export default function TesterSystemPage() {
   const [fieldErrors, setFieldErrors] = useState<TesterFieldError[]>([])
   const [runActive, setRunActive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [cpuLoad, setCpuLoad] = useState<TesterCpuLoad | null>(null)
 
   const load = useCallback(() => {
     api.testerSystemGet()
@@ -77,6 +146,28 @@ export default function TesterSystemPage() {
       .catch(() => setRunActive(false))
   }, [addError])
   useEffect(() => { load() }, [load])
+
+  // the CPU load, live; the run state, so editing locks when a run starts
+  useEffect(() => {
+    let cancelled = false
+    const readLoad = () => {
+      if (document.hidden) return
+      api.testerSystemCpuLoad()
+        .then((r) => { if (!cancelled) setCpuLoad(r.data) })
+        .catch(() => { if (!cancelled) setCpuLoad(null) })
+    }
+    const readRun = () => {
+      if (document.hidden) return
+      api.testerRunGet()
+        .then((r) => { if (!cancelled) setRunActive(!FINISHED.includes(r.data.state)) })
+        .catch(() => {})
+    }
+    readLoad()
+    const loadTimer = window.setInterval(readLoad, LOAD_POLL_MS)
+    const runTimer = window.setInterval(readRun, RUN_POLL_MS)
+    return () => { cancelled = true; window.clearInterval(loadTimer); window.clearInterval(runTimer) }
+  }, [])
+  const busy = new Map((cpuLoad?.cpus ?? []).map((l) => [l.cpu, l.busy]))
 
   const cp = parseCpus(form.cpCpus)
   const dp = parseCpus(form.dpCpus)
@@ -174,7 +265,7 @@ export default function TesterSystemPage() {
           {warnings.map((w) => <p key={w} className={styles.cpuWarn}>{w}</p>)}
           <p className={styles.hint}>
             <b>Control plane</b>: N2, registration, PDU sessions, the control-plane loop and fru-tester&apos;s API run only on these CPUs during a run.
-            {' '}<b>Data plane</b>: every sender and reader keeps its own thread on these CPUs, one of each per CPU. Leave a list empty to not pin that side.
+            {' '}<b>Data plane</b>: every sender and reader keeps its own thread on these CPUs. With N CPUs and G gNBs the socket engine runs G×⌈N/G⌉ uplink senders, N uplink readers (N6 sink), N downlink senders and G downlink readers (one per gNB); AF_XDP runs one reader per NIC queue and up to N senders per NIC. Leave a list empty to not pin that side.
             {' '}The kernel&apos;s share of receiving runs where the NIC&apos;s interrupts go, which fru-tester does not move: set that on the host so they land on the data plane CPUs.
           </p>
         </section>
@@ -194,6 +285,21 @@ export default function TesterSystemPage() {
               <CpuMap info={info} cp={cp ?? []} dp={dp ?? []} irq={irq} onToggle={toggle} disabled={runActive} />
               <p className={styles.hint}>
                 Click a CPU to move it: not pinned → control plane → data plane. fru-tester may use CPUs {info.topology.allowed || '—'} of {info.topology.online || '—'}.
+              </p>
+            </>
+          )}
+        </section>
+
+        <section className={styles.card}>
+          <h3 className={styles.cardTitle}>CPU usage</h3>
+          {!info && <p className={styles.hint}>Loading…</p>}
+          {info && (
+            <>
+              <CpuUsage info={info} load={busy} cp={parseCpus(saved.cpCpus) ?? []} dp={parseCpus(saved.dpCpus) ?? []} />
+              <div className={styles.usageScale}><span>0%</span><i /><span>100%</span></div>
+              <p className={styles.hint}>
+                How busy each CPU of the host is, updated every second, during a run too. Every process and the kernel&apos;s interrupt work count, not only fru-tester.
+                {' '}CP and DP mark the saved allocation.
               </p>
             </>
           )}

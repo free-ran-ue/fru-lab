@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -118,4 +119,31 @@ func TestReadTopology(t *testing.T) {
 	require.Equal(t, "0-7", topo.Online)
 	require.Equal(t, []Node{{0, "0-3"}, {1, "4-7"}}, topo.Nodes)
 	require.Equal(t, []NicLayout{{Name: "eth1", Driver: "i40e", NumaNode: 1, LocalCpus: "4-7", Queues: 2, IrqCpus: "4-5"}}, topo.Interfaces)
+}
+
+func TestSamplerReadsLoadPerCpu(t *testing.T) {
+	dir := t.TempDir()
+	stat := filepath.Join(dir, "proc/stat")
+	require.NoError(t, os.MkdirAll(filepath.Dir(stat), 0o755))
+	write := func(body string) { require.NoError(t, os.WriteFile(stat, []byte(body), 0o644)) }
+	old := root
+	root = dir
+	defer func() { root = old }()
+
+	// user nice system idle iowait irq softirq steal
+	write("cpu  0 0 0 0 0 0 0 0\ncpu0 100 0 0 900 0 0 0 0\ncpu1 0 0 0 1000 0 0 0 0\nintr 1 2\n")
+	s := NewSampler()
+	go func() {
+		time.Sleep(firstGap / 2) // during the first interval
+		write("cpu0 150 0 10 930 10 0 0 0\ncpu1 0 0 0 1100 0 0 100 0\n")
+	}()
+	l, err := s.Read()
+	require.NoError(t, err)
+	require.Equal(t, []CpuLoad{{0, 60}, {1, 50}}, l.Cpus, "cpu0: 60 of 100 busy; cpu1: softirq counts")
+	require.GreaterOrEqual(t, l.IntervalMs, firstGap.Milliseconds())
+
+	write("cpu0 0 0 0 0 0 0 0 0\n")
+	l2, err := s.Read()
+	require.NoError(t, err)
+	require.Equal(t, l, l2, "within minGap: the last result")
 }

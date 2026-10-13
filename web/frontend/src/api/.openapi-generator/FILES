@@ -26,6 +26,8 @@ docs/TesterCpLoopRate.md
 docs/TesterCpLoopSnapshot.md
 docs/TesterCpPoint.md
 docs/TesterCpuAllocation.md
+docs/TesterCpuLoad.md
+docs/TesterCpuLoadCpusInner.md
 docs/TesterCpusErrorResponse.md
 docs/TesterDataplaneSnapshot.md
 docs/TesterFieldError.md

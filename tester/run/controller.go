@@ -676,7 +676,9 @@ func (r *run) startDataplane() error {
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
 		Engine:  t.Engine, N3Interface: r.profile.Network.N3.Interface, N6Interface: n6.Interface,
-		// with data plane CPUs, one sender and one reader per CPU
+		// with data plane CPUs, their count sets the senders and sink
+		// readers (the engine rounds uplink senders up to a multiple of
+		// the gNBs); without, the engine uses every CPU it may
 		Cpus: r.dpCpus, Senders: len(r.dpCpus), Receivers: len(r.dpCpus),
 	})
 	if err := dp.Start(); err != nil {

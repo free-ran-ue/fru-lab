@@ -281,3 +281,15 @@ func TestSystemCpusStatusCodes(t *testing.T) {
 	ctrl.cpusErr = run.ErrRunActive
 	require.Equal(t, http.StatusConflict, do(t, h, http.MethodPut, "/api/system/cpus", `{}`, "t").Code)
 }
+
+// The CPU load is readable at any time, a run active or not.
+func TestSystemCpuLoad(t *testing.T) {
+	h := newTestRouter(&fakeCtrl{snap: run.Snapshot{State: run.StateRunning}}, "t")
+	rec := do(t, h, http.MethodGet, "/api/system/cpuload", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var l cpuset.Load
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &l))
+	require.NotEmpty(t, l.Cpus)
+	require.Positive(t, l.IntervalMs)
+	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/system/cpuload", "", "x").Code)
+}
