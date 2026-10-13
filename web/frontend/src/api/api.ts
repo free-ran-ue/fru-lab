@@ -235,6 +235,23 @@ export interface TesterCpuAllocation {
     'cpCpus': string;
     'dpCpus': string;
 }
+export interface TesterCpuLoad {
+    /**
+     * How long the load was measured over.
+     */
+    'intervalMs': number;
+    /**
+     * Every online CPU, by number.
+     */
+    'cpus': Array<TesterCpuLoadCpusInner>;
+}
+export interface TesterCpuLoadCpusInner {
+    'cpu': number;
+    /**
+     * Percent of the interval not idle.
+     */
+    'busy': number;
+}
 export interface TesterCpusErrorResponse {
     'message': string;
     'errors': Array<TesterFieldError>;
@@ -2195,6 +2212,40 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
+         * @summary How busy each CPU of the tester host is (System page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerSystemCpuLoad: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/tester/system/cpuload`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
          * @summary Set the CPU allocation for the next runs
          * @param {TesterCpuAllocation} testerCpuAllocation 
@@ -2759,6 +2810,18 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
+         * @summary How busy each CPU of the tester host is (System page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerSystemCpuLoad(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuLoad>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemCpuLoad(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemCpuLoad']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
          * @summary Set the CPU allocation for the next runs
          * @param {TesterCpuAllocation} testerCpuAllocation 
@@ -3159,6 +3222,15 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         testerRunStop(options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
             return localVarFp.testerRunStop(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
+         * @summary How busy each CPU of the tester host is (System page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerSystemCpuLoad(options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuLoad> {
+            return localVarFp.testerSystemCpuLoad(options).then((request) => request(axios, basePath));
         },
         /**
          * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
@@ -3590,6 +3662,16 @@ export class DefaultApi extends BaseAPI {
      */
     public testerRunStop(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).testerRunStop(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
+     * @summary How busy each CPU of the tester host is (System page)
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerSystemCpuLoad(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerSystemCpuLoad(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

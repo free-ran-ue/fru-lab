@@ -111,6 +111,15 @@ func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 		c.JSON(http.StatusOK, info)
 	})
 	g.PUT("/system/cpus", handleSetCpus(ctrl))
+	cpuLoad := cpuset.NewSampler()
+	g.GET("/system/cpuload", func(c *gin.Context) {
+		l, err := cpuLoad.Read()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, l)
+	})
 	g.GET("/run/reports", func(c *gin.Context) {
 		reps := ctrl.Reports()
 		if reps == nil {

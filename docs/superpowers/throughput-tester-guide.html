@@ -607,6 +607,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <ul>
         <li>格式是 Linux 的 CPU 清單：<code>0-3,8,10-11</code>。留空表示那一邊不綁核（和以前一樣）。兩邊不能重疊，CPU 必須是 fru-tester 能用的（在 container 裡就是它的 cpuset）。</li>
         <li><b>CPUs</b> 卡片依 NUMA node 列出每顆 CPU，點一下切換：不綁 → 控制面 → 資料面。橘色小點是網卡中斷所在的 CPU。</li>
+        <li><b>CPU usage</b> 卡片即時顯示整台主機每顆 CPU 的使用率（每秒更新），一樣依 NUMA node 分組。顏色從綠（閒）經黃（約 50%）到紅（滿），上方有全部 CPU、控制面、資料面的平均，CPU 編號旁的 <b>CP</b>／<b>DP</b> 標的是已存的分配。所有程式和 kernel 的中斷處理（softirq）都算在內，不只 fru-tester。run 進行中照樣更新，可以用來確認資料面 CPU 是否吃滿、網卡中斷的 CPU 是否被 softirq 塞滿。</li>
         <li><b>Network interfaces</b> 列出實體網卡的驅動、NUMA node、鄰近的 CPU、收包佇列數、中斷所在的 CPU。資料面 CPU 跨了 NUMA node，或不在任何網卡的鄰近 CPU 上時，會顯示提醒。</li>
         <li>Run 頁標題下面、以及 HTML 報告的開頭都會記下這次 run 用的 CPU 分配。</li>
       </ul>

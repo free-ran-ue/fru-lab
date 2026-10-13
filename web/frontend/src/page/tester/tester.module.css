@@ -123,6 +123,16 @@
 .cpuIrq { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: #ea580c; }
 .cpuSwatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid #cbd5e1; background: #f8fafc; vertical-align: -2px; margin-right: 6px; }
 .cpuIrqKey { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ea580c; vertical-align: 1px; margin-right: 6px; }
+.usageSummary { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.6rem; margin-bottom: 1rem; }
+.usageStat { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.8rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.78rem; color: #64748b; }
+.usageStat b { font-size: 1.35rem; color: #0f172a; font-variant-numeric: tabular-nums; }
+.usageGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.2rem, 1fr)); gap: 0.35rem; }
+.usageCpu { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 2.9rem; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; color: #1e293b; transition: background-color 0.6s, border-color 0.6s; }
+.usageCpu b { font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.usageNum { font: 0.66rem ui-monospace, SFMono-Regular, Menlo, monospace; color: #334155; }
+.usageNum em { margin-left: 3px; font-style: normal; font-weight: 700; font-size: 0.58rem; }
+.usageScale { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; font-size: 0.72rem; color: #64748b; }
+.usageScale i { flex: 0 1 14rem; height: 8px; border-radius: 4px; background: linear-gradient(90deg, hsl(120 75% 82%), hsl(60 75% 82%), hsl(0 75% 82%)); border: 1px solid #e2e8f0; }
 .cpuWarn { margin: 0.75rem 0 0; padding: 0.5rem 0.75rem; border-radius: 8px; background: #fef9c3; color: #854d0e; font-size: 0.82rem; }
 .legend i.cpuSwatch { width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
 .legend i.cpuIrqKey { width: 6px; height: 6px; border-radius: 50%; vertical-align: 1px; }
