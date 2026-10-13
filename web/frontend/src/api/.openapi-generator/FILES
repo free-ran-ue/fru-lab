@@ -25,6 +25,8 @@ docs/TesterCauseCount.md
 docs/TesterCpLoopRate.md
 docs/TesterCpLoopSnapshot.md
 docs/TesterCpPoint.md
+docs/TesterCpuAllocation.md
+docs/TesterCpusErrorResponse.md
 docs/TesterDataplaneSnapshot.md
 docs/TesterFieldError.md
 docs/TesterGnbSpec.md
@@ -33,6 +35,8 @@ docs/TesterGnbTraffic.md
 docs/TesterHistorySummary.md
 docs/TesterInterface.md
 docs/TesterLatency.md
+docs/TesterNicLayout.md
+docs/TesterNumaNode.md
 docs/TesterPingRequest.md
 docs/TesterPingResult.md
 docs/TesterPlan.md
@@ -51,6 +55,8 @@ docs/TesterStageRate.md
 docs/TesterStageSnapshot.md
 docs/TesterStartErrorResponse.md
 docs/TesterStoredProfile.md
+docs/TesterSystemInfo.md
+docs/TesterTopology.md
 docs/TesterTraffic.md
 docs/TesterTrafficDirection.md
 docs/TesterTrafficPoint.md

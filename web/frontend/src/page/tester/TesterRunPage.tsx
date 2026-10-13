@@ -452,7 +452,10 @@ export default function TesterRunPage() {
             <h2 className={styles.title}>Throughput Tester · Run</h2>
             <p className={styles.subtitle}>
               {snapshot && snapshot.state !== 'idle'
-                ? <>Run <span className={styles.mono}>{snapshot.runId}</span> · {snapshot.profileName}{snapshot.startedAt && ` · started ${new Date(snapshot.startedAt).toLocaleString()}`}</>
+                ? <>Run <span className={styles.mono}>{snapshot.runId}</span> · {snapshot.profileName}{snapshot.startedAt && ` · started ${new Date(snapshot.startedAt).toLocaleString()}`}
+                  {' · CPUs: '}{snapshot.cpus.cpCpus || snapshot.cpus.dpCpus
+                    ? <span className={styles.mono}>control plane {snapshot.cpus.cpCpus || 'any'}, data plane {snapshot.cpus.dpCpus || 'any'}</span>
+                    : 'not pinned'}</>
                 : <>No run has been started yet. <Link to="/tester">Set one up</Link>.</>}
             </p>
           </div>

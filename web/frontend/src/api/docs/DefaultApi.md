@@ -42,6 +42,8 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerRunGet**](#testerrunget) | **GET** /api/tester/run | Current run snapshot|
 |[**testerRunStart**](#testerrunstart) | **POST** /api/tester/run | Start a run|
 |[**testerRunStop**](#testerrunstop) | **POST** /api/tester/run/stop | Stop the active run|
+|[**testerSystemCpusPut**](#testersystemcpusput) | **PUT** /api/tester/system/cpus | Set the CPU allocation for the next runs|
+|[**testerSystemGet**](#testersystemget) | **GET** /api/tester/system | The tester host\&#39;s CPU allocation and layout (System page)|
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()
@@ -1962,6 +1964,104 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**202** | Stop requested |  -  |
 |**409** | No active run |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerSystemCpusPut**
+> TesterCpuAllocation testerSystemCpusPut(testerCpuAllocation)
+
+Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterCpuAllocation
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let testerCpuAllocation: TesterCpuAllocation; //
+
+const { status, data } = await apiInstance.testerSystemCpusPut(
+    testerCpuAllocation
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerCpuAllocation** | **TesterCpuAllocation**|  | |
+
+
+### Return type
+
+**TesterCpuAllocation**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Stored, in canonical form |  -  |
+|**400** | Invalid; errors name the field |  -  |
+|**409** | A run is active |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerSystemGet**
+> TesterSystemInfo testerSystemGet()
+
+Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerSystemGet();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**TesterSystemInfo**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

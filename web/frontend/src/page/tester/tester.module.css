@@ -108,3 +108,24 @@
 .dirtyTag { margin-left: 0.5rem; font-size: 0.72rem; color: #a16207; background: #fef9c3; padding: 0.1rem 0.5rem; border-radius: 999px; vertical-align: middle; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
 .modalText { margin: 0 0 0.75rem; font-size: 0.9rem; color: #334155; }
+
+/* System page: CPU map */
+.cpuMap { display: flex; flex-direction: column; gap: 1rem; }
+.cpuNode { border: 1px solid #e2e8f0; border-radius: 12px; padding: 0.75rem 0.9rem; }
+.cpuNodeHead { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.82rem; color: #0f172a; margin-bottom: 0.5rem; }
+.cpuGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: 0.35rem; }
+.cpu { position: relative; height: 2rem; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; color: #475569; font: 0.75rem ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+.cpu:hover:not(:disabled) { border-color: #4f46e5; }
+.cpu:disabled { cursor: default; }
+.cpuCp { background: #e0e7ff; border-color: #6366f1; color: #3730a3; font-weight: 600; }
+.cpuDp { background: #ccfbf1; border-color: #0d9488; color: #115e59; font-weight: 600; }
+.cpuOff { background: repeating-linear-gradient(45deg, #f1f5f9 0 4px, #e2e8f0 4px 8px); color: #94a3b8; }
+.cpuIrq { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: #ea580c; }
+.cpuSwatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid #cbd5e1; background: #f8fafc; vertical-align: -2px; margin-right: 6px; }
+.cpuIrqKey { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ea580c; vertical-align: 1px; margin-right: 6px; }
+.cpuWarn { margin: 0.75rem 0 0; padding: 0.5rem 0.75rem; border-radius: 8px; background: #fef9c3; color: #854d0e; font-size: 0.82rem; }
+.legend i.cpuSwatch { width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+.legend i.cpuIrqKey { width: 6px; height: 6px; border-radius: 50%; vertical-align: 1px; }
+.legend i.cpuSwatch.cpuCp { background: #e0e7ff; border-color: #6366f1; }
+.legend i.cpuSwatch.cpuDp { background: #ccfbf1; border-color: #0d9488; }
+.legend i.cpuSwatch.cpuOff { background: repeating-linear-gradient(45deg, #f1f5f9 0 3px, #e2e8f0 3px 6px); }

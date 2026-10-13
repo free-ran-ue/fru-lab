@@ -114,6 +114,7 @@ section { scroll-margin-top: 12px; }
     <span>Duration <b class="mono">{{dash .Duration}}</b></span>
     <span>Traffic <b class="mono">{{dash .TrafficTime}}</b></span>
     <span>Engine <b class="mono">{{dash .S.Dataplane.Engine}}</b></span>
+    <span>CPUs {{if or .S.Cpus.CpCpus .S.Cpus.DpCpus}}<b class="mono">control plane {{dash .S.Cpus.CpCpus}} · data plane {{dash .S.Cpus.DpCpus}}</b>{{else}}<b>not pinned</b>{{end}}</span>
   </div>
   {{if .S.Error}}<p class="error" style="margin-top:14px">{{.S.Error}}</p>{{end}}
   <nav class="toc" style="margin-top:16px" aria-label="Sections">

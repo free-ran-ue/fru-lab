@@ -14,6 +14,7 @@ import (
 
 	loggergoModel "github.com/Alonza0314/logger-go/v2/model"
 
+	"tester/cpuset"
 	"tester/dataplane"
 	"tester/gnb"
 	"tester/metrics"
@@ -42,6 +43,19 @@ type Deps struct {
 	// MaxDurationUnit is what one unit of Traffic.MaxDurationMin lasts;
 	// zero = time.Minute (tests shorten it).
 	MaxDurationUnit time.Duration
+	// Cpus keeps the System page's CPU allocation; nil = never pin.
+	Cpus CpuStore
+	// SetProcessCpus moves the whole process to a set of CPUs; nil =
+	// cpuset.SetProcess (tests record the calls instead).
+	SetProcessCpus func(cpuset.Set) error
+	// AllowedCpus is what the process may use; nil = cpuset.Allowed.
+	AllowedCpus func() cpuset.Set
+}
+
+// CpuStore is where the CPU allocation is kept between restarts.
+type CpuStore interface {
+	Load() (cpuset.Allocation, error)
+	Save(cpuset.Allocation) error
 }
 
 // Dataplane is the slice of *dataplane.Engine a run uses.
@@ -92,6 +106,12 @@ func NewController(deps Deps) *Controller {
 	}
 	if deps.Pinger == nil {
 		deps.Pinger = netcfg.ICMPPinger{}
+	}
+	if deps.SetProcessCpus == nil {
+		deps.SetProcessCpus = cpuset.SetProcess
+	}
+	if deps.AllowedCpus == nil {
+		deps.AllowedCpus = cpuset.Allowed
 	}
 	return &Controller{deps: deps, changed: make(chan struct{})}
 }
@@ -204,7 +224,12 @@ func (c *Controller) Start(p profile.Profile) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	cpus, cp, dp, err := c.allocation()
+	if err != nil {
+		return Snapshot{}, err
+	}
 	r := newRun(c.deps.NewID(), p, plan, c.deps, c.notify)
+	r.cpus, r.cpCpus, r.dpCpus = cpus, cp, dp
 
 	c.mu.Lock()
 	if c.current != nil && !c.current.state().Finished() {
@@ -310,6 +335,10 @@ type run struct {
 	pduStage         *procStage
 	teids            gnb.TeidAllocator
 	cp               *cpLoop // the control-plane test
+	// cpus is the System page's allocation when the run started: cpCpus
+	// holds the process for the run, dpCpus the data plane's threads.
+	cpus           cpuset.Allocation
+	cpCpus, dpCpus cpuset.Set
 	// tpDone is closed once every throughput UE has a final PDU outcome
 	// (tpLeft, under mu, counts those still without one); the
 	// control-plane loop starts then.
@@ -468,6 +497,7 @@ func (r *run) snapshot() Snapshot {
 		Gnbs:   append([]GnbStatus(nil), r.gnbs...),
 		Ues:    r.summary,
 		CpLoop: r.cp.snapshot(r.deps.Now()),
+		Cpus:   r.cpus,
 		// copy into a non-nil slice: an empty list must encode as [] (the
 		// Run page reads failedUes.length; null blanked it)
 		FailedUes: append([]UeFailure{}, r.failures...),
@@ -491,6 +521,14 @@ func (r *run) execute() {
 	if m := r.profile.Traffic.MaxDurationMin; m > 0 {
 		t := time.AfterFunc(time.Duration(m)*r.deps.MaxDurationUnit, func() { r.requestStop("maxDuration") })
 		defer t.Stop()
+	}
+
+	if len(r.cpCpus) > 0 {
+		if err := r.deps.SetProcessCpus(r.cpCpus); err != nil {
+			r.deps.Log.Warnf("run %s: keep to control plane CPUs %s: %v", r.id, r.cpCpus, err)
+		}
+		// back to every CPU for the API and the next run
+		defer func() { _ = r.deps.SetProcessCpus(r.deps.AllowedCpus()) }()
 	}
 
 	err := r.configureIPs()
@@ -638,6 +676,8 @@ func (r *run) startDataplane() error {
 		UlBps: t.UlMbps * 1e6, DlBps: t.DlMbps * 1e6, StartDelay: trafficStartDelay,
 		DlBatch: time.Duration(t.DlBatchMs) * time.Millisecond,
 		Engine:  t.Engine, N3Interface: r.profile.Network.N3.Interface, N6Interface: n6.Interface,
+		// with data plane CPUs, one sender and one reader per CPU
+		Cpus: r.dpCpus, Senders: len(r.dpCpus), Receivers: len(r.dpCpus),
 	})
 	if err := dp.Start(); err != nil {
 		return fmt.Errorf("start data plane: %w", err)

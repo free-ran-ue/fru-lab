@@ -40,6 +40,10 @@ func (b *backend) getTesterRoutes() util.Routes {
 			HandlerFunc: b.handleTesterProxy},
 		{Name: "TesterNetworkPing", Method: http.MethodPost, Pattern: "/tester/network/ping",
 			HandlerFunc: withLogging("TesterNetworkPing", b.TesterLog, b.handleTesterProxy)},
+		{Name: "TesterSystemGet", Method: http.MethodGet, Pattern: "/tester/system",
+			HandlerFunc: b.handleTesterProxy},
+		{Name: "TesterSystemCpusPut", Method: http.MethodPut, Pattern: "/tester/system/cpus",
+			HandlerFunc: withLogging("TesterSystemCpusPut", b.TesterLog, b.handleTesterProxy)},
 	}
 }
 

@@ -6,6 +6,7 @@ package run
 import (
 	"time"
 
+	"tester/cpuset"
 	"tester/dataplane"
 	"tester/metrics"
 	"tester/profile"
@@ -142,10 +143,12 @@ type Snapshot struct {
 	Deregistration metrics.StageSnapshot `json:"deregistration"`
 	N2Release      metrics.StageSnapshot `json:"n2Release"`
 	// StopReason is "user" (Stop pressed) or "maxDuration"; empty while running.
-	StopReason string             `json:"stopReason"`
-	Gnbs       []GnbStatus        `json:"gnbs"`
-	Ues        UeSummary          `json:"ues"`
-	FailedUes  []UeFailure        `json:"failedUes"` // first maxFailuresListed failures
-	CpLoop     CpLoopSnapshot     `json:"cpLoop"`
-	Dataplane  dataplane.Snapshot `json:"dataplane"`
+	StopReason string         `json:"stopReason"`
+	Gnbs       []GnbStatus    `json:"gnbs"`
+	Ues        UeSummary      `json:"ues"`
+	FailedUes  []UeFailure    `json:"failedUes"` // first maxFailuresListed failures
+	CpLoop     CpLoopSnapshot `json:"cpLoop"`
+	// Cpus is the CPU allocation the run used (empty lists: not pinned).
+	Cpus      cpuset.Allocation  `json:"cpus"`
+	Dataplane dataplane.Snapshot `json:"dataplane"`
 }

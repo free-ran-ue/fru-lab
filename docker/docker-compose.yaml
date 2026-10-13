@@ -43,3 +43,5 @@ services:
       - IPC_LOCK
     volumes:
       - ./tester.yaml:/frutester/tester.yaml
+      # the System page's CPU allocation (systemFile in tester.yaml)
+      - ./frutester-data:/frutester/data

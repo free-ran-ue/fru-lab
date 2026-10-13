@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"tester/bench"
+	"tester/cpuset"
 	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
@@ -29,6 +30,14 @@ type Controller interface {
 	Reports() []run.Report
 	Ping(p profile.Profile, plane string) (run.PingResult, error)
 	Interfaces() ([]netcfg.InterfaceInfo, error)
+	System() (run.SystemInfo, error)
+	SetCpus(a cpuset.Allocation) (cpuset.Allocation, error)
+}
+
+// CpusErrorResponse carries field errors when the CPU allocation is refused.
+type CpusErrorResponse struct {
+	Message string              `json:"message"`
+	Errors  []cpuset.FieldError `json:"errors"`
 }
 
 // Bench is the slice of *bench.Runner the handlers use.
@@ -93,6 +102,15 @@ func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 		}
 		c.JSON(http.StatusOK, ifaces)
 	})
+	g.GET("/system", func(c *gin.Context) {
+		info, err := ctrl.System()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, info)
+	})
+	g.PUT("/system/cpus", handleSetCpus(ctrl))
 	g.GET("/run/reports", func(c *gin.Context) {
 		reps := ctrl.Reports()
 		if reps == nil {
@@ -157,6 +175,7 @@ func handleStart(ctrl Controller, b Bench) gin.HandlerFunc {
 		}
 		snap, err := ctrl.Start(p)
 		var verr *profile.ValidationError
+		var aerr *run.CpuAllocationError
 		switch {
 		case err == nil:
 			c.JSON(http.StatusAccepted, snap)
@@ -164,6 +183,34 @@ func handleStart(ctrl Controller, b Bench) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, StartErrorResponse{Message: "profile is invalid", Errors: verr.Errors})
 		case errors.Is(err, run.ErrRunActive), errors.Is(err, run.ErrPingActive):
 			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
+		case errors.As(err, &aerr):
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error() + " (fix it on the System page)"})
+		default:
+			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
+		}
+	}
+}
+
+// handleSetCpus stores the CPU allocation the next run uses: 200 with it
+// in canonical form, 400 with field errors, 409 while a run is active.
+func handleSetCpus(ctrl Controller) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var a cpuset.Allocation
+		dec := json.NewDecoder(c.Request.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&a); err != nil {
+			c.JSON(http.StatusBadRequest, CpusErrorResponse{Message: "invalid CPU allocation JSON: " + err.Error(), Errors: []cpuset.FieldError{}})
+			return
+		}
+		saved, err := ctrl.SetCpus(a)
+		var aerr *run.CpuAllocationError
+		switch {
+		case err == nil:
+			c.JSON(http.StatusOK, saved)
+		case errors.As(err, &aerr):
+			c.JSON(http.StatusBadRequest, CpusErrorResponse{Message: "CPU allocation is invalid", Errors: aerr.Errors})
+		case errors.Is(err, run.ErrRunActive):
+			c.JSON(http.StatusConflict, MessageResponse{Message: "the CPU allocation cannot change during a run; stop it first"})
 		default:
 			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		}
