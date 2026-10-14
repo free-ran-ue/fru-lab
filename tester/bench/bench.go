@@ -198,7 +198,7 @@ func measureSend(senders int, s Settings, warm, dur time.Duration) (Step, error)
 
 	e := dataplane.New(dataplane.Config{
 		RunID: 1, UeCount: senders, GnbN3IPs: []netip.Addr{benchGnb},
-		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: sinkPort, PacketSize: s.PacketSize,
+		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: sinkPort, UlPacketSize: s.PacketSize, DlPacketSize: s.PacketSize,
 		UlBps: 400e9, Senders: senders, Receivers: 1, NoGSO: !s.Gso,
 	})
 	if err := e.Start(); err != nil {

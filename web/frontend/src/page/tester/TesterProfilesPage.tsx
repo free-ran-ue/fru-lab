@@ -10,6 +10,7 @@ import type { TesterStoredProfile } from '../../api'
 import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
 import { lastProfileId } from './testerProfiles'
+import { normalizeProfile } from './testerDefaults'
 import styles from './tester.module.css'
 
 // PROFILES_PAGE is how many profiles one page of the list shows.
@@ -17,6 +18,13 @@ const PROFILES_PAGE = 20
 
 function engineLabel(engine: string): string {
   return engine === '' ? 'socket' : engine
+}
+
+// packetSizes is a profile's uplink / downlink packet size; profiles
+// saved with one size show it both ways.
+function packetSizes(saved: TesterStoredProfile['profile']): string {
+  const t = normalizeProfile(saved).traffic
+  return t.ulPacketSize === t.dlPacketSize ? `${t.ulPacketSize} B` : `${t.ulPacketSize} / ${t.dlPacketSize} B`
 }
 
 export default function TesterProfilesPage() {
@@ -113,7 +121,7 @@ export default function TesterProfilesPage() {
                     <th>Name</th>
                     <th>gNBs / UEs</th>
                     <th>UL / DL per UE</th>
-                    <th>Packet</th>
+                    <th>Packet UL / DL</th>
                     <th>Engine</th>
                     <th>Updated</th>
                     <th />
@@ -132,7 +140,7 @@ export default function TesterProfilesPage() {
                       </td>
                       <td className={styles.mono}>{p.profile.scale.gnbCount} / {p.profile.scale.ueCount}</td>
                       <td className={styles.mono}>{p.profile.traffic.ulMbps} / {p.profile.traffic.dlMbps} Mbps</td>
-                      <td className={styles.mono}>{p.profile.traffic.packetSize} B</td>
+                      <td className={styles.mono}>{packetSizes(p.profile)}</td>
                       <td className={styles.mono}>{engineLabel(p.profile.traffic.engine ?? '')}</td>
                       <td>{new Date(p.updatedAt).toLocaleString()}</td>
                       <td>

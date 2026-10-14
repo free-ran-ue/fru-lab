@@ -69,7 +69,7 @@ func TestXDPEngineCarriesUplinkAndDownlink(t *testing.T) {
 	upf := xdpTestbed(t, port)
 	gnb := netip.MustParseAddr("10.97.0.10")
 	e := NewXDP(Config{RunID: 77, UeCount: 4, GnbN3IPs: []netip.Addr{gnb}, SinkIP: netip.MustParseAddr("10.97.0.2"),
-		Port: port, PacketSize: 500, UlBps: 2e6, DlBps: 2e6, N3Interface: "frd-tester", N6Interface: "frd-tester"})
+		Port: port, UlPacketSize: 500, DlPacketSize: 500, UlBps: 2e6, DlBps: 2e6, N3Interface: "frd-tester", N6Interface: "frd-tester"})
 	require.NoError(t, e.Start())
 	for ue := range 4 {
 		ueIP := netip.AddrFrom4([4]byte{10, 60, 0, byte(ue + 1)})
@@ -101,7 +101,7 @@ func TestXDPEngineCarriesUplinkAndDownlink(t *testing.T) {
 // auto falls back to sockets on a veth, saying why.
 func TestAutoUsesSocketsOffANIC(t *testing.T) {
 	r := Select(Config{Engine: EngineAuto, UeCount: 1, GnbN3IPs: []netip.Addr{netip.MustParseAddr("127.0.0.11")},
-		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: freePort(t, "127.0.0.1"), PacketSize: 500,
+		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: freePort(t, "127.0.0.1"), UlPacketSize: 500, DlPacketSize: 500,
 		N3Interface: "lo", N6Interface: "lo"})
 	require.NoError(t, r.Start())
 	defer r.Stop(0)

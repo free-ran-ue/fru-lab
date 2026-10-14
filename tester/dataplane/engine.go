@@ -21,14 +21,15 @@ import (
 
 // Config is one run's traffic setup. Rates are per UE (design Q10).
 type Config struct {
-	RunID      uint32
-	UeCount    int
-	GnbN3IPs   []netip.Addr // by gNB index; UL leaves from and DL arrives at <ip>:2152
-	SinkIP     netip.Addr   // N6 side: UL is addressed to it, DL is sent from it
-	Port       uint16       // UDP port of the sink and of the (simulated) UEs
-	PacketSize int          // inner IP packet bytes, MinPacketSize..9000
-	UlBps      float64      // per UE; 0 disables uplink
-	DlBps      float64      // per UE; 0 disables downlink
+	RunID        uint32
+	UeCount      int
+	GnbN3IPs     []netip.Addr // by gNB index; UL leaves from and DL arrives at <ip>:2152
+	SinkIP       netip.Addr   // N6 side: UL is addressed to it, DL is sent from it
+	Port         uint16       // UDP port of the sink and of the (simulated) UEs
+	UlPacketSize int          // inner IP packet bytes uplink, MinPacketSize..9000
+	DlPacketSize int          // and downlink
+	UlBps        float64      // per UE; 0 disables uplink
+	DlBps        float64      // per UE; 0 disables downlink
 	// DlTarget is where a UE's downlink is sent. nil means the UE's own
 	// IP:Port, which the host routes to the UPF's N6; tests point it at
 	// a fake UPF.
@@ -311,7 +312,7 @@ func (e *core) newFlow(ue, gnb int, ueIP netip.Addr, ulTeid, dlTeid uint32, upfN
 	f := &flow{ue: uint32(ue), gnb: gnb, dlTeid: dlTeid, upf: upfN3, ueIP: ueIP, ulTeid: ulTeid}
 	f.ulLast.Store(-1)
 	f.dlLast.Store(-1)
-	f.ulHead = slices.Clone(ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.PacketSize)[:ulHeadLen])
+	f.ulHead = slices.Clone(ulTemplate(ulTeid, ueIP, e.cfg.SinkIP, e.cfg.Port, e.cfg.UlPacketSize)[:ulHeadLen])
 	f.dlTo = netip.AddrPortFrom(ueIP, e.cfg.Port)
 	if e.cfg.DlTarget != nil {
 		f.dlTo = e.cfg.DlTarget(ueIP)
@@ -354,7 +355,10 @@ func growReadBuffer(c *net.UDPConn) {
 func (e *core) pace(ctx context.Context, sh *shard, bps float64, b txBatch) {
 	defer e.senders.Done()
 	e.pin()
-	pktBits := float64(e.cfg.PacketSize * 8)
+	pktBits := float64(e.cfg.UlPacketSize * 8)
+	if b.downlink() {
+		pktBits = float64(e.cfg.DlPacketSize * 8)
+	}
 	run := 1 // packets a flow gets in a row
 	if b.downlink() {
 		run = max(1, int(bps*e.cfg.DlBatch.Seconds()/pktBits))
@@ -413,6 +417,7 @@ type batcher struct {
 	pc    *ipv4.PacketConn
 	dl    bool
 	gnb   int // uplink: the gNB it sends for; downlink: -1 (each flow's own)
+	size  int // inner IP bytes of one packet, as counted
 	seg   int // UDP payload bytes of one packet
 	arena []byte
 	used  int // packets in the arena
@@ -434,12 +439,13 @@ func (e *Engine) newBatcher(conn *net.UDPConn, dl bool, gnb int) *batcher {
 		d = &e.dl
 	}
 	b := &batcher{e: e, conn: conn, pc: ipv4.NewPacketConn(conn), dl: dl, gnb: gnb,
-		seg:  e.cfg.PacketSize + gtpHeaderLen, // uplink carries the G-PDU header
+		size: e.cfg.UlPacketSize, seg: e.cfg.UlPacketSize + gtpHeaderLen, // uplink carries the G-PDU header
 		msgs: make([]ipv4.Message, batchSize), first: make([]int, batchSize), segs: make([]int, batchSize),
 		dst: make([]netip.AddrPort, batchSize), gnbOf: make([]int, batchSize),
 		stats: d.addSender(len(e.cfg.GnbN3IPs))}
 	if dl {
-		b.seg = e.cfg.PacketSize - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
+		b.size = e.cfg.DlPacketSize
+		b.seg = b.size - ipv4HeaderLen - udpHeaderLen // the kernel adds IP/UDP
 	}
 	slots := batchSize
 	if !e.cfg.NoGSO && setGSO(conn, b.seg) == nil {
@@ -524,7 +530,7 @@ func (b *batcher) dropGSO(off int) {
 				b.acc.errors++
 				continue
 			}
-			b.acc.add(b.gnbOf[i], uint64(b.e.cfg.PacketSize))
+			b.acc.add(b.gnbOf[i], uint64(b.size))
 		}
 	}
 }
@@ -566,7 +572,7 @@ func (b *batcher) flush() {
 // count counts message i as sent.
 func (b *batcher) count(i int) {
 	for range b.segs[i] {
-		b.acc.add(b.gnbOf[i], uint64(b.e.cfg.PacketSize))
+		b.acc.add(b.gnbOf[i], uint64(b.size))
 	}
 }
 

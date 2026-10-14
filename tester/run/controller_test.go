@@ -263,7 +263,7 @@ func testProfile() profile.Profile {
 			N3: profile.N3Network{Interface: "eth-n3", Cidr: "10.0.2.0/24", StartIP: "10.0.2.10", UpfIP: "10.0.2.1", UpfPort: 2152},
 			N6: profile.N6Network{Interface: "eth-n6", SinkIP: "10.0.3.2/24", UpfIP: "10.0.3.1", UePool: "10.60.0.0/16"},
 		},
-		Traffic: profile.Traffic{UlMbps: 1, DlMbps: 5, PacketSize: 1400, Port: 9200},
+		Traffic: profile.Traffic{UlMbps: 1, DlMbps: 5, UlPacketSize: 1400, DlPacketSize: 1400, Port: 9200},
 		// N2-only tests use fakeConn, which never answers NAS: keep the UE
 		// stages short so Stop does not wait long for their timeouts.
 		Rates: profile.Rates{
@@ -481,27 +481,27 @@ func TestValidateFlagsUnknownInterface(t *testing.T) {
 	require.Len(t, verr.Errors, 2)
 }
 
-// The packet must fit the interfaces: on N3 with up to 44 bytes of
-// GTP-U around it, on N6 as it is.
+// Each direction's packet must fit the interfaces: on N3 with up to 44
+// bytes of GTP-U around it, on N6 as it is.
 func TestValidateFitsThePacketToTheMTU(t *testing.T) {
 	c := newTestController(&fakeAddrs{}, newFakeDialer(nil))
 	p := testProfile()
-	p.Traffic.PacketSize = 1456
+	p.Traffic.UlPacketSize, p.Traffic.DlPacketSize = 1456, 200
 	_, err := c.Validate(p)
 	require.NoError(t, err)
 
-	p.Traffic.PacketSize = 1457
+	p.Traffic.DlPacketSize = 1457
 	_, err = c.Validate(p)
 	var verr *profile.ValidationError
 	require.ErrorAs(t, err, &verr)
-	require.Equal(t, []profile.FieldError{{Field: "traffic.packetSize",
+	require.Equal(t, []profile.FieldError{{Field: "traffic.dlPacketSize",
 		Message: "must be at most 1456 here: eth-n3 has MTU 1500 and GTP-U adds up to 44 bytes"}}, verr.Errors)
 
 	p.Network.N3.Interface = "jumbo"
-	p.Traffic.PacketSize = 8000
+	p.Traffic.UlPacketSize, p.Traffic.DlPacketSize = 8000, 1400
 	_, err = c.Validate(p)
 	require.ErrorAs(t, err, &verr)
-	require.Equal(t, []profile.FieldError{{Field: "traffic.packetSize", Message: "must be at most 1500 here: eth-n6 has MTU 1500"}}, verr.Errors)
+	require.Equal(t, []profile.FieldError{{Field: "traffic.ulPacketSize", Message: "must be at most 1500 here: eth-n6 has MTU 1500"}}, verr.Errors)
 
 	p.Network.N6.Interface = "jumbo"
 	_, err = c.Validate(p)

@@ -29,7 +29,7 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     sst: 1,
     sd: '010203',
   },
-  traffic: { ulMbps: 1, dlMbps: 1, packetSize: 1400, port: 9200, maxDurationMin: 0, dlBatchMs: 1, engine: 'auto' },
+  traffic: { ulMbps: 1, dlMbps: 1, ulPacketSize: 1400, dlPacketSize: 1400, port: 9200, maxDurationMin: 0, dlBatchMs: 1, engine: 'auto' },
   network: {
     n2: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', amfIp: '10.0.1.3', amfPort: 38412 },
     n3: { interface: 'docker-cn-ran', cidr: '10.0.1.0/24', startIp: '10.0.1.100', upfIp: '10.0.1.5', upfPort: 2152 },
@@ -55,6 +55,12 @@ export function normalizeProfile(saved: unknown): TesterProfile {
   // saved before the control-plane test existed: every UE carried traffic
   const scale = (saved as { scale?: { throughputUeCount?: unknown } } | null)?.scale
   if (typeof scale?.throughputUeCount !== 'number') p.scale.throughputUeCount = p.scale.ueCount
+  // saved with one packet size for both directions
+  const traffic = (saved as { traffic?: { packetSize?: unknown, ulPacketSize?: unknown } } | null)?.traffic
+  if (typeof traffic?.packetSize === 'number' && typeof traffic.ulPacketSize !== 'number') {
+    p.traffic.ulPacketSize = traffic.packetSize
+    p.traffic.dlPacketSize = traffic.packetSize
+  }
   return p
 }
 
