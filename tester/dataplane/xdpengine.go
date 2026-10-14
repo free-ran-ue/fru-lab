@@ -136,8 +136,8 @@ func (e *XDPEngine) Start() (err error) {
 	if cfg.N3Interface == "" || cfg.N6Interface == "" {
 		return errors.New("AF_XDP needs the N3 and N6 interface names")
 	}
-	if frameULHead+HeaderLen+cfg.PacketSize-ulHeadLen+gtpHeaderLen > xdp.FrameSize {
-		return fmt.Errorf("packets of %d bytes do not fit an AF_XDP frame (%d bytes)", cfg.PacketSize, xdp.FrameSize)
+	if size := max(cfg.UlPacketSize, cfg.DlPacketSize); frameULHead+HeaderLen+size-ulHeadLen+gtpHeaderLen > xdp.FrameSize {
+		return fmt.Errorf("packets of %d bytes do not fit an AF_XDP frame (%d bytes)", size, xdp.FrameSize)
 	}
 	if e.n3, err = e.openPort(cfg.N3Interface); err != nil {
 		return err
@@ -286,7 +286,10 @@ func (t *xdpTx) add(f *flow) {
 	if t.queue == 0 {
 		t.now = t.c.cfg.Now().UnixNano()
 	}
-	size := t.c.cfg.PacketSize
+	size := t.c.cfg.UlPacketSize
+	if t.dl {
+		size = t.c.cfg.DlPacketSize
+	}
 	fill := func(frame []byte) int {
 		if t.dl {
 			copy(frame, f.frameDL)
@@ -385,8 +388,8 @@ func (e *XDPEngine) hop(dst netip.Addr, want *xdpPort) (xdp.NextHop, error) {
 // the outer UDP source port varies by UE so a receiving NIC spreads the
 // flows over its queues.
 func (e *XDPEngine) buildFrames(f *flow) error {
-	size := e.cfg.PacketSize
 	if e.cfg.UlBps > 0 {
+		size := e.cfg.UlPacketSize
 		h, err := e.hop(f.upf.Addr(), e.n3)
 		if err != nil {
 			return err
@@ -405,7 +408,7 @@ func (e *XDPEngine) buildFrames(f *flow) error {
 		}
 		b := make([]byte, frameDLHead)
 		putEthernet(b, h)
-		putIPv4UDPHeader(b[ethHeaderLen:], size, e.cfg.SinkIP, f.ueIP, e.cfg.Port, e.cfg.Port)
+		putIPv4UDPHeader(b[ethHeaderLen:], e.cfg.DlPacketSize, e.cfg.SinkIP, f.ueIP, e.cfg.Port, e.cfg.Port)
 		f.frameDL = b
 	}
 	return nil

@@ -661,7 +661,7 @@ export interface TesterTopology {
     'interfaces': Array<TesterNicLayout>;
 }
 /**
- * Fixed-rate traffic of every established UE. packetSize is the inner IP packet length.
+ * Fixed-rate traffic of every established UE. ulPacketSize and dlPacketSize are the inner IP packet length each way.
  */
 export interface TesterTraffic {
     /**
@@ -673,9 +673,13 @@ export interface TesterTraffic {
      */
     'dlMbps': number;
     /**
-     * 64..9000, and at most the N3 interface\'s MTU minus 44 (GTP-U and its headers) and the N6 interface\'s MTU; 1456 on a 1500 MTU network.
+     * Uplink. 64..9000, and at most the N3 interface\'s MTU minus 44 (GTP-U and its headers) and the N6 interface\'s MTU; 1456 on a 1500 MTU network.
      */
-    'packetSize': number;
+    'ulPacketSize': number;
+    /**
+     * Downlink, with the same limits as ulPacketSize.
+     */
+    'dlPacketSize': number;
     /**
      * UDP port at the N6 sink and at the UEs.
      */

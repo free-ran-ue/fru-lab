@@ -152,7 +152,7 @@ func startEngineWith(t *testing.T, mbps float64, dropEvery uint64, tune func(*Co
 	gnbs := []netip.Addr{netip.MustParseAddr("127.0.0.11"), netip.MustParseAddr("127.0.0.12")}
 	cfg := Config{
 		RunID: 42, UeCount: 4, GnbN3IPs: gnbs, SinkIP: sink.Addr(), Port: sink.Port(),
-		PacketSize: 500, UlBps: mbps * 1e6, DlBps: mbps * 1e6,
+		UlPacketSize: 500, DlPacketSize: 500, UlBps: mbps * 1e6, DlBps: mbps * 1e6,
 		DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() },
 	}
 	tune(&cfg)
@@ -189,6 +189,24 @@ func TestEngineCarriesUplinkAndDownlinkThroughTheUPF(t *testing.T) {
 	require.Positive(t, s.Gnbs[1].UlRxBytes)
 }
 
+// Each direction sends its own packet size at its own rate in bits, so
+// the smaller packets go out more often.
+func TestEachDirectionHasItsOwnPacketSize(t *testing.T) {
+	e, _ := startEngineWith(t, 2, 0, func(c *Config) { c.UlPacketSize, c.DlPacketSize = 1200, 300 })
+	time.Sleep(time.Second)
+	e.Stop(100 * time.Millisecond)
+	s := e.Snapshot()
+	for name, want := range map[string]struct {
+		d    DirSnapshot
+		size uint64
+	}{"ul": {s.Ul, 1200}, "dl": {s.Dl, 300}} {
+		require.Positive(t, want.d.RxPackets, name)
+		require.Equal(t, want.size*want.d.TxPackets, want.d.TxBytes, name)
+		require.Equal(t, want.size*want.d.RxPackets, want.d.RxBytes, name)
+	}
+	require.InDelta(t, 4, float64(s.Dl.TxPackets)/float64(s.Ul.TxPackets), 0.5, "same Mbps, a quarter of the size")
+}
+
 func TestEngineCountsDownlinkLoss(t *testing.T) {
 	e, _ := startEngine(t, 2, 2) // the fake UPF drops every 2nd downlink packet
 	time.Sleep(time.Second)
@@ -211,7 +229,7 @@ func TestEngineIgnoresForeignAndStaleTraffic(t *testing.T) {
 
 func TestStartFailsWhenAnAddressIsNotLocal(t *testing.T) {
 	e := New(Config{UeCount: 1, GnbN3IPs: []netip.Addr{netip.MustParseAddr("192.0.2.1")},
-		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9, PacketSize: 100})
+		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9, UlPacketSize: 100, DlPacketSize: 100})
 	err := e.Start()
 	require.ErrorContains(t, err, "bind gNB-1 N3 192.0.2.1:2152")
 	e.Stop(0) // safe on a never-started engine
@@ -226,7 +244,7 @@ func TestTrafficStartsAfterTheStartDelay(t *testing.T) {
 	gnbs := []netip.Addr{netip.MustParseAddr("127.0.0.11")}
 	e := New(Config{
 		RunID: 1, UeCount: 1, GnbN3IPs: gnbs, SinkIP: sink.Addr(), Port: sink.Port(),
-		PacketSize: 500, UlBps: 1e6, DlBps: 1e6, StartDelay: 300 * time.Millisecond,
+		UlPacketSize: 500, DlPacketSize: 500, UlBps: 1e6, DlBps: 1e6, StartDelay: 300 * time.Millisecond,
 		DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() },
 	})
 	require.NoError(t, e.Start())
@@ -257,7 +275,7 @@ func TestDownlinkInTheWrongTunnelIsMisroutedNotReceived(t *testing.T) {
 	upf.mu.Unlock()
 	gnbs := []netip.Addr{netip.MustParseAddr("127.0.0.11")}
 	e := New(Config{RunID: 3, UeCount: 1, GnbN3IPs: gnbs, SinkIP: sink.Addr(), Port: sink.Port(),
-		PacketSize: 500, DlBps: 1e6, DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() }})
+		UlPacketSize: 500, DlPacketSize: 500, DlBps: 1e6, DlTarget: func(netip.Addr) netip.AddrPort { return upf.n6Addr() }})
 	require.NoError(t, e.Start())
 	ueIP := netip.MustParseAddr("10.60.0.1")
 	upf.route(0, ueRoute{dlTeid: 100, gnb: netip.AddrPortFrom(gnbs[0], GtpPort), ueIP: ueIP})
@@ -358,7 +376,7 @@ func gsoBatcher(t *testing.T, noGSO bool) (*batcher, []*flow, *net.UDPConn) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = upf.Close() })
 	e := New(Config{RunID: 9, UeCount: 3, GnbN3IPs: []netip.Addr{netip.MustParseAddr("127.0.0.11")},
-		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9200, PacketSize: 500, NoGSO: noGSO})
+		SinkIP: netip.MustParseAddr("127.0.0.1"), Port: 9200, UlPacketSize: 500, DlPacketSize: 500, NoGSO: noGSO})
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.11")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })

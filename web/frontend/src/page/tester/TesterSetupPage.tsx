@@ -466,7 +466,8 @@ export default function TesterSetupPage() {
               <div className={styles.fieldGrid}>
                 <Field label="Uplink (Mbps)" path="traffic.ulMbps" numeric {...fieldProps} />
                 <Field label="Downlink (Mbps)" path="traffic.dlMbps" numeric {...fieldProps} />
-                <Field label="Packet size (bytes, inner IP)" path="traffic.packetSize" numeric {...fieldProps} />
+                <Field label="Uplink packet size (bytes, inner IP)" path="traffic.ulPacketSize" numeric {...fieldProps} />
+                <Field label="Downlink packet size (bytes, inner IP)" path="traffic.dlPacketSize" numeric {...fieldProps} />
                 <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
                 <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />
                 <Field label="Downlink batch (ms per UE, 0 = off)" path="traffic.dlBatchMs" numeric {...fieldProps} />
@@ -474,9 +475,9 @@ export default function TesterSetupPage() {
               </div>
               <p className={styles.hint}>
                 Every throughput UE starts sending as soon as its PDU session is up. At full scale: uplink
-                {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.throughputUeCount, profile.traffic.packetSize)}</span>,
-                downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.throughputUeCount, profile.traffic.packetSize)}</span>.
-                0 turns a direction off. The packet size can go up to the network&apos;s MTU minus 44 bytes of GTP-U (1456 at
+                {' '}<span className={styles.mono}>{totalRate(profile.traffic.ulMbps, profile.scale.throughputUeCount, profile.traffic.ulPacketSize)}</span>,
+                downlink <span className={styles.mono}>{totalRate(profile.traffic.dlMbps, profile.scale.throughputUeCount, profile.traffic.dlPacketSize)}</span>.
+                0 turns a direction off. Each direction has its own packet size, which can go up to the network&apos;s MTU minus 44 bytes of GTP-U (1456 at
                 MTU 1500); bigger packets carry more for the same packets per second.
                 {' '}With a max run time the run stops itself, exactly as if you pressed Stop.
                 {' '}Downlink batch sends each UE that many milliseconds of packets in a row, so the kernel can take them in one

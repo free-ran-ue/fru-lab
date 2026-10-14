@@ -27,13 +27,15 @@ const MaxPacketSize = 9000
 const GtpOverhead = 44
 
 // Traffic is what every established UE sends and receives, at a fixed
-// rate (design Q10). PacketSize is the inner IP packet's length; Port is
-// the UDP port used at the N6 sink and at the (simulated) UEs.
+// rate (design Q10). UlPacketSize and DlPacketSize are the inner IP
+// packet's length each way; Port is the UDP port used at the N6 sink and
+// at the (simulated) UEs.
 type Traffic struct {
-	UlMbps     float64 `json:"ulMbps"` // per UE; 0 = no uplink
-	DlMbps     float64 `json:"dlMbps"` // per UE; 0 = no downlink
-	PacketSize int     `json:"packetSize"`
-	Port       int     `json:"port"`
+	UlMbps       float64 `json:"ulMbps"` // per UE; 0 = no uplink
+	DlMbps       float64 `json:"dlMbps"` // per UE; 0 = no downlink
+	UlPacketSize int     `json:"ulPacketSize"`
+	DlPacketSize int     `json:"dlPacketSize"`
+	Port         int     `json:"port"`
 	// MaxDurationMin stops the run this many minutes after it started,
 	// exactly like pressing Stop; 0 = run until Stop (design N6).
 	MaxDurationMin int `json:"maxDurationMin"`

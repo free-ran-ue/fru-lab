@@ -245,8 +245,13 @@ func validateTraffic(p Profile, verr *ValidationError) {
 			verr.add(field, "must be between 0 and 10000")
 		}
 	}
-	if t.PacketSize < 64 || t.PacketSize > MaxPacketSize {
-		verr.add("traffic.packetSize", fmt.Sprintf("must be between 64 and %d", MaxPacketSize))
+	for _, f := range []struct {
+		field string
+		size  int
+	}{{"traffic.ulPacketSize", t.UlPacketSize}, {"traffic.dlPacketSize", t.DlPacketSize}} {
+		if f.size < 64 || f.size > MaxPacketSize {
+			verr.add(f.field, fmt.Sprintf("must be between 64 and %d", MaxPacketSize))
+		}
 	}
 	if t.Port < 1 || t.Port > 65535 {
 		verr.add("traffic.port", "must be between 1 and 65535")

@@ -199,7 +199,8 @@ func TestEstablishedUesStartTrafficWithTheirTunnel(t *testing.T) {
 
 	require.Equal(t, uint16(9200), dp.cfg.Port)
 	require.Equal(t, trafficStartDelay, dp.cfg.StartDelay, "traffic waits for the UPF to learn the DL tunnel")
-	require.Equal(t, 1400, dp.cfg.PacketSize)
+	require.Equal(t, 1400, dp.cfg.UlPacketSize)
+	require.Equal(t, 1400, dp.cfg.DlPacketSize)
 	require.Equal(t, "eth-n3", dp.cfg.N3Interface, "AF_XDP needs the interfaces")
 	require.Equal(t, "eth-n6", dp.cfg.N6Interface)
 	require.Equal(t, 5e6, dp.cfg.DlBps)

@@ -468,7 +468,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <div class="tbl"><table>
           <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
           <tr><td class="f">Uplink / Downlink (Mbps)<span class="path">traffic.ulMbps / dlMbps</span></td><td class="r">0–10000，0 = 關／1 / 1</td><td>每個 UE 每個方向的固定速率。</td><td class="up">總量變大；每個 UE 封包更密，DL 一次合得更多（省 tester CPU）。單一 UE 超過約 3 Gbps 會先卡在 UPF 的單一核心。</td><td class="down">同樣總量要更多 UE；每個 UE 封包稀疏，DL 幾乎一次送一個。</td></tr>
-          <tr><td class="f">Packet size<span class="path">traffic.packetSize</span></td><td class="r">64 到 N3 MTU − 44（1500 MTU 時 1456）／1400</td><td>內層 IP 封包長度。N3 上每個 UL 封包再多 36 bytes，DL 由 gtp5g 再多 8 bytes。</td><td class="up">成本幾乎只看「每秒幾個封包」，封包越大，同樣 CPU 打出越多 Gbps。超過 MTU 時驗證會擋下。</td><td class="down">同樣 Gbps 要更多封包，tester 和 UPF 都更吃力；適合測 UPF 處理小封包的能力。</td></tr>
+          <tr><td class="f">Uplink / Downlink packet size<span class="path">traffic.ulPacketSize / traffic.dlPacketSize</span></td><td class="r">各自 64 到 N3 MTU − 44（1500 MTU 時 1456）／1400</td><td>上行、下行各自的內層 IP 封包長度，可以設不一樣，例如 UL 小封包、DL 大封包。N3 上每個 UL 封包再多 36 bytes，DL 由 gtp5g 再多 8 bytes。舊的 profile 只有一個大小，打開時兩邊都套用它。</td><td class="up">成本幾乎只看「每秒幾個封包」，封包越大，同樣 CPU 打出越多 Gbps。超過 MTU 時驗證會擋下。</td><td class="down">同樣 Gbps 要更多封包，tester 和 UPF 都更吃力；適合測 UPF 處理小封包的能力。</td></tr>
           <tr><td class="f">UDP port<span class="path">traffic.port</span></td><td class="r">1–65535／9200</td><td>sink 和 UE 用的 UDP port。</td><td colspan="2">和主機上其他程式衝突時才需要改。</td></tr>
           <tr><td class="f">Max run time<span class="path">traffic.maxDurationMin</span></td><td class="r">0–10080 分鐘，0 = 不限／0</td><td>開始後多久自動 Stop，流程和按 Stop 一樣。</td><td colspan="2">長時間 run 的圖會自動壓縮，不會變慢。</td></tr>
           <tr><td class="f">Downlink batch<span class="path">traffic.dlBatchMs</span></td><td class="r">0–10 ms，0 = 關／1</td><td>每個 UE 連續送這麼多時間量的 DL 封包，讓 kernel 用一次 UDP GSO 送出（DL 的目的地是各 UE，只能合同一個 UE 的封包）。UL 不需要：同一個 gNB 的 UL 都送往 UPF，本來就會合併。</td><td class="up">一次合更多封包，tester 送 DL 更省 CPU；但每個 UE 的 DL 變得一陣一陣，同一台時容易瞬間塞滿某顆 CPU 的佇列。</td><td class="down">流量最平均，但 tester 送 DL 最吃 CPU。每 UE 10 Mbps 時 1 ms 不到一個封包，等於沒合併。</td></tr>
@@ -660,7 +660,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（feat/cpu-isolation，2026-10-13）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（feat/cpu-isolation，2026-10-14）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 
