@@ -146,6 +146,7 @@ footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--lin
     <a href="#launch">啟動 fru-tester</a>
     <a class="sub" href="#helm">Kubernetes（Helm）</a>
     <a href="#deploy">部署架構</a>
+    <a class="sub" href="#same-host-macvlan">同一台、5GC 用 macvlan</a>
     <a class="sub" href="#two-hosts">兩台機器：步驟</a>
     <a href="#profiles">設定檔（Profiles）</a>
     <a href="#fields">Setup 頁欄位</a>
@@ -233,7 +234,8 @@ tester:
         <ul>
           <li><b>macvlan 模式（預設）</b>：tester pod 透過 Multus 拿到 <code>n2</code>、<code>n3</code>、<code>n6</code> 三張 macvlan，和 5GC pod 是同一個母網卡下的子介面，bridge 模式下直接互通。Setup 頁的 Local interface 就填 <code>n2</code>、<code>n3</code>、<code>n6</code>。需要 Multus（MicroK8s：<code>microk8s enable multus</code>），node 上要 <code>modprobe sctp</code>。</li>
           <li><b>沒有 IPAM</b>：NAD 不發 IP，gNB IP 和 sink IP 照樣由 tester 在 run 期間加、結束時拿掉。gNB 範圍要避開 5GC 的 IPAM 範圍。</li>
-          <li><b>資料面</b>：macvlan 不是實體網卡，<code>auto</code> 會用 socket 引擎。要 AF_XDP 得把 SR-IOV VF 之類的實體網卡給 pod。</li>
+          <li><b>資料面</b>：macvlan 不是真的網卡，<code>auto</code> 會用 socket 引擎，跑不到全效能。</li>
+          <li><b>用本機網卡（要 zero-copy 時）</b>：設 <code>tester.network.mode: host</code>，tester 和 docker 版一樣看得到 node 上所有網卡，Setup 頁直接選實體 port 或 VF。這時 chart 不建 <code>n2/n3/n6</code>；5GC 的 macvlan 掛在哪張網卡，tester 就不能直接用那張，要用它切出來的 VF（見「部署架構」的同一台機器、5GC 用 macvlan 時）。</li>
           <li><b>CPU</b>：System 頁只能選 pod 分到的 CPU。要獨佔核心，kubelet 開 static CPU manager，<code>tester.resources</code> 的 cpu request 與 limit 設成相同的整數（Guaranteed QoS）。</li>
           <li><b>資料保存</b>：預設 hostPath（<code>/var/lib/frulab/db</code>、<code>/var/lib/frulab/tester-data</code>），也可以改 <code>pvc</code>。</li>
           <li>fru-lab 自己部署 free5GC 的頁面需要 Docker，k8s 上預設關閉（<code>frulab.docker.enabled</code>）。完整選項見 <code>helm/values.yaml</code> 與 <code>helm/README.md</code>。</li>
@@ -261,8 +263,34 @@ tester:
           </ul>
         </div>
       </div>
-      <div class="why">
-        <p><b>5GC 在 k8s、N2/N3/N6 用 macvlan 時：</b>主機上看到的 N2/N3/N6 網卡沒有 IP，IP 在 pod 裡。macvlan 的子介面（pod）連不到同一台主機的母網卡，所以 tester 如果也跑在這台，<b>不能</b>直接用那幾張網卡，要先在主機上開 macvlan 子介面給 tester 用（<code>ip link add n3-t link N3 type macvlan mode bridge</code>，N2、N6 同理），Setup 頁的介面填子介面。tester 在另一台、經實體線連過去就沒有這個限制。也可以用 Helm 把 tester 部署進同一個 k8s，pod 直接拿到同一個母網卡上的 macvlan（見「啟動 fru-tester」的 Kubernetes）。</p>
+      <div class="block" id="same-host-macvlan">
+        <h3>同一台機器、5GC 用 macvlan 時</h3>
+        <p>5GC 在 k8s，N2/N3/N6 是綁在本機網卡（例如 <code>enp1s0</code>）上的 macvlan。tester 也在這台時，先記住一條規則：</p>
+        <div class="why">
+          <p><b>同一張網卡上，macvlan 和 macvlan 之間互通；網卡本身和它上面的 macvlan 之間不通。</b>macvlan 之間的封包由 kernel 直接轉交，不經過網卡；網卡本身送出的封包會直接上線路，收不回來。</p>
+        </div>
+        <div class="tbl">
+          <table>
+            <tr><th>tester 用哪張介面</th><th>通嗎</th><th>資料面</th></tr>
+            <tr><td><code>enp1s0</code> 本身</td><td>不通</td><td>—</td></tr>
+            <tr><td><code>enp1s0</code> 上另開的 macvlan</td><td>通</td><td>只有 socket 或 generic XDP，tester 和 UPF 搶 CPU，適合驗證功能</td></tr>
+            <tr><td><code>enp1s0</code> 切出來的 VF（SR-IOV）</td><td>通</td><td>AF_XDP zero-copy，<b>要全效能用這個</b></td></tr>
+            <tr><td>另一個實體 port 拉線接到 <code>enp1s0</code>，或另一台機器</td><td>通</td><td>AF_XDP zero-copy</td></tr>
+          </table>
+        </div>
+        <p><b>另開 macvlan</b>（docker 版；helm 的 macvlan 模式會自動做這件事）：</p>
+        <div class="code"><button class="copy" type="button">複製</button><pre>sudo ip link add tester-n3 link enp1s0 type macvlan mode bridge
+sudo ip link set tester-n3 up        <span class="cmt"># N2、N6 同理；Setup 頁的介面填 tester-n3</span></pre></div>
+        <p><b>切 VF</b>：VF 是網卡硬體切出來的網卡，和 5GC 的封包由網卡硬體互轉，所以能通，也能 zero-copy。</p>
+        <div class="code"><button class="copy" type="button">複製</button><pre>cat /sys/class/net/enp1s0/device/sriov_totalvfs          <span class="cmt"># 0 = 不支援，只能拉線或用兩台</span>
+echo 1 | sudo tee /sys/class/net/enp1s0/device/sriov_numvfs
+ip -br link                                              <span class="cmt"># 多出來的那張就是 VF；重開機後要重切</span></pre></div>
+        <p>Setup 頁的 N3、N6 選 VF，engine 用 <code>auto</code>，Run 頁的 Engine 出現 <code>zero-copy</code> 就成功了。</p>
+        <ul>
+          <li><b>docker 版和 helm 版都能 zero-copy</b>，差別只在 tester 用的是不是真的網卡（實體 port 或 VF）。helm 要用 <code>tester.network.mode: host</code>，見「啟動 fru-tester」的 Kubernetes。</li>
+          <li>engine 不要在 macvlan 上強制 <code>afxdp</code>：generic XDP 每個封包都要多複製一次，通常比 socket 慢。</li>
+          <li>只用 macvlan 時要拉高流量：多開幾個 gNB（每個 gNB 的 DL 只有一條收包 thread）、封包大一點、System 頁的 DP 不要和 UPF 的 CPU 重疊。</li>
+        </ul>
       </div>
 
       <div class="block" id="two-hosts">
