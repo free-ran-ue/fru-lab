@@ -1,0 +1,3 @@
+{{- if and .Values.tester.enabled (eq .Values.tester.persistence.type "pvc") }}
+{{ include "frulab.pvc" (dict "root" . "p" .Values.tester.persistence "claim" (printf "%s-data" (include "tester.name" .))) }}
+{{- end }}

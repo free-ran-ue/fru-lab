@@ -1,0 +1,6 @@
+apiVersion: v2
+name: frulab
+description: fru-lab web console and the fru-tester 5G throughput tester
+type: application
+version: 0.1.0
+appVersion: "latest"

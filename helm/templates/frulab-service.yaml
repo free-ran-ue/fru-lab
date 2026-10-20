@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "frulab.name" . }}
+  labels:
+    {{- include "frulab.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.frulab.service.type }}
+  selector:
+    {{- include "frulab.selector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.frulab.service.port }}
+      targetPort: http
+      {{- if and (eq .Values.frulab.service.type "NodePort") .Values.frulab.service.nodePort }}
+      nodePort: {{ .Values.frulab.service.nodePort }}
+      {{- end }}

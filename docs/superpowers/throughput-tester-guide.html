@@ -144,6 +144,7 @@ footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--lin
     <a href="#overview">它做什麼</a>
     <a href="#prereq">開始之前</a>
     <a href="#launch">啟動 fru-tester</a>
+    <a class="sub" href="#helm">Kubernetes（Helm）</a>
     <a href="#deploy">部署架構</a>
     <a class="sub" href="#two-hosts">兩台機器：步驟</a>
     <a href="#profiles">設定檔（Profiles）</a>
@@ -212,6 +213,32 @@ make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），�
           <p class="hint">tester API 會在 host 的所有網卡上聽，所以 <code>docker/tester.yaml</code> 和 <code>docker/config.yaml</code> 的 <code>apiToken</code> 都要改掉預設值。兩個 image 用 <code>make docker</code> 建。</p>
         </div>
       </div>
+      <div class="block" id="helm">
+        <h3>Kubernetes（Helm）</h3>
+        <p>chart 在 <code>helm/</code>，fru-lab 和 fru-tester 各是一個 Deployment。fru-lab 用 NodePort <code>30888</code>，fru-tester 用 ClusterIP Service，<code>apiToken</code> 由 chart 一起帶入兩邊。</p>
+        <div class="code"><button class="copy" type="button">複製</button><pre>cd helm
+helm install frulab . -f my-values.yaml</pre></div>
+        <div class="code"><button class="copy" type="button">複製</button><pre><span class="cmt"># my-values.yaml：最少要改的</span>
+tester:
+  apiToken: change-me
+  nodeSelector:
+    kubernetes.io/hostname: my-node   <span class="cmt"># macvlan 母網卡所在的 node</span>
+  network:
+    mode: macvlan                     <span class="cmt"># 或 host（同 docker-compose）</span>
+    macvlan:
+      interfaces:
+        n2: {master: dummy-n2}        <span class="cmt"># 和 5GC 的 macvlan 同一個母網卡</span>
+        n3: {master: dummy-n3}
+        n6: {master: dummy-n6}</pre></div>
+        <ul>
+          <li><b>macvlan 模式（預設）</b>：tester pod 透過 Multus 拿到 <code>n2</code>、<code>n3</code>、<code>n6</code> 三張 macvlan，和 5GC pod 是同一個母網卡下的子介面，bridge 模式下直接互通。Setup 頁的 Local interface 就填 <code>n2</code>、<code>n3</code>、<code>n6</code>。需要 Multus（MicroK8s：<code>microk8s enable multus</code>），node 上要 <code>modprobe sctp</code>。</li>
+          <li><b>沒有 IPAM</b>：NAD 不發 IP，gNB IP 和 sink IP 照樣由 tester 在 run 期間加、結束時拿掉。gNB 範圍要避開 5GC 的 IPAM 範圍。</li>
+          <li><b>資料面</b>：macvlan 不是實體網卡，<code>auto</code> 會用 socket 引擎。要 AF_XDP 得把 SR-IOV VF 之類的實體網卡給 pod。</li>
+          <li><b>CPU</b>：System 頁只能選 pod 分到的 CPU。要獨佔核心，kubelet 開 static CPU manager，<code>tester.resources</code> 的 cpu request 與 limit 設成相同的整數（Guaranteed QoS）。</li>
+          <li><b>資料保存</b>：預設 hostPath（<code>/var/lib/frulab/db</code>、<code>/var/lib/frulab/tester-data</code>），也可以改 <code>pvc</code>。</li>
+          <li>fru-lab 自己部署 free5GC 的頁面需要 Docker，k8s 上預設關閉（<code>frulab.docker.enabled</code>）。完整選項見 <code>helm/values.yaml</code> 與 <code>helm/README.md</code>。</li>
+        </ul>
+      </div>
     </section>
 
     <section id="deploy">
@@ -235,7 +262,7 @@ make run-tester   <span class="cmt"># fru-tester，127.0.0.1:9100（sudo），�
         </div>
       </div>
       <div class="why">
-        <p><b>5GC 在 k8s、N2/N3/N6 用 macvlan 時：</b>主機上看到的 N2/N3/N6 網卡沒有 IP，IP 在 pod 裡。macvlan 的子介面（pod）連不到同一台主機的母網卡，所以 tester 如果也跑在這台，<b>不能</b>直接用那幾張網卡，要先在主機上開 macvlan 子介面給 tester 用（<code>ip link add n3-t link N3 type macvlan mode bridge</code>，N2、N6 同理），Setup 頁的介面填子介面。tester 在另一台、經實體線連過去就沒有這個限制。</p>
+        <p><b>5GC 在 k8s、N2/N3/N6 用 macvlan 時：</b>主機上看到的 N2/N3/N6 網卡沒有 IP，IP 在 pod 裡。macvlan 的子介面（pod）連不到同一台主機的母網卡，所以 tester 如果也跑在這台，<b>不能</b>直接用那幾張網卡，要先在主機上開 macvlan 子介面給 tester 用（<code>ip link add n3-t link N3 type macvlan mode bridge</code>，N2、N6 同理），Setup 頁的介面填子介面。tester 在另一台、經實體線連過去就沒有這個限制。也可以用 Helm 把 tester 部署進同一個 k8s，pod 直接拿到同一個母網卡上的 macvlan（見「啟動 fru-tester」的 Kubernetes）。</p>
       </div>
 
       <div class="block" id="two-hosts">
@@ -660,7 +687,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（feat/cpu-isolation，2026-10-14）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（feat/psize/dlul，2026-10-20）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 

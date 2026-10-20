@@ -1,0 +1,159 @@
+# Install from this directory with:  helm install frulab .
+# Override anything here with -f my-values.yaml or --set.
+
+# ---------------------------------------------------------------------------
+# fru-lab: the web console (backend + frontend in one image)
+# ---------------------------------------------------------------------------
+frulab:
+  image:
+    repository: alonza0314/fru-lab
+    tag: latest
+    pullPolicy: Always
+
+  # login of the web console
+  username: admin
+  password: frulab
+  jwt:
+    secret: fru-lab
+    expiresIn: 24h
+
+  logLevel: info # error, warn, info, debug, trace
+
+  service:
+    # NodePort: browse to http://<node IP>:<nodePort>
+    type: NodePort
+    port: 8888
+    nodePort: 30888
+
+  # where the bbolt database (users, saved tester profiles, ...) is kept
+  persistence:
+    # hostPath: a directory on the node (pin the pod with nodeSelector)
+    # pvc:      a PersistentVolumeClaim (needs a StorageClass)
+    # emptyDir: lost whenever the pod goes away
+    type: hostPath
+    hostPath: /var/lib/frulab/db
+    storageClass: ""
+    size: 1Gi
+
+  # fru-lab's own free5GC/gNB/UE deploy pages drive a Docker daemon over
+  # its socket. They are not needed to test an existing 5GC; enable this
+  # only on a node that runs Docker.
+  docker:
+    enabled: false
+    socket: /var/run/docker.sock
+    # mounted at the same path in the pod and on the node: the daemon
+    # bind-mounts the files fru-lab writes here into the containers
+    workDir: /var/lib/frulab/deploy
+    timeout: 5m
+    # where the node publishes free5GC's webconsole; the pod reaches the
+    # node by its IP (required when docker.enabled)
+    webconsoleHost: ""
+    webconsolePort: 5000
+
+  # CPU and memory; {} sets no requests or limits (BestEffort).
+  # fru-lab is light: uncomment to give it a budget.
+  resources: {}
+  # resources:
+  #   requests:
+  #     cpu: 500m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: "2"
+  #     memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# fru-tester: the gNB/UE simulator and data plane
+# ---------------------------------------------------------------------------
+tester:
+  enabled: true
+  image:
+    repository: alonza0314/fru-tester
+    tag: latest
+    pullPolicy: Always
+
+  # shared with fru-lab; change it for anything but a lab
+  apiToken: frulab-tester
+  port: 9100
+  logLevel: info
+
+  network:
+    # macvlan: the pod gets interfaces n2, n3 and n6 through Multus, macvlan
+    #          links on the masters below. A 5GC whose pods are macvlan links
+    #          on the same masters (bridge mode) is reached directly. Profiles
+    #          use n2 / n3 / n6 as their interface names.
+    # host:    the pod runs on the node's network, like docker-compose; the
+    #          profiles name the node's interfaces. A node cannot reach its
+    #          own macvlan children this way.
+    mode: macvlan
+    macvlan:
+      # Multus NetworkAttachmentDefinitions. create: false uses ones that
+      # already exist, by name (in this namespace or as "ns/name").
+      create: true
+      mode: bridge
+      interfaces:
+        n2:
+          master: dummy-n2
+          mtu: 0 # 0 = the master's MTU
+          name: ""  # NAD name when create is false; default <release>-n2
+        n3:
+          master: dummy-n3
+          mtu: 0
+          name: ""
+        n6:
+          master: dummy-n6
+          mtu: 0
+          name: ""
+
+  # the System page's CPU allocation
+  persistence:
+    type: hostPath # hostPath, pvc or emptyDir (see frulab.persistence)
+    hostPath: /var/lib/frulab/tester-data
+    storageClass: ""
+    size: 100Mi
+
+  # NET_ADMIN adds and removes the gNB/sink IPs and the UE route; BPF and
+  # IPC_LOCK are for the AF_XDP engine (a run on "auto" falls back to UDP
+  # sockets without them, and on macvlan links it uses sockets anyway).
+  capabilities:
+    - NET_ADMIN
+    - BPF
+    - IPC_LOCK
+  privileged: false
+
+  # A run tears down every SCTP association and the IPs it added on exit.
+  terminationGracePeriodSeconds: 60
+
+  # CPU and memory; {} sets no requests or limits (BestEffort), and the
+  # System page offers every CPU of the node.
+  #
+  # Exclusive data plane CPUs need all of:
+  #   - the kubelet's static CPU manager (--cpu-manager-policy=static and
+  #     --reserved-cpus; on MicroK8s in
+  #     /var/snap/microk8s/current/args/kubelet, then restart it)
+  #   - Guaranteed QoS: requests equal to limits, for cpu and memory
+  #   - a whole number of CPUs ("16", not 16500m)
+  # The System page then offers only the CPUs the pod was given. To get
+  # them on the N3/N6 NICs' NUMA node, add
+  # --topology-manager-policy=single-numa-node.
+  #
+  # Limits alone (no static CPU manager) only throttle the pod once it uses
+  # that much CPU in total, which lowers throughput without saying why.
+  # Memory grows with the UEs and, on AF_XDP, with the sockets' buffers;
+  # past the limit the pod is OOM-killed and the run stops: check
+  # kubectl top pod after a run and leave room.
+  resources: {}
+  # resources:
+  #   requests:
+  #     cpu: "16"
+  #     memory: 8Gi
+  #   limits:
+  #     cpu: "16"
+  #     memory: 8Gi
+  # the macvlan masters (and the NICs) are on one node: pin the pod there,
+  # e.g. kubernetes.io/hostname: my-node
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

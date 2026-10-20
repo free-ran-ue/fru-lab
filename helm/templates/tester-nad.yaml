@@ -1,0 +1,20 @@
+{{- $net := .Values.tester.network }}
+{{- if and .Values.tester.enabled (eq $net.mode "macvlan") $net.macvlan.create }}
+{{- range $if := list "n2" "n3" "n6" }}
+{{- $i := index $net.macvlan.interfaces $if }}
+---
+# no IPAM: fru-tester adds the gNB and sink IPs of each run itself and
+# removes them afterwards, so they never collide with an IPAM's leases
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: {{ include "tester.nad" (dict "root" $ "if" $if) }}
+  labels:
+    {{- include "frulab.labels" $ | nindent 4 }}
+spec:
+  config: |
+    {{- $cfg := dict "cniVersion" "0.3.1" "type" "macvlan" "master" (required (printf "tester.network.macvlan.interfaces.%s.master is required" $if) $i.master) "mode" $net.macvlan.mode "ipam" dict }}
+    {{- if $i.mtu }}{{- $_ := set $cfg "mtu" (int $i.mtu) }}{{- end }}
+    {{ toJson $cfg }}
+{{- end }}
+{{- end }}
