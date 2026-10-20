@@ -53,6 +53,7 @@ func newTestCompose(t *testing.T, fake *fakeCompose) *composeContext {
 		targets:        defaultTargets(),
 		webconsolePort: 5055,
 		deployTimeout:  time.Minute,
+		networksReady:  true,
 		BackendLogger:  logger.NewBackendLogger("error", "", true),
 	}
 }

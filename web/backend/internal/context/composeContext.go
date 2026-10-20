@@ -96,6 +96,11 @@ type composeContext struct {
 	// allowed to wipe and rewrite the same files mid-mount (see loadProject).
 	materializeMu sync.Mutex
 
+	// networksReady is set once the shared networks exist; without a
+	// Docker daemon at startup, the first deploy creates them.
+	networksMu    sync.Mutex
+	networksReady bool
+
 	*logger.BackendLogger
 }
 
@@ -128,8 +133,11 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		BackendLogger: ie.BackendLogger,
 	}
 
-	if err := c.ensureSharedNetworks(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to ensure shared networks: %v", err)
+	// fru-lab also runs without a Docker daemon (in Kubernetes, to drive
+	// the throughput tester only): then the deploy pages fail with the
+	// daemon's error, and the networks are created on the next deploy.
+	if err := c.networks(context.Background()); err != nil {
+		c.CtxLog.Warnf("Docker is not reachable, deploying free5GC/gNB/UE will fail until it is: %v", err)
 	}
 
 	return c, nil
@@ -185,6 +193,20 @@ func defaultTargets() map[string]composeTarget {
 			},
 		},
 	}
+}
+
+// networks creates the shared networks unless that was already done.
+func (c *composeContext) networks(ctx context.Context) error {
+	c.networksMu.Lock()
+	defer c.networksMu.Unlock()
+	if c.networksReady {
+		return nil
+	}
+	if err := c.ensureSharedNetworks(ctx); err != nil {
+		return err
+	}
+	c.networksReady = true
+	return nil
 }
 
 func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
@@ -368,6 +390,9 @@ const downAfterFailedUpTimeout = time.Minute
 func (c *composeContext) up(ctx context.Context, project *types.Project) error {
 	upCtx, cancel := context.WithTimeout(ctx, c.deployTimeout)
 	defer cancel()
+	if err := c.networks(upCtx); err != nil {
+		return fmt.Errorf("failed to ensure shared networks: %v", err)
+	}
 	err := c.service.Up(upCtx, project, api.UpOptions{
 		Create: api.CreateOptions{},
 		Start: api.StartOptions{
