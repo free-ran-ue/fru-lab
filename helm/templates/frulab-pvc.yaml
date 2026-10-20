@@ -1,0 +1,3 @@
+{{- if eq .Values.frulab.persistence.type "pvc" }}
+{{ include "frulab.pvc" (dict "root" . "p" .Values.frulab.persistence "claim" (printf "%s-db" (include "frulab.name" .))) }}
+{{- end }}

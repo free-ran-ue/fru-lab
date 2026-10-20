@@ -1,0 +1,84 @@
+{{- $d := .Values.frulab.docker }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "frulab.name" . }}
+  labels:
+    {{- include "frulab.labels" . | nindent 4 }}
+    app.kubernetes.io/name: frulab
+spec:
+  replicas: 1
+  # bbolt allows one process on the database at a time
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "frulab.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "frulab.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/frulab-secret.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: fru-lab
+          image: "{{ .Values.frulab.image.repository }}:{{ .Values.frulab.image.tag }}"
+          imagePullPolicy: {{ .Values.frulab.image.pullPolicy }}
+          command: ["./fru-lab", "-c", "config.yaml"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.frulab.service.port }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /frulab/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: db
+              mountPath: /frulab/db
+            {{- if $d.enabled }}
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: deploy
+              mountPath: {{ $d.workDir }}
+            {{- end }}
+          {{- with .Values.frulab.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "frulab.name" . }}-config
+        {{- include "frulab.volume" (dict "name" "db" "p" .Values.frulab.persistence "claim" (printf "%s-db" (include "frulab.name" .))) | nindent 8 }}
+        {{- if $d.enabled }}
+        - name: docker-sock
+          hostPath:
+            path: {{ $d.socket }}
+            type: Socket
+        - name: deploy
+          hostPath:
+            path: {{ $d.workDir }}
+            type: DirectoryOrCreate
+        {{- end }}
+      {{- with .Values.frulab.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frulab.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frulab.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

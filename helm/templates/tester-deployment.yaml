@@ -1,0 +1,102 @@
+{{- if .Values.tester.enabled }}
+{{- $net := .Values.tester.network }}
+{{- if not (has $net.mode (list "macvlan" "host")) }}
+{{- fail (printf "tester.network.mode must be macvlan or host, not %q" $net.mode) }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tester.name" . }}
+  labels:
+    {{- include "frulab.labels" . | nindent 4 }}
+    app.kubernetes.io/name: fru-tester
+spec:
+  replicas: 1
+  # one tester per node network: never two at once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tester.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tester.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/tester-secret.yaml") . | sha256sum }}
+        {{- if eq $net.mode "macvlan" }}
+        {{- $nets := list }}
+        {{- range $if := list "n2" "n3" "n6" }}
+        {{- $nad := include "tester.nad" (dict "root" $ "if" $if) }}
+        {{- $e := dict "interface" $if }}
+        {{- if contains "/" $nad }}
+        {{- $parts := splitList "/" $nad }}
+        {{- $_ := set $e "namespace" (index $parts 0) }}
+        {{- $_ := set $e "name" (index $parts 1) }}
+        {{- else }}
+        {{- $_ := set $e "name" $nad }}
+        {{- end }}
+        {{- $nets = append $nets $e }}
+        {{- end }}
+        k8s.v1.cni.cncf.io/networks: {{ toJson $nets | quote }}
+        {{- end }}
+    spec:
+      {{- if eq $net.mode "host" }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.tester.terminationGracePeriodSeconds }}
+      containers:
+        - name: fru-tester
+          image: "{{ .Values.tester.image.repository }}:{{ .Values.tester.image.tag }}"
+          imagePullPolicy: {{ .Values.tester.image.pullPolicy }}
+          command: ["./fru-tester", "-c", "tester.yaml"]
+          ports:
+            - name: api
+              containerPort: {{ .Values.tester.port }}
+          readinessProbe:
+            tcpSocket:
+              port: api
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          securityContext:
+            {{- if .Values.tester.privileged }}
+            privileged: true
+            {{- else }}
+            capabilities:
+              add:
+                {{- toYaml .Values.tester.capabilities | nindent 16 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /frutester/tester.yaml
+              subPath: tester.yaml
+              readOnly: true
+            - name: data
+              mountPath: /frutester/data
+          {{- with .Values.tester.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "tester.name" . }}-config
+        {{- include "frulab.volume" (dict "name" "data" "p" .Values.tester.persistence "claim" (printf "%s-data" (include "tester.name" .))) | nindent 8 }}
+      {{- with .Values.tester.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tester.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tester.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
