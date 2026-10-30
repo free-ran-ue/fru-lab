@@ -11,6 +11,7 @@ import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
 import { lastProfileId } from './testerProfiles'
 import { normalizeProfile } from './testerDefaults'
+import { testerLabel, useTesters } from './useTesters'
 import styles from './tester.module.css'
 
 // PROFILES_PAGE is how many profiles one page of the list shows.
@@ -37,6 +38,7 @@ export default function TesterProfilesPage() {
   const [toDelete, setToDelete] = useState<TesterStoredProfile[] | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const openId = lastProfileId()
+  const { testers } = useTesters()
 
   const refresh = useCallback(() => api.testerProfileList()
     .then((response) => {
@@ -119,6 +121,7 @@ export default function TesterProfilesPage() {
                         disabled={isDeleting} />
                     </th>
                     <th>Name</th>
+                    <th>Tester</th>
                     <th>gNBs / UEs</th>
                     <th>UL / DL per UE</th>
                     <th>Packet UL / DL</th>
@@ -137,6 +140,10 @@ export default function TesterProfilesPage() {
                       <td>
                         {p.profile.name}
                         {p.id === openId && <span className={`${styles.pill} ${styles.pillActive}`} style={{ marginLeft: '0.5rem' }}>open in Setup</span>}
+                      </td>
+                      <td>
+                        {testerLabel(testers, p.profile.testerId)}
+                        {testers !== null && !testers.some((t) => t.id === (p.profile.testerId || 'default')) && <span className={`${styles.pill} ${styles.pillBad}`} style={{ marginLeft: '0.5rem' }}>choose another</span>}
                       </td>
                       <td className={styles.mono}>{p.profile.scale.gnbCount} / {p.profile.scale.ueCount}</td>
                       <td className={styles.mono}>{p.profile.traffic.ulMbps} / {p.profile.traffic.dlMbps} Mbps</td>

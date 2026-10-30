@@ -448,8 +448,9 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <tr><td><b>Setup 頁的 Profile name</b></td><td>直接輸入就是命名或改名。按右邊的 <b>▾</b> 打開選單：選一份已存的設定檔就換成它；<b>+ New profile</b> 從預設值開始一份新的。有還沒存的修改時，切換前會先問要不要丟掉。名稱和別份已存的設定檔一樣時，欄位下面會直接標紅。</td></tr>
         <tr><td><b>Setup 頁標題旁</b></td><td><code>New profile, not saved</code>：這份還沒存過，這時右上角多一個 <b>Cancel</b>，放棄這份新設定檔，回到之前打開的那一份（沒有的話回到 Profiles 頁），有修改會先確認；<code>Unsaved changes</code>：和上次存的不一樣。</td></tr>
         <tr><td><b>Save</b></td><td>還沒存過的新設定檔：直接存成新的。已存過的：跳出視窗選 <b>Update current profile</b>（覆蓋目前這份；名稱有改就一起改名）或 <b>Save as new</b>（目前這份不動，另存一份）。另存時名稱已經被用了（包括和目前這份同名），會跳出視窗請你重新命名，預設建議 <code>原名 copy</code>。</td></tr>
-        <tr><td><b>Start run</b></td><td>先存再開始：已存過的設定檔有修改就更新它；新的設定檔就存成新的（名稱重複時一樣先請你重新命名）。</td></tr>
-        <tr><td><b>側邊欄的 Profiles 頁</b></td><td>列出所有設定檔（gNB／UE 數、每 UE 速率、封包大小、資料面引擎、最後更新時間）。<b>+ New profile</b> 打開 Setup 頁的新設定檔；<b>Edit</b> 在 Setup 頁打開那一份；<b>Delete</b> 刪一份；勾選多份後按 <b>Delete selected</b> 一次刪除。刪掉的設定檔不影響 History：每個 run 都留著它當時用的設定。</td></tr>
+        <tr><td><b>Setup 頁右上角的 tester 選單</b></td><td>在 <b>Save</b> 和 <b>Start run</b> 中間，選這份設定檔在哪一台 tester 上跑（清單就是 Status 頁上的 tester，顯示它們的 <code>testerName</code>，滑鼠停在上面會顯示 URL），這個選擇和設定檔一起存。驗證、介面選單、Ping 測試、plan 預覽和 Start run 都是對所選的那台 tester 做。舊的設定檔沒有這個欄位，當成預設 tester（<code>default-tester</code>）。設定檔用的 tester 被從 Status 頁移除時，選單會標紅、上方出現提示、Start run 不能按，要先選另一台。</td></tr>
+        <tr><td><b>Start run</b></td><td>先存再開始：已存過的設定檔有修改就更新它；新的設定檔就存成新的（名稱重複時一樣先請你重新命名）。在預設 tester 上跑會跳到 Run 頁；在其他 tester 上跑會跳到那台 tester 的 Status 頁（Run 頁目前只看預設 tester）。</td></tr>
+        <tr><td><b>側邊欄的 Profiles 頁</b></td><td>列出所有設定檔（用哪一台 tester、gNB／UE 數、每 UE 速率、封包大小、資料面引擎、最後更新時間）。<b>+ New profile</b> 打開 Setup 頁的新設定檔；<b>Edit</b> 在 Setup 頁打開那一份；<b>Delete</b> 刪一份；勾選多份後按 <b>Delete selected</b> 一次刪除。刪掉的設定檔不影響 History：每個 run 都留著它當時用的設定。</td></tr>
       </table></div>
       <p class="hint">Setup 頁會記得這個瀏覽器上次打開的是哪一份（Profiles 頁標示 <code>open in Setup</code>）。舊版只存一份設定檔，升級後第一次打開時會自動搬進列表，名稱已被使用時改成 <code>basic (2)</code> 這種形式。</p>
     </section>
@@ -664,7 +665,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <li><b>預設 tester</b>：就是 fru-lab <code>config.yaml</code> 裡 <code>backend.tester</code> 的那台，卡片下方寫著「From config.yaml」，不能在頁面上刪除。</li>
         <li><b>新增</b>：另一台機器只部署 fru-tester（它的 <code>listen</code> 要是 fru-lab 連得到的位址），然後在 Status 頁按 <b>Add tester</b>，填它的 URL（例如 <code>http://10.0.0.2:9100</code>）和它 <code>tester.yaml</code> 裡的 <code>apiToken</code>。fru-lab 會先實際請那台 tester 回報狀態，連不到、token 不對、或已經在列表上都不會加入，並顯示原因。加入後存在 fru-lab 的資料庫，重啟也還在。</li>
         <li><b>移除</b>：手動加入的 tester 卡片下方有 <b>Remove</b>，只是讓 fru-lab 忘掉它，tester 本身照常執行。URL 或 token 要改就移除再重新加入。</li>
-        <li><b>目前的範圍</b>：Setup、Run、History、Bench 仍然只用預設 tester；手動加入的 tester 只能在 Status 頁看狀態、設定 CPU 分配。</li>
+        <li><b>目前的範圍</b>：Setup 可以選任一台 tester 跑（見「設定檔」）；Run、History、Bench 仍然只看預設 tester。在其他 tester 上跑的 run，先在那台的 Status 頁 Run 卡片看狀態。</li>
       </ul>
       <h3>總覽</h3>
       <div class="tbl"><table>

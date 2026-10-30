@@ -1260,6 +1260,161 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Start a run on one tester
+      description: Forwarded to that tester's /api/run, like /api/tester/run is to the tester in config.yaml.
+      operationId: testerByIdRunStart
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '202':
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '400':
+          description: Invalid profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run or a bench is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/profile/validate:
+    post:
+      summary: Validate a profile on one tester
+      description: Forwarded to that tester's /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
+      operationId: testerByIdProfileValidate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterValidateResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/network/interfaces:
+    get:
+      summary: One tester's network interfaces
+      description: Forwarded to that tester's /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
+      operationId: testerByIdNetworkInterfaces
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterInterface'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/network/ping:
+    post:
+      summary: Ping test from one tester
+      description: Forwarded to that tester's /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
+      operationId: testerByIdNetworkPing
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterPingRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterPingResult'
+        '400':
+          description: Invalid profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run is active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/testers/{id}/system:
     get:
       summary: One tester's CPU allocation and layout
@@ -1691,6 +1846,10 @@ components:
         name:
           type: string
           example: 1000 UE baseline
+        testerId:
+          type: string
+          description: Which tester (GET /api/testers) runs this profile; absent means "default", the one in config.yaml. Only fru-lab reads it; leave it out of what is sent to a tester, which rejects fields it does not know.
+          example: default
         scale:
           type: object
           required: [gnbCount, ueCount, throughputUeCount]

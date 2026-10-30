@@ -7,7 +7,8 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterFieldError, TesterInterface, TesterPlan, TesterProfile, TesterStoredProfile, TesterValidateResponse } from '../../api'
-import { DEFAULT_TESTER_PROFILE, normalizeProfile } from './testerDefaults'
+import { DEFAULT_TESTER_ID, DEFAULT_TESTER_PROFILE, forTester, normalizeProfile } from './testerDefaults'
+import { useTesters } from './useTesters'
 import { formatBps } from './testerFormat'
 import styles from './tester.module.css'
 import PingTest from './PingTest'
@@ -124,16 +125,26 @@ export default function TesterSetupPage() {
   // the host's interfaces for the N2/N3/N6 menus: null while loading,
   // undefined when they could not be listed (the fields fall back to text)
   const [interfaces, setInterfaces] = useState<TesterInterface[] | null | undefined>(null)
+  // the testers to choose from; the profile names the one that runs it
+  const { testers } = useTesters()
+  const testerId = profile.testerId || DEFAULT_TESTER_ID
+  const tester = testers?.find((t) => t.id === testerId)
+  // false: the profile's tester was removed from fru-lab
+  const testerKnown = testers === null ? null : tester !== undefined
 
   const loadInterfaces = useCallback(() => {
+    if (testerKnown === false) {
+      setInterfaces(undefined)
+      return
+    }
     setInterfaces(null)
-    api.testerNetworkInterfaces()
+    api.testerByIdNetworkInterfaces(testerId)
       .then((response) => setInterfaces(response.data))
       .catch((error) => {
         setInterfaces(undefined)
         addError(extractErrorMessage(error, "Failed to list the tester host's interfaces"))
       })
-  }, [addError])
+  }, [addError, testerId, testerKnown])
 
   useEffect(() => { loadInterfaces() }, [loadInterfaces])
 
@@ -198,8 +209,12 @@ export default function TesterSetupPage() {
   useEffect(() => {
     if (isLoading) return
     const seq = ++validateSeq.current
+    if (testerKnown === false) {
+      setValidation(null)
+      return
+    }
     const timer = window.setTimeout(() => {
-      api.testerProfileValidate(profile)
+      api.testerByIdProfileValidate(profile.testerId || DEFAULT_TESTER_ID, forTester(profile))
         .then((response) => {
           if (seq === validateSeq.current) setValidation(response.data)
         })
@@ -211,7 +226,7 @@ export default function TesterSetupPage() {
         })
     }, 400)
     return () => window.clearTimeout(timer)
-  }, [profile, isLoading, addError])
+  }, [profile, isLoading, addError, testerKnown])
 
   function handleChange(path: string, value: string | number) {
     setProfile((prev) => {
@@ -296,10 +311,13 @@ export default function TesterSetupPage() {
     void saveNew(rename.name, rename.then)
   }
 
+  // start runs p on its tester. The Run page follows the default tester;
+  // a run elsewhere is watched on that tester's Status page for now.
   async function start(p: TesterProfile) {
+    const id = p.testerId || DEFAULT_TESTER_ID
     try {
-      await api.testerRunStart(p)
-      navigate('/tester/run')
+      await api.testerByIdRunStart(id, forTester(p))
+      navigate(id === DEFAULT_TESTER_ID ? '/tester/run' : `/tester/status/${id}`)
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to start the run'))
       setIsBusy(false)
@@ -349,11 +367,25 @@ export default function TesterSetupPage() {
               <Button variant="secondary" onClick={handleCancel} disabled={isBusy}>Cancel</Button>
             )}
             <Button variant="secondary" onClick={handleSave} disabled={isLoading || isBusy}>Save</Button>
-            <Button onClick={handleStart} disabled={isLoading || isBusy || !validation?.valid || (currentId !== null && nameError !== undefined)}>
+            <select aria-label="Tester to run on" className={`${styles.headerSelect} ${testerKnown === false ? styles.inputError : ''}`}
+              value={testerId} disabled={isLoading || testers === null}
+              title={tester ? `Run on ${tester.name} (${tester.url}); saved with the profile` : "This profile's tester was removed from fru-lab: choose another"}
+              onChange={(e) => handleChange('testerId', e.target.value)}>
+              {testerKnown === false && <option value={testerId}>Removed tester</option>}
+              {testers === null && <option value={testerId}>Loading testers…</option>}
+              {(testers ?? []).map((t) => (
+                <option key={t.id} value={t.id}>{t.name}{t.reachable === false ? ' (unreachable)' : ''}</option>
+              ))}
+            </select>
+            <Button onClick={handleStart} disabled={isLoading || isBusy || testerKnown === false || !validation?.valid || (currentId !== null && nameError !== undefined)}>
               {isBusy ? 'Starting…' : 'Start run'}
             </Button>
           </div>
         </header>
+
+        {testerKnown === false && !isLoading && (
+          <p className={styles.runError}>This profile&apos;s tester was removed from fru-lab: choose another one next to Start run.</p>
+        )}
 
         {isLoading ? (
           <p className={styles.emptyState}>Loading profile…</p>
@@ -426,7 +458,7 @@ export default function TesterSetupPage() {
                 <Field label="AMF port" path="network.n2.amfPort" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>fru-tester adds one IP per gNB to this interface when the run starts and removes them when it stops. IPs already on the host and the AMF IP are skipped.</p>
-              <PingTest plane="n2" label="Ping AMF" profile={profile} />
+              <PingTest plane="n2" label="Ping AMF" profile={profile} testerId={testerId} />
             </section>
 
             <section className={styles.card}>
@@ -440,7 +472,7 @@ export default function TesterSetupPage() {
                 <Field label="UPF port" path="network.n3.upfPort" numeric {...fieldProps} />
               </div>
               <p className={styles.hint}>Each gNB gets its own N3 IP: uplink leaves from it and the UPF sends downlink to it.</p>
-              <PingTest plane="n3" label="Ping UPF (N3)" profile={profile} />
+              <PingTest plane="n3" label="Ping UPF (N3)" profile={profile} testerId={testerId} />
             </section>
 
             <section className={styles.card}>
@@ -458,7 +490,7 @@ export default function TesterSetupPage() {
                 the run, which also gives the host a route to that subnet. Downlink is sent from it to each UE&apos;s IP; the tester
                 routes the UE pool via the UPF N6 IP for the run. Both are removed afterwards.
               </p>
-              <PingTest plane="n6" label="Ping UPF (N6)" profile={profile} />
+              <PingTest plane="n6" label="Ping UPF (N6)" profile={profile} testerId={testerId} />
             </section>
 
             <section className={styles.card}>

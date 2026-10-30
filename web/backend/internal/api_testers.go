@@ -13,7 +13,7 @@ import (
 )
 
 // getTestersRoutes list, add and remove testers, and forward the Status
-// page's requests to one of them: /testers/<id>/<rest> reaches
+// and Setup pages' requests to one of them: /testers/<id>/<rest> reaches
 // <tester>/api/<rest>. The other tester pages still use /tester/, the
 // tester in config.yaml.
 func (b *backend) getTestersRoutes() util.Routes {
@@ -28,6 +28,14 @@ func (b *backend) getTestersRoutes() util.Routes {
 			HandlerFunc: b.handleTesterByID}, // polled; not logged per request
 		{Name: "TesterByIdRun", Method: http.MethodGet, Pattern: "/testers/:id/run",
 			HandlerFunc: b.handleTesterByID},
+		{Name: "TesterByIdRunStart", Method: http.MethodPost, Pattern: "/testers/:id/run",
+			HandlerFunc: withLogging("TesterByIdRunStart", b.TesterLog, b.handleTesterByID)},
+		{Name: "TesterByIdProfileValidate", Method: http.MethodPost, Pattern: "/testers/:id/profile/validate",
+			HandlerFunc: b.handleTesterByID}, // on every edit; not logged per request
+		{Name: "TesterByIdNetworkInterfaces", Method: http.MethodGet, Pattern: "/testers/:id/network/interfaces",
+			HandlerFunc: b.handleTesterByID},
+		{Name: "TesterByIdNetworkPing", Method: http.MethodPost, Pattern: "/testers/:id/network/ping",
+			HandlerFunc: withLogging("TesterByIdNetworkPing", b.TesterLog, b.handleTesterByID)},
 		{Name: "TesterByIdSystem", Method: http.MethodGet, Pattern: "/testers/:id/system",
 			HandlerFunc: b.handleTesterByID},
 		{Name: "TesterByIdCpuLoad", Method: http.MethodGet, Pattern: "/testers/:id/system/cpuload",

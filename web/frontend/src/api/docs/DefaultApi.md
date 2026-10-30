@@ -30,7 +30,11 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerBenchStart**](#testerbenchstart) | **POST** /api/tester/bench | Start a data plane bench|
 |[**testerByIdCpuLoad**](#testerbyidcpuload) | **GET** /api/testers/{id}/system/cpuload | How busy each CPU of one tester\&#39;s host is|
 |[**testerByIdCpusPut**](#testerbyidcpusput) | **PUT** /api/testers/{id}/system/cpus | Set one tester\&#39;s CPU allocation|
+|[**testerByIdNetworkInterfaces**](#testerbyidnetworkinterfaces) | **GET** /api/testers/{id}/network/interfaces | One tester\&#39;s network interfaces|
+|[**testerByIdNetworkPing**](#testerbyidnetworkping) | **POST** /api/testers/{id}/network/ping | Ping test from one tester|
+|[**testerByIdProfileValidate**](#testerbyidprofilevalidate) | **POST** /api/testers/{id}/profile/validate | Validate a profile on one tester|
 |[**testerByIdRun**](#testerbyidrun) | **GET** /api/testers/{id}/run | One tester\&#39;s run|
+|[**testerByIdRunStart**](#testerbyidrunstart) | **POST** /api/testers/{id}/run | Start a run on one tester|
 |[**testerByIdStatus**](#testerbyidstatus) | **GET** /api/testers/{id}/status | One tester\&#39;s host and process|
 |[**testerByIdSystem**](#testerbyidsystem) | **GET** /api/testers/{id}/system | One tester\&#39;s CPU allocation and layout|
 |[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON)|
@@ -1380,6 +1384,175 @@ const { status, data } = await apiInstance.testerByIdCpusPut(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **testerByIdNetworkInterfaces**
+> Array<TesterInterface> testerByIdNetworkInterfaces()
+
+Forwarded to that tester\'s /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+
+const { status, data } = await apiInstance.testerByIdNetworkInterfaces(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**Array<TesterInterface>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No tester with that id |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerByIdNetworkPing**
+> TesterPingResult testerByIdNetworkPing(testerPingRequest)
+
+Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterPingRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+let testerPingRequest: TesterPingRequest; //
+
+const { status, data } = await apiInstance.testerByIdNetworkPing(
+    id,
+    testerPingRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerPingRequest** | **TesterPingRequest**|  | |
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**TesterPingResult**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Invalid profile |  -  |
+|**409** | A run is active |  -  |
+|**404** | No tester with that id |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerByIdProfileValidate**
+> TesterValidateResponse testerByIdProfileValidate(testerProfile)
+
+Forwarded to that tester\'s /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+let testerProfile: TesterProfile; //
+
+const { status, data } = await apiInstance.testerByIdProfileValidate(
+    id,
+    testerProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerProfile** | **TesterProfile**|  | |
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**TesterValidateResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No tester with that id |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **testerByIdRun**
 > TesterRunSnapshot testerByIdRun()
 
@@ -1428,6 +1601,65 @@ const { status, data } = await apiInstance.testerByIdRun(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+|**404** | No tester with that id |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerByIdRunStart**
+> TesterRunSnapshot testerByIdRunStart(testerProfile)
+
+Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+let testerProfile: TesterProfile; //
+
+const { status, data } = await apiInstance.testerByIdRunStart(
+    id,
+    testerProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerProfile** | **TesterProfile**|  | |
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**TesterRunSnapshot**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**202** | Started |  -  |
+|**400** | Invalid profile |  -  |
+|**409** | A run or a bench is already running |  -  |
 |**404** | No tester with that id |  -  |
 |**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
 

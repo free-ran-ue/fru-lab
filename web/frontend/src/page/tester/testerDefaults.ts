@@ -5,8 +5,13 @@ import type { TesterProfile } from '../../api'
 // frulab-cn-ran bridge, host side docker-cn-ran) so it runs as-is there.
 // The UE template matches free-ran-ue's sample ue.yaml subscriber; create
 // subscribers imsi-208930000000001.. in the core with the same keys.
+// DEFAULT_TESTER_ID is the tester in fru-lab's config.yaml; profiles
+// saved before testers could be chosen run there.
+export const DEFAULT_TESTER_ID = 'default'
+
 export const DEFAULT_TESTER_PROFILE: TesterProfile = {
   name: 'basic',
+  testerId: DEFAULT_TESTER_ID,
   scale: { gnbCount: 10, ueCount: 1000, throughputUeCount: 1000 },
   gnb: {
     gnbIdStart: '000314',
@@ -70,4 +75,11 @@ function mergeKnown(defaults: unknown, saved: unknown): unknown {
     return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, mergeKnown(value, src[key])]))
   }
   return typeof saved === typeof defaults ? saved : defaults
+}
+
+// forTester is the profile as a tester takes it: without testerId, which
+// only fru-lab reads (a tester rejects fields it does not know).
+export function forTester(p: TesterProfile): TesterProfile {
+  const { testerId: _testerId, ...rest } = p
+  return rest
 }

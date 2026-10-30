@@ -169,3 +169,5 @@
 .testerCardFoot { margin-top: auto; padding-top: 0.6rem; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; }
 .testerCard:hover { border-color: #c7d2fe; box-shadow: 0 4px 12px rgb(79 70 229 / 0.12); }
 .testerGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem; }
+.headerSelect { height: 2.5rem; max-width: 14rem; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 0.75rem; font-size: 0.9rem; color: #0f172a; background: #ffffff; }
+.headerSelect:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16); }
