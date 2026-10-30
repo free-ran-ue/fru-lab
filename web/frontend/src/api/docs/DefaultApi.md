@@ -42,9 +42,10 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerRunGet**](#testerrunget) | **GET** /api/tester/run | Current run snapshot|
 |[**testerRunStart**](#testerrunstart) | **POST** /api/tester/run | Start a run|
 |[**testerRunStop**](#testerrunstop) | **POST** /api/tester/run/stop | Stop the active run|
-|[**testerSystemCpuLoad**](#testersystemcpuload) | **GET** /api/tester/system/cpuload | How busy each CPU of the tester host is (System page)|
+|[**testerStatusGet**](#testerstatusget) | **GET** /api/tester/status | The tester host and process (Status page)|
+|[**testerSystemCpuLoad**](#testersystemcpuload) | **GET** /api/tester/system/cpuload | How busy each CPU of the tester host is (Status page)|
 |[**testerSystemCpusPut**](#testersystemcpusput) | **PUT** /api/tester/system/cpus | Set the CPU allocation for the next runs|
-|[**testerSystemGet**](#testersystemget) | **GET** /api/tester/system | The tester host\&#39;s CPU allocation and layout (System page)|
+|[**testerSystemGet**](#testersystemget) | **GET** /api/tester/system | The tester host\&#39;s CPU allocation and layout (Status page)|
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()
@@ -1965,6 +1966,51 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**202** | Stop requested |  -  |
 |**409** | No active run |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerStatusGet**
+> TesterStatus testerStatusGet()
+
+Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.testerStatusGet();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**TesterStatus**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**502** | fru-tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

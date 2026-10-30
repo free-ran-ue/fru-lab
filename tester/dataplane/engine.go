@@ -59,7 +59,7 @@ type Config struct {
 	Engine                   string
 	N3Interface, N6Interface string
 	// Cpus, if set, are the data plane CPUs: every sender and reader
-	// goroutine keeps its own OS thread on them (the System page).
+	// goroutine keeps its own OS thread on them (the Status page).
 	Cpus cpuset.Set
 	Now  func() time.Time
 }

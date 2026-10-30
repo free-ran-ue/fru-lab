@@ -15,7 +15,7 @@ type Config struct {
 	Listen   string `yaml:"listen"`
 	ApiToken string `yaml:"apiToken"`
 	Logger   Logger `yaml:"logger"`
-	// SystemFile keeps the System page's CPU allocation; a relative path
+	// SystemFile keeps the Status page's CPU allocation; a relative path
 	// is relative to the config file's directory.
 	SystemFile string `yaml:"systemFile"`
 }

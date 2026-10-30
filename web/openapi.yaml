@@ -1057,7 +1057,7 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
   /api/tester/system:
     get:
-      summary: The tester host's CPU allocation and layout (System page)
+      summary: The tester host's CPU allocation and layout (Status page)
       description: Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
       operationId: testerSystemGet
       security:
@@ -1071,7 +1071,7 @@ paths:
                 $ref: '#/components/schemas/TesterSystemInfo'
   /api/tester/system/cpuload:
     get:
-      summary: How busy each CPU of the tester host is (System page)
+      summary: How busy each CPU of the tester host is (Status page)
       description: Forwarded to fru-tester, which reads /proc/stat. The whole host's load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
       operationId: testerSystemCpuLoad
       security:
@@ -1083,6 +1083,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TesterCpuLoad'
+  /api/tester/status:
+    get:
+      summary: The tester host and process (Status page)
+      description: Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+      operationId: testerStatusGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStatus'
+        '502':
+          description: fru-tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/system/cpus:
     put:
       summary: Set the CPU allocation for the next runs
@@ -1875,6 +1895,89 @@ components:
           $ref: '#/components/schemas/TesterCpuAllocation'
         topology:
           $ref: '#/components/schemas/TesterTopology'
+    TesterStatus:
+      type: object
+      required: [hostname, version, goVersion, kernel, pid, startedAt, uptimeSec, memory, cpu, capabilities]
+      properties:
+        hostname:
+          type: string
+        version:
+          type: string
+          description: VCS revision fru-tester was built from; empty when the build does not say.
+        goVersion:
+          type: string
+        kernel:
+          type: string
+          description: Kernel release of the tester host.
+        pid:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        uptimeSec:
+          type: integer
+          format: int64
+        memory:
+          type: object
+          description: Bytes.
+          required: [hostTotal, hostAvailable, processRss, goHeap, cgroupLimit, cgroupUsage]
+          properties:
+            hostTotal:
+              type: integer
+              format: int64
+            hostAvailable:
+              type: integer
+              format: int64
+            processRss:
+              type: integer
+              format: int64
+              description: fru-tester's resident memory.
+            goHeap:
+              type: integer
+              format: int64
+            cgroupLimit:
+              type: integer
+              format: int64
+              nullable: true
+              description: Memory limit of fru-tester's cgroup (its container); null when there is none.
+            cgroupUsage:
+              type: integer
+              format: int64
+              nullable: true
+              description: What the cgroup uses, page cache included; null when it cannot be read.
+        cpu:
+          type: object
+          required: [online, allowed, load1, load5, load15, goroutines]
+          properties:
+            online:
+              type: integer
+            allowed:
+              type: integer
+              description: CPUs fru-tester may use.
+            load1:
+              type: number
+            load5:
+              type: number
+            load15:
+              type: number
+            goroutines:
+              type: integer
+        capabilities:
+          type: object
+          required: [netAdmin, bpf, ipcLock, sctp]
+          properties:
+            netAdmin:
+              type: boolean
+              description: Needed to add the gNB IPs and the UE route.
+            bpf:
+              type: boolean
+              description: Needed by the AF_XDP engine (CAP_BPF, or CAP_SYS_ADMIN before Linux 5.8).
+            ipcLock:
+              type: boolean
+              description: Needed by the AF_XDP engine.
+            sctp:
+              type: boolean
+              description: The sctp kernel module is loaded.
     TesterCpuLoad:
       type: object
       required: [intervalMs, cpus]

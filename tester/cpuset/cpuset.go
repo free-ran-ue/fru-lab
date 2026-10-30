@@ -1,5 +1,5 @@
 // Package cpuset keeps the control plane and the data plane on CPUs the
-// user chose (the System page): the data plane's long-lived goroutines
+// user chose (the Status page): the data plane's long-lived goroutines
 // each lock an OS thread pinned to the data plane CPUs, and the rest of
 // the process is held to the control plane CPUs for the run.
 package cpuset

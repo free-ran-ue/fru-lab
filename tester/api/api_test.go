@@ -14,6 +14,7 @@ import (
 
 	"tester/bench"
 	"tester/cpuset"
+	"tester/hoststat"
 	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
@@ -292,4 +293,16 @@ func TestSystemCpuLoad(t *testing.T) {
 	require.NotEmpty(t, l.Cpus)
 	require.Positive(t, l.IntervalMs)
 	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/system/cpuload", "", "x").Code)
+}
+
+// The status page reads the tester host's state with the API token.
+func TestStatus(t *testing.T) {
+	h := newTestRouter(&fakeCtrl{}, "t")
+	rec := do(t, h, http.MethodGet, "/api/status", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var s hoststat.Status
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &s))
+	require.NotEmpty(t, s.Hostname)
+	require.NotZero(t, s.Memory.HostTotal)
+	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/status", "", "x").Code)
 }

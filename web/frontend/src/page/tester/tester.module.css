@@ -139,3 +139,27 @@
 .legend i.cpuSwatch.cpuCp { background: #e0e7ff; border-color: #6366f1; }
 .legend i.cpuSwatch.cpuDp { background: #ccfbf1; border-color: #0d9488; }
 .legend i.cpuSwatch.cpuOff { background: repeating-linear-gradient(45deg, #f1f5f9 0 3px, #e2e8f0 3px 6px); }
+
+/* Status page */
+.overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.overviewWide { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; margin-top: -0.5rem; }
+.tile { display: flex; flex-direction: column; gap: 0.6rem; }
+.tileHead { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.tileHead h3 { margin: 0; font-size: 0.95rem; font-weight: 700; color: #0f172a; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.3rem 0.9rem; margin: 0; font-size: 0.8rem; }
+.kv dt { color: #64748b; }
+.kv dd { margin: 0; color: #0f172a; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.meter { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: #64748b; }
+.meter > div:first-child { display: flex; justify-content: space-between; gap: 0.5rem; }
+.meter b { color: #0f172a; font-variant-numeric: tabular-nums; font-weight: 600; }
+.meterBar { height: 8px; border-radius: 4px; background: #f1f5f9; overflow: hidden; }
+.meterBar i { display: block; height: 100%; border-radius: 4px; transition: width 0.6s, background-color 0.6s; }
+.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem; color: #0f172a; }
+.checks li { display: flex; align-items: baseline; gap: 0.5rem; }
+.checks small { color: #64748b; }
+.checkOk, .checkBad { flex: none; width: 1.1rem; height: 1.1rem; border-radius: 50%; display: inline-grid; place-items: center; font-size: 0.7rem; font-weight: 700; transform: translateY(2px); }
+.checkOk { background: #dcfce7; color: #15803d; }
+.checkBad { background: #fee2e2; color: #b91c1c; }
+.cardHead { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.cardHead .cardTitle { margin: 0; }
+.sectionTitle { margin: 0.5rem 0 -0.5rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }

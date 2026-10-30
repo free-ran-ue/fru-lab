@@ -15,6 +15,7 @@ import (
 
 	"tester/bench"
 	"tester/cpuset"
+	"tester/hoststat"
 	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
@@ -111,6 +112,7 @@ func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 		c.JSON(http.StatusOK, info)
 	})
 	g.PUT("/system/cpus", handleSetCpus(ctrl))
+	g.GET("/status", func(c *gin.Context) { c.JSON(http.StatusOK, hoststat.Read()) })
 	cpuLoad := cpuset.NewSampler()
 	g.GET("/system/cpuload", func(c *gin.Context) {
 		l, err := cpuLoad.Read()
@@ -193,7 +195,7 @@ func handleStart(ctrl Controller, b Bench) gin.HandlerFunc {
 		case errors.Is(err, run.ErrRunActive), errors.Is(err, run.ErrPingActive):
 			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
 		case errors.As(err, &aerr):
-			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error() + " (fix it on the System page)"})
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error() + " (fix it on the Status page)"})
 		default:
 			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		}

@@ -636,6 +636,73 @@ export interface TesterStartErrorResponse {
     'message': string;
     'errors': Array<TesterFieldError>;
 }
+export interface TesterStatus {
+    'hostname': string;
+    /**
+     * VCS revision fru-tester was built from; empty when the build does not say.
+     */
+    'version': string;
+    'goVersion': string;
+    /**
+     * Kernel release of the tester host.
+     */
+    'kernel': string;
+    'pid': number;
+    'startedAt': string;
+    'uptimeSec': number;
+    'memory': TesterStatusMemory;
+    'cpu': TesterStatusCpu;
+    'capabilities': TesterStatusCapabilities;
+}
+export interface TesterStatusCapabilities {
+    /**
+     * Needed to add the gNB IPs and the UE route.
+     */
+    'netAdmin': boolean;
+    /**
+     * Needed by the AF_XDP engine (CAP_BPF, or CAP_SYS_ADMIN before Linux 5.8).
+     */
+    'bpf': boolean;
+    /**
+     * Needed by the AF_XDP engine.
+     */
+    'ipcLock': boolean;
+    /**
+     * The sctp kernel module is loaded.
+     */
+    'sctp': boolean;
+}
+export interface TesterStatusCpu {
+    'online': number;
+    /**
+     * CPUs fru-tester may use.
+     */
+    'allowed': number;
+    'load1': number;
+    'load5': number;
+    'load15': number;
+    'goroutines': number;
+}
+/**
+ * Bytes.
+ */
+export interface TesterStatusMemory {
+    'hostTotal': number;
+    'hostAvailable': number;
+    /**
+     * fru-tester\'s resident memory.
+     */
+    'processRss': number;
+    'goHeap': number;
+    /**
+     * Memory limit of fru-tester\'s cgroup (its container); null when there is none.
+     */
+    'cgroupLimit': number | null;
+    /**
+     * What the cgroup uses, page cache included; null when it cannot be read.
+     */
+    'cgroupUsage': number | null;
+}
 export interface TesterStoredProfile {
     'id': string;
     'updatedAt': string;
@@ -2216,8 +2283,42 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+         * @summary The tester host and process (Status page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerStatusGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/tester/status`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-         * @summary How busy each CPU of the tester host is (System page)
+         * @summary How busy each CPU of the tester host is (Status page)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -2290,7 +2391,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-         * @summary The tester host\'s CPU allocation and layout (System page)
+         * @summary The tester host\'s CPU allocation and layout (Status page)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -2814,8 +2915,20 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+         * @summary The tester host and process (Status page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerStatusGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStatus>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerStatusGet(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerStatusGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-         * @summary How busy each CPU of the tester host is (System page)
+         * @summary How busy each CPU of the tester host is (Status page)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -2840,7 +2953,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         },
         /**
          * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-         * @summary The tester host\'s CPU allocation and layout (System page)
+         * @summary The tester host\'s CPU allocation and layout (Status page)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -3228,8 +3341,17 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerRunStop(options).then((request) => request(axios, basePath));
         },
         /**
+         * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+         * @summary The tester host and process (Status page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerStatusGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterStatus> {
+            return localVarFp.testerStatusGet(options).then((request) => request(axios, basePath));
+        },
+        /**
          * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-         * @summary How busy each CPU of the tester host is (System page)
+         * @summary How busy each CPU of the tester host is (Status page)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -3248,7 +3370,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-         * @summary The tester host\'s CPU allocation and layout (System page)
+         * @summary The tester host\'s CPU allocation and layout (Status page)
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -3669,8 +3791,18 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+     * @summary The tester host and process (Status page)
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerStatusGet(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerStatusGet(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-     * @summary How busy each CPU of the tester host is (System page)
+     * @summary How busy each CPU of the tester host is (Status page)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -3691,7 +3823,7 @@ export class DefaultApi extends BaseAPI {
 
     /**
      * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-     * @summary The tester host\'s CPU allocation and layout (System page)
+     * @summary The tester host\'s CPU allocation and layout (Status page)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */

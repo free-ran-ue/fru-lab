@@ -7,7 +7,7 @@ import (
 	"tester/cpuset"
 )
 
-// SystemInfo is the System page: the CPU allocation and the host layout
+// SystemInfo is the Status page's CPU part: the CPU allocation and the host layout
 // that helps choose it.
 type SystemInfo struct {
 	Cpus     cpuset.Allocation `json:"cpus"`

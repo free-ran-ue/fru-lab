@@ -56,6 +56,10 @@ docs/TesterRunSnapshot.md
 docs/TesterStageRate.md
 docs/TesterStageSnapshot.md
 docs/TesterStartErrorResponse.md
+docs/TesterStatus.md
+docs/TesterStatusCapabilities.md
+docs/TesterStatusCpu.md
+docs/TesterStatusMemory.md
 docs/TesterStoredProfile.md
 docs/TesterSystemInfo.md
 docs/TesterTopology.md

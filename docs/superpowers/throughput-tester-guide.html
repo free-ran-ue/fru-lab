@@ -158,7 +158,7 @@ footer { font-size: .82rem; color: var(--ink-3); border-top: 1px solid var(--lin
     <a href="#recipes">建議設定</a>
     <a href="#run">Run 頁怎麼看</a>
     <a href="#history">History 與 Bench</a>
-    <a href="#system">System：CPU 分配</a>
+    <a href="#system">Status：tester 狀態與 CPU 分配</a>
     <a href="#limits">已知限制與排錯</a>
   </nav>
 
@@ -236,7 +236,7 @@ tester:
           <li><b>沒有 IPAM</b>：NAD 不發 IP，gNB IP 和 sink IP 照樣由 tester 在 run 期間加、結束時拿掉。gNB 範圍要避開 5GC 的 IPAM 範圍。</li>
           <li><b>資料面</b>：macvlan 不是真的網卡，<code>auto</code> 會用 socket 引擎，跑不到全效能。</li>
           <li><b>用本機網卡（要 zero-copy 時）</b>：設 <code>tester.network.mode: host</code>，tester 和 docker 版一樣看得到 node 上所有網卡，Setup 頁直接選實體 port 或 VF。這時 chart 不建 <code>n2/n3/n6</code>；5GC 的 macvlan 掛在哪張網卡，tester 就不能直接用那張，要用它切出來的 VF（見「部署架構」的同一台機器、5GC 用 macvlan 時）。</li>
-          <li><b>CPU</b>：System 頁只能選 pod 分到的 CPU。要獨佔核心，kubelet 開 static CPU manager，<code>tester.resources</code> 的 cpu request 與 limit 設成相同的整數（Guaranteed QoS）。</li>
+          <li><b>CPU</b>：Status 頁只能選 pod 分到的 CPU。要獨佔核心，kubelet 開 static CPU manager，<code>tester.resources</code> 的 cpu request 與 limit 設成相同的整數（Guaranteed QoS）。</li>
           <li><b>資料保存</b>：預設 hostPath（<code>/var/lib/frulab/db</code>、<code>/var/lib/frulab/tester-data</code>），也可以改 <code>pvc</code>。</li>
           <li>fru-lab 自己部署 free5GC 的頁面需要 Docker，k8s 上預設關閉（<code>frulab.docker.enabled</code>）。完整選項見 <code>helm/values.yaml</code> 與 <code>helm/README.md</code>。</li>
         </ul>
@@ -289,7 +289,7 @@ ip -br link                                              <span class="cmt"># 多
         <ul>
           <li><b>docker 版和 helm 版都能 zero-copy</b>，差別只在 tester 用的是不是真的網卡（實體 port 或 VF）。helm 要用 <code>tester.network.mode: host</code>，見「啟動 fru-tester」的 Kubernetes。</li>
           <li>engine 不要在 macvlan 上強制 <code>afxdp</code>：generic XDP 每個封包都要多複製一次，通常比 socket 慢。</li>
-          <li>只用 macvlan 時要拉高流量：多開幾個 gNB（每個 gNB 的 DL 只有一條收包 thread）、封包大一點、System 頁的 DP 不要和 UPF 的 CPU 重疊。</li>
+          <li>只用 macvlan 時要拉高流量：多開幾個 gNB（每個 gNB 的 DL 只有一條收包 thread）、封包大一點、Status 頁的 DP 不要和 UPF 的 CPU 重疊。</li>
         </ul>
       </div>
 
@@ -652,8 +652,20 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
     </section>
 
     <section id="system">
-      <h2>System：CPU 分配</h2>
-      <p>側邊欄的 <b>System</b> 頁決定 tester 主機上哪些 CPU 給控制面（CP）、哪些給資料面（DP）。這是<b>主機</b>的設定，和 profile 無關；在 run 開始前設好，run 會沿用開始時的設定，run 進行中不能修改。</p>
+      <h2>Status：tester 狀態與 CPU 分配</h2>
+      <p>側邊欄 Throughput Tester 底下的第一頁 <b>Status</b> 是 tester 的管理面板（取代原本的 System 頁，舊網址 <code>/tester/system</code> 會自動轉過來）。上半部看 tester 現在的狀況，下半部設定 CPU 隔離。</p>
+      <h3>總覽</h3>
+      <div class="tbl"><table>
+        <tr><th>卡片</th><th>內容</th></tr>
+        <tr><td><b>Tester</b></td><td>連線狀態與回應時間、主機名稱、build（git revision）、uptime、kernel、Go 版本。連不到時整頁只剩這張卡，顯示錯誤原因，並每幾秒自動重試，連上後自動恢復。</td></tr>
+        <tr><td><b>Run</b></td><td>目前或上一次 run 的狀態、profile、run ID、開始時間、已建立的 UE 數，可以直接跳到 Run 頁。</td></tr>
+        <tr><td><b>Ready to run</b></td><td>run 需要的條件：SCTP 模組已載入、<code>NET_ADMIN</code>（加 gNB IP 和路由）、<code>BPF</code> 與 <code>IPC_LOCK</code>（AF_XDP 引擎）。右上角是結論：<b>AF_XDP ready</b>、<b>Sockets only</b>（只能用 socket 引擎）或 <b>Not ready</b>。</td></tr>
+        <tr><td><b>Memory</b></td><td>主機已用／總量、fru-tester 本身的常駐記憶體。在 container 裡且有設記憶體上限時，多一條 <b>Container limit</b>，顯示用了上限的幾 %；超過上限 tester 會被 OOM kill，run 中斷。</td></tr>
+        <tr><td><b>CPU</b></td><td>全部 CPU 的平均使用率與 load average、fru-tester 能用幾顆 CPU、目前存的 CP／DP 分配。</td></tr>
+      </table></div>
+      <p class="hint">每 3 秒更新一次（CPU 使用率每秒）。這些資料由 tester 的 <code>GET /api/status</code> 提供，fru-lab 經 <code>/api/tester/status</code> 轉送；之後分成多台部署時，每台 tester 各有一個這樣的面板。</p>
+      <h3>CPU 分配</h3>
+      <p>決定 tester 主機上哪些 CPU 給控制面（CP）、哪些給資料面（DP）。這是<b>主機</b>的設定，和 profile 無關；在 run 開始前設好，run 會沿用開始時的設定，run 進行中不能修改。<b>Save</b>／<b>Reset</b> 在 CPU allocation 卡片的右上角。</p>
       <div class="tbl"><table>
         <tr><th>欄位</th><th>意思</th></tr>
         <tr><td><b>Control plane CPUs</b></td><td>例如 <code>0-3</code>。run 期間，N2、註冊、PDU、CP 迴圈、fru-tester 的 API 都只在這些 CPU 上跑。</td></tr>
@@ -661,9 +673,9 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
       <ul>
         <li>格式是 Linux 的 CPU 清單：<code>0-3,8,10-11</code>。留空表示那一邊不綁核（和以前一樣）。兩邊不能重疊，CPU 必須是 fru-tester 能用的（在 container 裡就是它的 cpuset）。</li>
-        <li><b>CPUs</b> 卡片依 NUMA node 列出每顆 CPU，點一下切換：不綁 → 控制面 → 資料面。橘色小點是網卡中斷所在的 CPU。</li>
+        <li>CPU allocation 卡片下半部依 NUMA node 列出每顆 CPU，點一下切換：不綁 → 控制面 → 資料面。橘色小點是網卡中斷所在的 CPU。</li>
         <li><b>CPU usage</b> 卡片即時顯示整台主機每顆 CPU 的使用率（每秒更新），一樣依 NUMA node 分組。顏色從綠（閒）經黃（約 50%）到紅（滿），上方有全部 CPU、控制面、資料面的平均，CPU 編號旁的 <b>CP</b>／<b>DP</b> 標的是已存的分配。所有程式和 kernel 的中斷處理（softirq）都算在內，不只 fru-tester。run 進行中照樣更新，可以用來確認資料面 CPU 是否吃滿、網卡中斷的 CPU 是否被 softirq 塞滿。</li>
-        <li><b>Network interfaces</b> 列出實體網卡的驅動、NUMA node、鄰近的 CPU、收包佇列數、中斷所在的 CPU。資料面 CPU 跨了 NUMA node，或不在任何網卡的鄰近 CPU 上時，會顯示提醒。</li>
+        <li><b>Network interfaces</b>（Network 區塊）只列實體網卡（AF_XDP 能用的那些，macvlan、veth 不列），顯示驅動、NUMA node、鄰近的 CPU、收包佇列數、中斷所在的 CPU。資料面 CPU 跨了 NUMA node，或不在任何網卡的鄰近 CPU 上時，會顯示提醒。</li>
         <li>Run 頁標題下面、以及 HTML 報告的開頭都會記下這次 run 用的 CPU 分配。</li>
       </ul>
       <h3>資料面開幾條執行緒</h3>
@@ -715,7 +727,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </table></div>
     </section>
 
-    <footer>依 fru-tester 目前的程式整理（feat/psize/dlul，2026-10-20）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
+    <footer>依 fru-tester 目前的程式整理（main，2026-10-30）。設計與實作紀錄、效能問答在 Throughput Tester 設計文檔。</footer>
   </main>
 </div>
 
