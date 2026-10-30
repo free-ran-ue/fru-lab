@@ -109,6 +109,28 @@ export interface ServiceStatus {
     'name': string;
     'status': string;
 }
+export interface TesterAddRequest {
+    'url': string;
+    /**
+     * The apiToken in that tester\'s tester.yaml.
+     */
+    'apiToken': string;
+}
+export interface TesterAdded {
+    /**
+     * \"default\" for the tester in config.yaml.
+     */
+    'id': string;
+    'url': string;
+    /**
+     * The tester in config.yaml; it cannot be removed.
+     */
+    'builtIn': boolean;
+    /**
+     * The name the tester reported.
+     */
+    'name': string;
+}
 export interface TesterBenchResult {
     'state': TesterBenchResultStateEnum;
     'error': string;
@@ -272,6 +294,17 @@ export interface TesterDataplaneSnapshot {
      * The whole run from its first second, in at most 600 points. A point covers 1 second until the run outgrows that, then 2, 4, 8 ... seconds (averaged).
      */
     'series': Array<TesterTrafficPoint>;
+}
+export interface TesterEntry {
+    /**
+     * \"default\" for the tester in config.yaml.
+     */
+    'id': string;
+    'url': string;
+    /**
+     * The tester in config.yaml; it cannot be removed.
+     */
+    'builtIn': boolean;
 }
 export interface TesterFieldError {
     'field': string;
@@ -637,6 +670,10 @@ export interface TesterStartErrorResponse {
     'errors': Array<TesterFieldError>;
 }
 export interface TesterStatus {
+    /**
+     * The tester\'s testerName (tester.yaml); its host name when that is empty.
+     */
+    'name': string;
     'hostname': string;
     /**
      * VCS revision fru-tester was built from; empty when the build does not say.
@@ -1762,6 +1799,201 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
+         * @summary How busy each CPU of one tester\'s host is
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdCpuLoad: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerByIdCpuLoad', 'id', id)
+            const localVarPath = `/api/testers/{id}/system/cpuload`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
+         * @summary Set one tester\'s CPU allocation
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {TesterCpuAllocation} testerCpuAllocation 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdCpusPut: async (id: string, testerCpuAllocation: TesterCpuAllocation, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerByIdCpusPut', 'id', id)
+            // verify required parameter 'testerCpuAllocation' is not null or undefined
+            assertParamExists('testerByIdCpusPut', 'testerCpuAllocation', testerCpuAllocation)
+            const localVarPath = `/api/testers/{id}/system/cpus`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerCpuAllocation, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
+         * @summary One tester\'s run
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdRun: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerByIdRun', 'id', id)
+            const localVarPath = `/api/testers/{id}/run`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
+         * @summary One tester\'s host and process
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdStatus: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerByIdStatus', 'id', id)
+            const localVarPath = `/api/testers/{id}/status`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
+         * @summary One tester\'s CPU allocation and layout
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdSystem: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerByIdSystem', 'id', id)
+            const localVarPath = `/api/testers/{id}/system`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
@@ -2423,6 +2655,117 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
                 options: localVarRequestOptions,
             };
         },
+        /**
+         * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
+         * @summary Add a tester
+         * @param {TesterAddRequest} testerAddRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testersAdd: async (testerAddRequest: TesterAddRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'testerAddRequest' is not null or undefined
+            assertParamExists('testersAdd', 'testerAddRequest', testerAddRequest)
+            const localVarPath = `/api/testers`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerAddRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
+         * @summary Remove an added tester
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testersDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testersDelete', 'id', id)
+            const localVarPath = `/api/testers/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
+         * @summary Every tester fru-lab can reach (Status page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testersList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/testers`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
     }
 };
 
@@ -2737,6 +3080,72 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
+         * @summary How busy each CPU of one tester\'s host is
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerByIdCpuLoad(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuLoad>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdCpuLoad(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdCpuLoad']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
+         * @summary Set one tester\'s CPU allocation
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {TesterCpuAllocation} testerCpuAllocation 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerByIdCpusPut(id: string, testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuAllocation>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdCpusPut(id, testerCpuAllocation, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdCpusPut']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
+         * @summary One tester\'s run
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerByIdRun(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRun(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdRun']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
+         * @summary One tester\'s host and process
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerByIdStatus(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStatus>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdStatus(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdStatus']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
+         * @summary One tester\'s CPU allocation and layout
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerByIdSystem(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterSystemInfo>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdSystem(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdSystem']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
@@ -2961,6 +3370,44 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemGet(options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
+         * @summary Add a tester
+         * @param {TesterAddRequest} testerAddRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testersAdd(testerAddRequest: TesterAddRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterAdded>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testersAdd(testerAddRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testersAdd']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
+         * @summary Remove an added tester
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testersDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testersDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testersDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
+         * @summary Every tester fru-lab can reach (Status page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testersList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterEntry>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testersList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testersList']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
     }
@@ -3205,6 +3652,57 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerBenchStart(testerBenchSettings, options).then((request) => request(axios, basePath));
         },
         /**
+         * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
+         * @summary How busy each CPU of one tester\'s host is
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdCpuLoad(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuLoad> {
+            return localVarFp.testerByIdCpuLoad(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
+         * @summary Set one tester\'s CPU allocation
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {TesterCpuAllocation} testerCpuAllocation 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdCpusPut(id: string, testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuAllocation> {
+            return localVarFp.testerByIdCpusPut(id, testerCpuAllocation, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
+         * @summary One tester\'s run
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdRun(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
+            return localVarFp.testerByIdRun(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
+         * @summary One tester\'s host and process
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdStatus(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterStatus> {
+            return localVarFp.testerByIdStatus(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
+         * @summary One tester\'s CPU allocation and layout
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdSystem(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterSystemInfo> {
+            return localVarFp.testerByIdSystem(id, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON)
          * @param {string} runId 
@@ -3376,6 +3874,35 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         testerSystemGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterSystemInfo> {
             return localVarFp.testerSystemGet(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
+         * @summary Add a tester
+         * @param {TesterAddRequest} testerAddRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testersAdd(testerAddRequest: TesterAddRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterAdded> {
+            return localVarFp.testersAdd(testerAddRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
+         * @summary Remove an added tester
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testersDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.testersDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
+         * @summary Every tester fru-lab can reach (Status page)
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testersList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterEntry>> {
+            return localVarFp.testersList(options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -3641,6 +4168,62 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
+     * @summary How busy each CPU of one tester\'s host is
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerByIdCpuLoad(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdCpuLoad(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
+     * @summary Set one tester\'s CPU allocation
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {TesterCpuAllocation} testerCpuAllocation 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerByIdCpusPut(id: string, testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdCpusPut(id, testerCpuAllocation, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
+     * @summary One tester\'s run
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerByIdRun(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdRun(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
+     * @summary One tester\'s host and process
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerByIdStatus(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdStatus(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
+     * @summary One tester\'s CPU allocation and layout
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerByIdSystem(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdSystem(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * 
      * @summary One finished run\'s full report (JSON)
      * @param {string} runId 
@@ -3829,6 +4412,38 @@ export class DefaultApi extends BaseAPI {
      */
     public testerSystemGet(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).testerSystemGet(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
+     * @summary Add a tester
+     * @param {TesterAddRequest} testerAddRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testersAdd(testerAddRequest: TesterAddRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testersAdd(testerAddRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
+     * @summary Remove an added tester
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testersDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testersDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
+     * @summary Every tester fru-lab can reach (Status page)
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testersList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testersList(options).then((request) => request(this.axios, this.basePath));
     }
 }
 

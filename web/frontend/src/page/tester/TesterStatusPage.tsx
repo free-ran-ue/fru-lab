@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import Sidebar from '../../components/sidebar/Sidebar'
 import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
-import type { TesterCpuAllocation, TesterCpuLoad, TesterFieldError, TesterRunSnapshot, TesterStatus, TesterSystemInfo } from '../../api'
+import type { TesterCpuAllocation, TesterCpuLoad, TesterEntry, TesterFieldError, TesterRunSnapshot, TesterStatus, TesterSystemInfo } from '../../api'
 import { formatCpus, parseCpus } from './cpus'
 import { CpuMap, CpuUsage } from './TesterCpus'
 import { formatBytes, formatDuration } from './testerFormat'
@@ -157,7 +157,7 @@ function Overview({ status, latencyMs, run, cpuLoad, saved }: {
 
 // TesterPanel is everything about one tester. fru-lab drives one tester
 // for now; with several, the page lists one panel per tester.
-function TesterPanel() {
+function TesterPanel({ id }: { id: string }) {
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [status, setStatus] = useState<TesterStatus | null>(null)
   const [latencyMs, setLatencyMs] = useState(0)
@@ -171,10 +171,10 @@ function TesterPanel() {
   const [isSaving, setIsSaving] = useState(false)
 
   const loadSystem = useCallback(() => {
-    api.testerSystemGet()
+    api.testerByIdSystem(id)
       .then((r) => { setInfo(r.data); setForm(r.data.cpus); setSaved(r.data.cpus) })
       .catch((error) => addError(extractErrorMessage(error, 'Failed to read the tester host')))
-  }, [addError])
+  }, [addError, id])
 
   // the tester, its run: every few seconds; reaching it again reloads the
   // CPU layout, which a restarted tester may have changed
@@ -184,7 +184,7 @@ function TesterPanel() {
     const readStatus = () => {
       if (document.hidden) return
       const t0 = performance.now()
-      api.testerStatusGet()
+      api.testerByIdStatus(id)
         .then((r) => {
           if (cancelled) return
           setLatencyMs(performance.now() - t0)
@@ -198,28 +198,28 @@ function TesterPanel() {
           setUnreachable(extractErrorMessage(error, 'fru-tester did not answer'))
           wasDown = true
         })
-      api.testerRunGet()
+      api.testerByIdRun(id)
         .then((r) => { if (!cancelled) setRun(r.data) })
         .catch(() => {})
     }
     readStatus()
     const timer = window.setInterval(readStatus, STATUS_POLL_MS)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [loadSystem])
+  }, [loadSystem, id])
 
   // the CPU load, live
   useEffect(() => {
     let cancelled = false
     const readLoad = () => {
       if (document.hidden) return
-      api.testerSystemCpuLoad()
+      api.testerByIdCpuLoad(id)
         .then((r) => { if (!cancelled) setCpuLoad(r.data) })
         .catch(() => { if (!cancelled) setCpuLoad(null) })
     }
     readLoad()
     const timer = window.setInterval(readLoad, LOAD_POLL_MS)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [])
+  }, [id])
 
   const runActive = run !== null && !FINISHED.includes(run.state)
   const busy = new Map((cpuLoad?.cpus ?? []).map((l) => [l.cpu, l.busy]))
@@ -261,7 +261,7 @@ function TesterPanel() {
   async function handleSave() {
     setIsSaving(true)
     try {
-      const r = await api.testerSystemCpusPut(form)
+      const r = await api.testerByIdCpusPut(id, form)
       setForm(r.data)
       setSaved(r.data)
       setFieldErrors([])
@@ -289,7 +289,7 @@ function TesterPanel() {
           </div>
           <p className={styles.runError}>{unreachable}</p>
           <p className={styles.hint} style={{ margin: 0 }}>
-            Check that fru-tester is running and that fru-lab&apos;s <code>backend.tester.url</code> and <code>apiToken</code> match it. This page keeps trying every few seconds.
+            Check that fru-tester is running at that URL and that its <code>apiToken</code> is the one fru-lab sends. This page keeps trying every few seconds.
           </p>
         </section>
       )}
@@ -386,20 +386,207 @@ function TesterPanel() {
   )
 }
 
+// TesterCard is one tester in the list: whether it answers and the gist
+// of its state. Clicking it opens that tester's Status page.
+function TesterCard({ tester, onRemove }: { tester: TesterEntry, onRemove: (t: TesterEntry, name: string) => void }) {
+  const [status, setStatus] = useState<TesterStatus | null>(null)
+  const [latencyMs, setLatencyMs] = useState(0)
+  const [unreachable, setUnreachable] = useState<string | null>(null)
+  const [run, setRun] = useState<TesterRunSnapshot | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const read = () => {
+      if (document.hidden) return
+      const t0 = performance.now()
+      api.testerByIdStatus(tester.id)
+        .then((r) => {
+          if (cancelled) return
+          setLatencyMs(performance.now() - t0)
+          setStatus(r.data)
+          setUnreachable(null)
+        })
+        .catch((error) => { if (!cancelled) setUnreachable(extractErrorMessage(error, 'fru-tester did not answer')) })
+      api.testerByIdRun(tester.id)
+        .then((r) => { if (!cancelled) setRun(r.data) })
+        .catch(() => {})
+    }
+    read()
+    const timer = window.setInterval(read, STATUS_POLL_MS)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [tester.id])
+
+  const m = status?.memory
+  const runActive = run !== null && !FINISHED.includes(run.state)
+  const name = status?.name || tester.url
+  return (
+    <div className={`${styles.card} ${styles.tile} ${styles.testerCard}`}>
+      <Link to={`/tester/status/${tester.id}`} className={styles.testerCardLink}>
+        <div className={styles.tileHead}>
+          <h3>{name}</h3>
+          {unreachable
+            ? <span className={`${styles.pill} ${styles.pillBad}`}>Unreachable</span>
+            : status
+              ? <span className={`${styles.pill} ${styles.pillOk}`}>Connected · {latencyMs.toFixed(0)} ms</span>
+              : <span className={`${styles.pill} ${styles.pillMuted}`}>Connecting…</span>}
+        </div>
+        <dl className={styles.kv}>
+          <dt>URL</dt><dd className={styles.mono}>{tester.url}</dd>
+          {status && !unreachable && m && (
+            <>
+              <dt>Host</dt><dd className={styles.mono}>{status.hostname}</dd>
+              <dt>Run</dt><dd>{run ? RUN_LABELS[run.state] : '—'}{runActive && run?.profileName ? ` · ${run.profileName}` : ''}</dd>
+              <dt>Memory</dt><dd>{formatBytes(m.hostTotal - m.hostAvailable)} of {formatBytes(m.hostTotal)} used</dd>
+              <dt>CPUs</dt><dd>{status.cpu.allowed} of {status.cpu.online} usable · load {status.cpu.load1.toFixed(2)}</dd>
+              <dt>Uptime</dt><dd>{formatDuration(status.uptimeSec)}</dd>
+            </>
+          )}
+        </dl>
+        {unreachable && <p className={styles.runError}>{unreachable}</p>}
+      </Link>
+      <div className={styles.testerCardFoot}>
+        {tester.builtIn
+          ? <span className={styles.fieldHint}>From config.yaml · runs next to fru-lab</span>
+          : <button type="button" className={styles.linkButton} onClick={() => onRemove(tester, name)}>Remove</button>}
+      </div>
+    </div>
+  )
+}
+
+// AddTesterForm adds a tester by its URL and API token; fru-lab checks
+// that it answers before keeping it.
+function AddTesterForm({ onAdded, onCancel }: { onAdded: (name: string) => void, onCancel: () => void }) {
+  const [url, setUrl] = useState('http://')
+  const [token, setToken] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isAdding, setIsAdding] = useState(false)
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setIsAdding(true)
+    setError(null)
+    try {
+      const r = await api.testersAdd({ url, apiToken: token })
+      onAdded(r.data.name)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Failed to add the tester'))
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  return (
+    <form className={`${styles.card} ${styles.tile}`} onSubmit={handleAdd}>
+      <div className={styles.tileHead}><h3>Add a tester</h3></div>
+      <div className={styles.fieldGrid}>
+        <div className={styles.field}>
+          <label htmlFor="testerUrl">URL</label>
+          <input id="testerUrl" className={styles.input} type="text" placeholder="http://10.0.0.2:9100" autoFocus
+            value={url} onChange={(e) => setUrl(e.target.value)} />
+          <p className={styles.fieldHint}>Where fru-lab reaches it: its listen address in tester.yaml.</p>
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="testerToken">API token</label>
+          <input id="testerToken" className={styles.input} type="password" autoComplete="off"
+            value={token} onChange={(e) => setToken(e.target.value)} />
+          <p className={styles.fieldHint}>The apiToken in its tester.yaml.</p>
+        </div>
+      </div>
+      {error && <p className={styles.runError}>{error}</p>}
+      <div className={styles.headerActions}>
+        <Button type="submit" disabled={isAdding || url.trim() === '' || token.trim() === ''}>{isAdding ? 'Checking…' : 'Add'}</Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={isAdding}>Cancel</Button>
+      </div>
+      <p className={styles.hint} style={{ margin: 0 }}>fru-lab asks the tester for its status first and adds it only if it answers. Its name is the testerName in its tester.yaml.</p>
+    </form>
+  )
+}
+
+// TesterStatusPage lists every tester; each card opens its own page.
 export default function TesterStatusPage() {
+  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const [testers, setTesters] = useState<TesterEntry[] | null>(null)
+  const [adding, setAdding] = useState(false)
+
+  const load = useCallback(() => {
+    api.testersList()
+      .then((r) => setTesters(r.data))
+      .catch((error) => addError(extractErrorMessage(error, 'Failed to list the testers')))
+  }, [addError])
+  useEffect(() => { load() }, [load])
+
+  async function handleRemove(t: TesterEntry, name: string) {
+    if (!window.confirm(`Remove ${name} (${t.url}) from fru-lab? The tester itself keeps running.`)) return
+    try {
+      await api.testersDelete(t.id)
+      addSuccess(`Removed ${name}`)
+      load()
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to remove the tester'))
+    }
+  }
+
   return (
     <div className={styles.layout}>
+      <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
       <Sidebar />
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
             <h2 className={styles.title}>Throughput Tester · Status</h2>
             <p className={styles.subtitle}>
-              The tester fru-lab drives: whether it answers, its memory and CPUs, what a run needs, and which CPUs the control plane and the data plane use.
+              The testers fru-lab drives. Open one to see its memory and CPUs, what a run needs, and which CPUs the control plane and the data plane use.
+            </p>
+          </div>
+          <div className={styles.headerActions}>
+            <Button onClick={() => setAdding(true)} disabled={adding}>Add tester</Button>
+          </div>
+        </header>
+        {adding && (
+          <AddTesterForm
+            onCancel={() => setAdding(false)}
+            onAdded={(name) => { setAdding(false); addSuccess(`Added ${name}`); load() }}
+          />
+        )}
+        {testers !== null && testers.length === 0 && !adding && (
+          <p className={styles.emptyState}>No testers yet: set backend.tester in config.yaml, or add one.</p>
+        )}
+        <div className={styles.testerGrid}>
+          {(testers ?? []).map((t) => <TesterCard key={t.id} tester={t} onRemove={handleRemove} />)}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// TesterDetailPage is one tester's Status page.
+export function TesterDetailPage() {
+  const { testerId = '' } = useParams()
+  const [known, setKnown] = useState<boolean | null>(null)
+  const [name, setName] = useState('')
+
+  useEffect(() => {
+    api.testersList()
+      .then((r) => setKnown(r.data.some((t) => t.id === testerId)))
+      .catch(() => setKnown(true)) // let the panel say what is wrong
+    api.testerByIdStatus(testerId).then((r) => setName(r.data.name)).catch(() => {})
+  }, [testerId])
+
+  if (known === false) return <Navigate to="/tester/status" replace />
+  return (
+    <div className={styles.layout}>
+      <Sidebar />
+      <main className={styles.content}>
+        <header className={styles.header}>
+          <div>
+            <Link to="/tester/status" className={styles.linkButton}>← All testers</Link>
+            <h2 className={styles.title}>Throughput Tester · {name || 'Tester'}</h2>
+            <p className={styles.subtitle}>
+              Whether it answers, its memory and CPUs, what a run needs, and which CPUs the control plane and the data plane use.
             </p>
           </div>
         </header>
-        <TesterPanel />
+        {known && <TesterPanel id={testerId} />}
       </main>
     </div>
   )

@@ -10,16 +10,16 @@ import (
 	"backend/logger"
 )
 
-// Every /api/tester/ operation in openapi.yaml needs a route here, or the
-// request falls through to the frontend's index.html. History is served
-// by its own router (testerHistory.go).
+// Every /api/tester/ and /api/testers operation in openapi.yaml needs a
+// route here, or the request falls through to the frontend's index.html.
+// History is served by its own router (testerHistory.go).
 func TestEveryTesterOperationInTheSpecHasARoute(t *testing.T) {
 	f, err := os.Open("../../openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	pathLine := regexp.MustCompile(`^  (/api/tester/[^:]+):\s*$`)
+	pathLine := regexp.MustCompile(`^  (/api/testers?(?:/[^:]*)?):\s*$`)
 	opLine := regexp.MustCompile(`^    (get|post|put|delete|patch):\s*$`)
 	want := map[string]bool{}
 	path := ""
@@ -45,12 +45,12 @@ func TestEveryTesterOperationInTheSpecHasARoute(t *testing.T) {
 	}
 	have := map[string]bool{}
 	b := &backend{BackendLogger: logger.NewBackendLogger("error", "", true)}
-	for _, r := range b.getTesterRoutes() {
+	for _, r := range append(b.getTesterRoutes(), b.getTestersRoutes()...) {
 		have[r.Method+" "+r.Pattern] = true
 	}
 	for op := range want {
 		if !have[op] {
-			t.Errorf("openapi.yaml has %s but getTesterRoutes does not", op)
+			t.Errorf("openapi.yaml has %s but no route does", op)
 		}
 	}
 }

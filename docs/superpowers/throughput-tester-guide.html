@@ -653,7 +653,19 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
 
     <section id="system">
       <h2>Status：tester 狀態與 CPU 分配</h2>
-      <p>側邊欄 Throughput Tester 底下的第一頁 <b>Status</b> 是 tester 的管理面板（取代原本的 System 頁，舊網址 <code>/tester/system</code> 會自動轉過來）。上半部看 tester 現在的狀況，下半部設定 CPU 隔離。</p>
+      <p>側邊欄 Throughput Tester 底下的第一頁 <b>Status</b> 是 tester 的管理面板（取代原本的 System 頁，舊網址 <code>/tester/system</code> 會自動轉過來）。它分兩層：</p>
+      <ul>
+        <li><b>第一層：所有 tester 的卡片。</b>卡片標題是 tester 的名稱，卡上顯示 URL、是否連得上、主機名稱、run 狀態、記憶體、CPU 和 uptime，每 3 秒更新。</li>
+        <li><b>第二層：點卡片進入那台 tester 的頁面</b>（<code>/tester/status/&lt;id&gt;</code>），左上角的「← All testers」回到列表。上半部看那台 tester 現在的狀況，下半部設定那台的 CPU 隔離。</li>
+      </ul>
+      <h3>多台 tester</h3>
+      <ul>
+        <li><b>名稱</b>：每台 tester 在自己的 <code>tester.yaml</code> 設 <code>testerName</code>，卡片就顯示這個名稱；沒設時用主機名稱。和 fru-lab 部署在一起的預設 tester（repo 的 <code>tester.yaml</code>、<code>docker/tester.yaml</code>、helm 的 <code>tester.name</code>）叫 <code>default-tester</code>。</li>
+        <li><b>預設 tester</b>：就是 fru-lab <code>config.yaml</code> 裡 <code>backend.tester</code> 的那台，卡片下方寫著「From config.yaml」，不能在頁面上刪除。</li>
+        <li><b>新增</b>：另一台機器只部署 fru-tester（它的 <code>listen</code> 要是 fru-lab 連得到的位址），然後在 Status 頁按 <b>Add tester</b>，填它的 URL（例如 <code>http://10.0.0.2:9100</code>）和它 <code>tester.yaml</code> 裡的 <code>apiToken</code>。fru-lab 會先實際請那台 tester 回報狀態，連不到、token 不對、或已經在列表上都不會加入，並顯示原因。加入後存在 fru-lab 的資料庫，重啟也還在。</li>
+        <li><b>移除</b>：手動加入的 tester 卡片下方有 <b>Remove</b>，只是讓 fru-lab 忘掉它，tester 本身照常執行。URL 或 token 要改就移除再重新加入。</li>
+        <li><b>目前的範圍</b>：Setup、Run、History、Bench 仍然只用預設 tester；手動加入的 tester 只能在 Status 頁看狀態、設定 CPU 分配。</li>
+      </ul>
       <h3>總覽</h3>
       <div class="tbl"><table>
         <tr><th>卡片</th><th>內容</th></tr>

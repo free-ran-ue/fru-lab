@@ -1135,6 +1135,221 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/testers:
+    get:
+      summary: Every tester fru-lab can reach (Status page)
+      description: The tester in config.yaml (backend.tester, id "default", builtIn) first, then the ones added here. API tokens are never returned; each tester's name comes from its own status.
+      operationId: testersList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterEntry'
+    post:
+      summary: Add a tester
+      description: fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
+      operationId: testersAdd
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterAddRequest'
+      responses:
+        '201':
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterAdded'
+        '400':
+          description: Not added; the message says why (unreachable, wrong token, already listed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}:
+    delete:
+      summary: Remove an added tester
+      description: Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
+      operationId: testersDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: The tester in config.yaml
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/status:
+    get:
+      summary: One tester's host and process
+      description: Forwarded to that tester's /api/status, like /api/tester/status is to the tester in config.yaml.
+      operationId: testerByIdStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStatus'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/run:
+    get:
+      summary: One tester's run
+      description: Forwarded to that tester's /api/run, like /api/tester/run is to the tester in config.yaml.
+      operationId: testerByIdRun
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/system:
+    get:
+      summary: One tester's CPU allocation and layout
+      description: Forwarded to that tester's /api/system, like /api/tester/system is to the tester in config.yaml.
+      operationId: testerByIdSystem
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterSystemInfo'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/system/cpuload:
+    get:
+      summary: How busy each CPU of one tester's host is
+      description: Forwarded to that tester's /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
+      operationId: testerByIdCpuLoad
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpuLoad'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/system/cpus:
+    put:
+      summary: Set one tester's CPU allocation
+      description: Forwarded to that tester's /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
+      operationId: testerByIdCpusPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterCpuAllocation'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpuAllocation'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/history:
     get:
       summary: Finished runs, newest first
@@ -1209,6 +1424,14 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    TesterId:
+      name: id
+      in: path
+      required: true
+      description: A tester from GET /api/testers; "default" is the one in config.yaml.
+      schema:
+        type: string
+        example: default
     UeInstance:
       name: instance
       in: path
@@ -1895,10 +2118,44 @@ components:
           $ref: '#/components/schemas/TesterCpuAllocation'
         topology:
           $ref: '#/components/schemas/TesterTopology'
+    TesterEntry:
+      type: object
+      required: [id, url, builtIn]
+      properties:
+        id:
+          type: string
+          description: '"default" for the tester in config.yaml.'
+        url:
+          type: string
+        builtIn:
+          type: boolean
+          description: The tester in config.yaml; it cannot be removed.
+    TesterAddRequest:
+      type: object
+      required: [url, apiToken]
+      properties:
+        url:
+          type: string
+          example: http://10.0.0.2:9100
+        apiToken:
+          type: string
+          description: The apiToken in that tester's tester.yaml.
+    TesterAdded:
+      allOf:
+        - $ref: '#/components/schemas/TesterEntry'
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+              description: The name the tester reported.
     TesterStatus:
       type: object
-      required: [hostname, version, goVersion, kernel, pid, startedAt, uptimeSec, memory, cpu, capabilities]
+      required: [name, hostname, version, goVersion, kernel, pid, startedAt, uptimeSec, memory, cpu, capabilities]
       properties:
+        name:
+          type: string
+          description: The tester's testerName (tester.yaml); its host name when that is empty.
         hostname:
           type: string
         version:

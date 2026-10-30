@@ -20,6 +20,8 @@ import (
 
 // Status is one reading. Byte counts are bytes.
 type Status struct {
+	// Name is the tester's configured name (testerName); the API fills it.
+	Name         string       `json:"name"`
 	Hostname     string       `json:"hostname"`
 	Version      string       `json:"version"` // VCS revision of the build, "" when unknown
 	GoVersion    string       `json:"goVersion"`

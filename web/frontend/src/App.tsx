@@ -10,7 +10,7 @@ import TesterSetupPage from './page/tester/TesterSetupPage'
 import TesterRunPage from './page/tester/TesterRunPage'
 import TesterHistoryPage from './page/tester/TesterHistoryPage'
 import TesterProfilesPage from './page/tester/TesterProfilesPage'
-import TesterStatusPage from './page/tester/TesterStatusPage'
+import TesterStatusPage, { TesterDetailPage } from './page/tester/TesterStatusPage'
 import TesterBenchPage from './page/tester/TesterBenchPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -119,6 +119,14 @@ export default function App() {
         element={(
           <RequireAuth>
             <TesterStatusPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/tester/status/:testerId"
+        element={(
+          <RequireAuth>
+            <TesterDetailPage />
           </RequireAuth>
         )}
       />

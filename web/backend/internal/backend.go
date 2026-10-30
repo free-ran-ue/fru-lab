@@ -41,6 +41,8 @@ type backend struct {
 	webconsoleProxy *httputil.ReverseProxy
 	// testerProxy is nil when backend.tester.url is not configured.
 	testerProxy *httputil.ReverseProxy
+	// testers is every tester, for the Status page.
+	testers *testerRegistry
 	// testerHistory copies finished runs into the DB; nil like testerProxy.
 	testerHistory     *testerHistoryWatcher
 	stopTesterHistory context.CancelFunc
@@ -118,6 +120,13 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 	} else {
 		logger.BckLog.Warnln("backend.tester.url is empty; Throughput Tester routes will answer 503")
 	}
+
+	testers, err := newTesterRegistry(config.Backend.Tester.URL, config.Backend.Tester.ApiToken, flCtx)
+	if err != nil {
+		logger.BckLog.Errorf("Failed to load the testers: %v", err)
+		return nil
+	}
+	b.testers = testers
 
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
 
@@ -210,6 +219,7 @@ func addServices(router *gin.Engine, b *backend) {
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
 	addRoutes(authGroup, b.getTesterRoutes())
+	addRoutes(authGroup, b.getTestersRoutes())
 	addTesterHistoryRoutes(authGroup, b.Processor.FlContext)
 	authGroup.Any("/webconsole/*path", func(c *gin.Context) { b.webconsoleProxy.ServeHTTP(c.Writer, c.Request) })
 	addRoutes(apiGroup, b.getTesterStreamRoutes())

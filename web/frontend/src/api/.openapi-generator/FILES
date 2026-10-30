@@ -18,6 +18,8 @@ docs/LoginResponse.md
 docs/MessageResponse.md
 docs/RequestDeployFree5gc.md
 docs/ServiceStatus.md
+docs/TesterAddRequest.md
+docs/TesterAdded.md
 docs/TesterBenchResult.md
 docs/TesterBenchSettings.md
 docs/TesterBenchStep.md
@@ -30,6 +32,7 @@ docs/TesterCpuLoad.md
 docs/TesterCpuLoadCpusInner.md
 docs/TesterCpusErrorResponse.md
 docs/TesterDataplaneSnapshot.md
+docs/TesterEntry.md
 docs/TesterFieldError.md
 docs/TesterGnbSpec.md
 docs/TesterGnbStatus.md

@@ -74,6 +74,8 @@ tester:
     tag: latest
     pullPolicy: Always
 
+  # how fru-lab lists this tester on the Status page
+  name: default-tester
   # shared with fru-lab; change it for anything but a lab
   apiToken: frulab-tester
   port: 9100

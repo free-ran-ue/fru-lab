@@ -10,6 +10,9 @@ import (
 )
 
 type Config struct {
+	// TesterName is how fru-lab lists this tester; the host name when
+	// empty.
+	TesterName string `yaml:"testerName"`
 	// Listen is host:port for the API. fru-lab reaches it from inside its
 	// container, so the default binds every interface; ApiToken guards it.
 	Listen   string `yaml:"listen"`
@@ -35,6 +38,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.ApiToken == "" {
 		return nil, fmt.Errorf("%s: apiToken must be set", path)
+	}
+	if cfg.TesterName == "" {
+		cfg.TesterName, _ = os.Hostname()
 	}
 	if cfg.SystemFile == "" {
 		cfg.SystemFile = "tester-system.json"

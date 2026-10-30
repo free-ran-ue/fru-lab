@@ -1,5 +1,7 @@
 # fru-tester dev config. fru-lab's config.yaml backend.tester must point at
 # this listen address with the same apiToken.
+# how fru-lab lists this tester (Status page); the host name when empty
+testerName: "default-tester"
 listen: "127.0.0.1:9100"
 apiToken: "frulab-tester"
 

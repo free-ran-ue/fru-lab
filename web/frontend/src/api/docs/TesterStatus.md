@@ -5,6 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**name** | **string** | The tester\&#39;s testerName (tester.yaml); its host name when that is empty. | [default to undefined]
 **hostname** | **string** |  | [default to undefined]
 **version** | **string** | VCS revision fru-tester was built from; empty when the build does not say. | [default to undefined]
 **goVersion** | **string** |  | [default to undefined]
@@ -22,6 +23,7 @@ Name | Type | Description | Notes
 import { TesterStatus } from './api';
 
 const instance: TesterStatus = {
+    name,
     hostname,
     version,
     goVersion,

@@ -163,3 +163,9 @@
 .cardHead { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .cardHead .cardTitle { margin: 0; }
 .sectionTitle { margin: 0.5rem 0 -0.5rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+.testerCard { border: 1px solid transparent; transition: border-color 0.15s, box-shadow 0.15s; }
+.testerCardLink { display: flex; flex-direction: column; gap: 0.6rem; text-decoration: none; color: inherit; border-radius: 8px; }
+.testerCardLink:focus-visible { outline: 3px solid rgba(79, 70, 229, 0.35); outline-offset: 4px; }
+.testerCardFoot { margin-top: auto; padding-top: 0.6rem; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; }
+.testerCard:hover { border-color: #c7d2fe; box-shadow: 0 4px 12px rgb(79 70 229 / 0.12); }
+.testerGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem; }
