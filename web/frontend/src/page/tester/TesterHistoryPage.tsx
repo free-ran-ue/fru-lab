@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import Sidebar from '../../components/sidebar/Sidebar'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import AppLayout from '../../components/layout/AppLayout'
+import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
@@ -12,6 +13,9 @@ import { pageOf } from '../../components/pager/paging'
 
 // HISTORY_PAGE is how many runs one page of the history shows.
 const HISTORY_PAGE = 20
+
+// TESTER_COLORS tell the testers apart in the table: accent, then violet.
+const TESTER_COLORS = ['var(--accent)', 'var(--violet)', 'var(--ok)', 'var(--warn)', 'var(--accent-ink)', 'var(--ink-2)']
 
 function seconds(r: TesterHistorySummary): number {
   if (!r.startedAt || !r.stoppedAt) return 0
@@ -33,12 +37,28 @@ function avgRate(bytes: number, r: TesterHistorySummary): string {
   return s > 0 ? formatBps((bytes * 8) / s) : '—'
 }
 
-function result(r: TesterHistorySummary): string {
-  if (r.state === 'failed') return 'Failed'
-  return r.stopReason === 'maxDuration' ? 'Max run time' : 'Stopped'
+type Result = 'max' | 'failed' | 'stopped'
+
+function resultOf(r: TesterHistorySummary): Result {
+  if (r.state === 'failed') return 'failed'
+  return r.stopReason === 'maxDuration' ? 'max' : 'stopped'
 }
 
-// METRICS are the numbers shown per run, in the table and side by side.
+const RESULTS: Record<Result, [string, string]> = {
+  max: ['Max run time', styles.tagOk],
+  failed: ['Failed', styles.tagBad],
+  stopped: ['Stopped', ''],
+}
+
+// started is the short start time of the table, e.g. 11-03 05:54.
+function started(r: TesterHistorySummary): string {
+  if (!r.startedAt) return '—'
+  const d = new Date(r.startedAt)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// METRICS are the numbers compared side by side.
 const METRICS: [string, (r: TesterHistorySummary) => string][] = [
   ['Duration', duration],
   ['gNBs / UEs', (r) => `${r.gnbCount} / ${r.ueCount}`],
@@ -65,7 +85,12 @@ export default function TesterHistoryPage() {
   const { errors, successes, addError, removeNotification } = useNotifications()
   const [runs, setRuns] = useState<TesterHistorySummary[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
+  const [comparing, setComparing] = useState(false)
+  const [query, setQuery] = useState('')
+  const [testerFilter, setTesterFilter] = useState('')
+  const [resultFilter, setResultFilter] = useState<'' | Result>('')
   const { testers } = useTesters()
+  const compareRef = useRef<HTMLElement>(null)
   // the tester's name when the run was stored, else its name now
   const testerName = (r: TesterHistorySummary) => r.testerName || testers?.find((t) => t.id === r.testerId)?.name || r.testerId
   const [page, setPage] = useState(1)
@@ -101,95 +126,137 @@ export default function TesterHistoryPage() {
     }
   }
 
+  // every tester in the history gets one colour, in order of first use
+  const colorOf = useMemo(() => {
+    const ids: string[] = []
+    for (const r of runs ?? []) if (!ids.includes(r.testerId)) ids.push(r.testerId)
+    return (id: string) => TESTER_COLORS[ids.indexOf(id) % TESTER_COLORS.length]
+  }, [runs])
+
+  const testerIds = [...new Set((runs ?? []).map((r) => r.testerId))]
+  const q = query.trim().toLowerCase()
+  const filtered = (runs ?? []).filter((r) =>
+    (q === '' || r.runId.toLowerCase().includes(q) || r.profileName.toLowerCase().includes(q))
+    && (testerFilter === '' || r.testerId === testerFilter)
+    && (resultFilter === '' || resultOf(r) === resultFilter))
+
+  useEffect(() => { setPage(1) }, [query, testerFilter, resultFilter])
+
   const compared = (runs ?? []).filter((r) => selected.includes(r.id))
-  const shown = pageOf(runs ?? [], page, HISTORY_PAGE)
+  const showCompare = comparing && compared.length === 2
+  const shown = pageOf(filtered, page, HISTORY_PAGE)
+
+  useEffect(() => { if (selected.length !== 2) setComparing(false) }, [selected])
+  useEffect(() => { if (showCompare) compareRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [showCompare])
 
   return (
-    <div className={styles.layout}>
-      <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
-      <Sidebar />
+    <AppLayout crumbs={[{ label: 'History' }]}
+      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
+      <section className={styles.pageHead}>
+        <div className={styles.pageHeadText}>
+          <h1 className={styles.pageTitle}>Run history</h1>
+          <p className={styles.pageSub}>The last 50 finished runs from every tester. Select two to compare. View opens a run&apos;s full report; Download saves it as one HTML file that opens offline.</p>
+        </div>
+        <div className={styles.pageActions}>
+          <Button onClick={() => setComparing((c) => !c)} disabled={selected.length !== 2}>
+            {showCompare ? 'Hide comparison' : 'Compare 2 runs'}
+          </Button>
+        </div>
+      </section>
 
-      <main className={styles.content}>
-        <header className={styles.header}>
-          <div>
-            <h2 className={styles.title}>History</h2>
-            <p className={styles.subtitle}>The last 50 finished runs. Tick two to compare them side by side; View opens a run&apos;s full report, Download saves it as one HTML file that opens offline.</p>
-          </div>
-        </header>
-
-        {compared.length === 2 && (
-          <section className={styles.card}>
-            <h3 className={styles.cardTitle}>Comparison</h3>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th />
-                    {compared.map((r) => (
-                      <th key={r.id} className={styles.numCol}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : r.runId} · {r.profileName} · {testerName(r)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {METRICS.map(([label, f]) => (
-                    <tr key={label}>
-                      <td>{label}</td>
-                      {compared.map((r) => <td key={r.id} className={styles.numCol}>{f(r)}</td>)}
-                    </tr>
+      {showCompare && (
+        <section ref={compareRef} className={`${styles.panel} ${styles.panelFlush}`}>
+          <div className={styles.panelHead}><h2 className={styles.panelTitle}>Comparison</h2></div>
+          <div className={styles.tableScroll}>
+            <table className={styles.dataTable}>
+              <thead>
+                <tr>
+                  <th />
+                  {compared.map((r) => (
+                    <th key={r.id} className={styles.r}>
+                      <span className={styles.swatch}><i style={{ background: colorOf(r.testerId) }} />{r.runId} · {r.profileName} · {testerName(r)}</span>
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        <section className={styles.card}>
-          <h3 className={styles.cardTitle}>Runs</h3>
-          {runs === null && <p className={styles.hint}>Loading…</p>}
-          {runs?.length === 0 && <p className={styles.hint}>No finished runs yet. Runs are saved here when they stop.</p>}
-          {runs && runs.length > 0 && (
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th className={styles.checkCol} />
-                    <th>Started</th>
-                    <th>Profile</th>
-                    <th>Tester</th>
-                    <th>Result</th>
-                    <th>Report</th>
-                    {METRICS.map(([label]) => <th key={label} className={styles.numCol}>{label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {METRICS.map(([label, f]) => (
+                  <tr key={label}>
+                    <td className={styles.dim}>{label}</td>
+                    {compared.map((r) => <td key={r.id} className={`num ${styles.r}`}>{f(r)}</td>)}
                   </tr>
-                </thead>
-                <tbody>
-                  {shown.items.map((r) => (
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      <section className={`${styles.panel} ${styles.panelFlush}`}>
+        <div className={styles.filterBar}>
+          <input className={`${styles.in} ${styles.search}`} aria-label="Search runs" placeholder="Search run ID or profile"
+            value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className={styles.in} aria-label="Tester" value={testerFilter} onChange={(e) => setTesterFilter(e.target.value)}>
+            <option value="">All testers</option>
+            {testerIds.map((id) => {
+              const r = runs!.find((x) => x.testerId === id)!
+              return <option key={id} value={id}>{testerName(r)}</option>
+            })}
+          </select>
+          <select className={styles.in} aria-label="Result" value={resultFilter} onChange={(e) => setResultFilter(e.target.value as '' | Result)}>
+            <option value="">All results</option>
+            <option value="max">Max run time</option>
+            <option value="failed">Failed</option>
+            <option value="stopped">Stopped</option>
+          </select>
+          <span className={`num ${styles.count}`}>{filtered.length} of {runs?.length ?? 0}</span>
+        </div>
+        {runs === null && <p className={styles.tableEmpty}>Loading…</p>}
+        {runs?.length === 0 && <p className={styles.tableEmpty}>No finished runs yet. Runs are saved here when they stop.</p>}
+        {runs && runs.length > 0 && filtered.length === 0 && <p className={styles.tableEmpty}>No run matches these filters.</p>}
+        {filtered.length > 0 && (
+          <div className={styles.tableScroll}>
+            <table className={`${styles.dataTable} ${styles.historyTable}`}>
+              <thead>
+                <tr>
+                  <th className={styles.selCol} aria-label="Compare" />
+                  <th>Run</th><th>Started</th><th>Tester</th><th>Profile</th>
+                  <th className={styles.r}>UEs</th><th className={styles.r}>Registered</th><th className={styles.r}>Avg DL</th>
+                  <th className={styles.r}>Duration</th><th>Result</th><th className={styles.r}>Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.items.map((r) => {
+                  const [label, tone] = RESULTS[resultOf(r)]
+                  return (
                     <tr key={r.id}>
                       <td>
                         <input type="checkbox" aria-label={`Compare run ${r.runId}`}
                           checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
                       </td>
-                      <td className={`${styles.mono} ${styles.dimCell}`}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}</td>
+                      <td className="num">{r.runId}</td>
+                      <td className={`num ${styles.dim}`}>{started(r)}</td>
+                      <td><span className={styles.swatch}><i style={{ background: colorOf(r.testerId) }} />{testerName(r)}</span></td>
                       <td>{r.profileName}</td>
-                      <td>{testerName(r)}</td>
-                      <td>
-                        <span className={`${styles.pill} ${r.state === 'failed' ? styles.pillBad : styles.pillMuted}`} title={r.error || undefined}>
-                          {result(r)}
-                        </span>
+                      <td className={`num ${styles.r}`}>{r.ueCount.toLocaleString()}</td>
+                      <td className={`num ${styles.r}`}>{r.registered.toLocaleString()}</td>
+                      <td className={`num ${styles.r}`}>{avgRate(r.dlRxBytes, r)}</td>
+                      <td className={`num ${styles.r}`}>{duration(r)}</td>
+                      <td><span className={`${styles.tag} ${tone}`} title={r.error || undefined}>{label}</span></td>
+                      <td className={styles.r}>
+                        <button type="button" className={styles.textLink} onClick={() => report(r, 'view')}>View</button>
+                        <span className={styles.linkSep} aria-hidden="true">|</span>
+                        <button type="button" className={styles.textLink} onClick={() => report(r, 'download')}>Download</button>
                       </td>
-                      <td>
-                        <button type="button" className={styles.linkButton} onClick={() => report(r, 'view')}>View</button>
-                        <button type="button" className={styles.linkButton} onClick={() => report(r, 'download')}>Download</button>
-                      </td>
-                      {METRICS.map(([label, f]) => <td key={label} className={styles.numCol}>{f(r)}</td>)}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Pager page={shown} total={runs.length} onChange={setPage} />
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {filtered.length > HISTORY_PAGE && <div className={styles.pagerPad}><Pager page={shown} total={filtered.length} onChange={setPage} /></div>}
+      </section>
+    </AppLayout>
   )
 }

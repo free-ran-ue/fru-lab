@@ -1,100 +1,52 @@
-import Button from '../../components/button/button'
+import type { ReactNode } from 'react'
 import { getStatusMeta } from './statusMeta'
-import type { DeploymentNode, NetworkFunction } from './types'
+import type { NodeStatus } from './types'
 import styles from './detail-panel.module.css'
 
-interface DetailPanelProps {
-  node: DeploymentNode
-  networkFunctions: NetworkFunction[]
-  onViewLogs: () => void
-  onPrimaryAction?: () => void
-  isActionPending?: boolean
-  // set when the currently-shown primary action (deploy or stop) would
-  // violate the network's dependency order - e.g. stopping a gNB a UE is
-  // still dialing, or deploying a gNB before the core is up. Disables the
-  // button and explains why instead of only erroring after the click.
-  actionBlockedReason?: string
-  // only free5gc (which template) and gnb-under-ulcl-2slice (which slice)
-  // ever show this picker - every other case leaves these unset, and it
-  // doesn't render at all.
-  templateOptions?: { value: string; label: string }[]
-  selectedTemplate?: string
-  onTemplateChange?: (value: string) => void
-  templateLabel?: string
+export interface DetailRow {
+  k: string
+  v: ReactNode
 }
 
-export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrimaryAction, isActionPending = false, actionBlockedReason, templateOptions, selectedTemplate, onTemplateChange, templateLabel = 'Template' }: DetailPanelProps) {
-  const meta = getStatusMeta(node.status)
-  // running, deploying (possibly stuck) and unhealthy nodes all offer Stop
-  const isRunning = node.status !== 'stopped'
-  const isActionBlocked = Boolean(actionBlockedReason)
+interface DetailPanelProps {
+  name: string
+  status: NodeStatus
+  // overrides the tag's text (e.g. "2 / 3" for the UE fleet)
+  statusText?: string
+  rows: DetailRow[]
+  // extra body content after the key/value rows (the UE instance list)
+  children?: ReactNode
+  // why the primary action is disabled, shown above the footer
+  hint?: string
+  footer: ReactNode
+}
 
-  const primaryActionLabel = isActionPending
-    ? (isRunning ? 'Stopping…' : 'Deploying…')
-    : (isRunning ? 'Stop Service' : 'Deploy Service')
-
+// The prototype's "Selected node" aside: eyebrow, name + status tag,
+// key/value rows and a footer row of buttons.
+export default function DetailPanel({ name, status, statusText, rows, children, hint, footer }: DetailPanelProps) {
+  const meta = getStatusMeta(status)
   return (
-    <div className={styles.panel}>
-      <div>
-        <div className={styles.eyebrow}>Selected node</div>
-        <h4 className={styles.nodeLabel}>{node.label}</h4>
-        <p className={styles.nodeSublabel}>{node.sublabel}</p>
-        <span className={styles.statusPill} style={{ background: meta.bg, color: meta.color }}>
-          <span className={styles.statusDot} style={{ background: meta.dot }} />
-          {meta.text}
-        </span>
-      </div>
-
-      <div className={styles.divider} />
-
-      <div>
-        <div className={styles.sectionTitle}>Services</div>
-        <div className={styles.nfGrid}>
-          {networkFunctions.map((nf) => {
-            const nfMeta = getStatusMeta(nf.status)
-            return (
-              <div key={nf.name} className={styles.nfChip} title={nfMeta.text}>
-                <span className={styles.nfDot} style={{ background: nfMeta.dot }} />
-                {nf.name}
-              </div>
-            )
-          })}
+    <aside aria-label="Selected node" className={styles.aside}>
+      <div className={styles.head}>
+        <span className={styles.eyebrow}>SELECTED NODE</span>
+        <div className={styles.nameRow}>
+          <span className={styles.name}>{name}</span>
+          <span className={styles.tag} style={{ color: meta.color, background: meta.bg }}>
+            {(statusText ?? meta.text).toUpperCase()}
+          </span>
         </div>
       </div>
-
-      <div className={styles.divider} />
-
-      <div className={styles.metaList}>
-        <div className={styles.metaRow}>
-          <span>Last deployed</span>
-          <span className={`${styles.metaValue} num`}>{node.lastDeployed}</span>
-        </div>
+      <div className={styles.body}>
+        {rows.map((row) => (
+          <div key={row.k} className={styles.row}>
+            <span className={styles.rowKey}>{row.k}</span>
+            <span className={`num ${styles.rowValue}`}>{row.v}</span>
+          </div>
+        ))}
+        {children}
       </div>
-
-      <div className={styles.actions}>
-        {templateOptions && !isRunning && (
-          <label className={styles.templateSelector}>
-            <span>{templateLabel}</span>
-            <select
-              className={styles.templateSelect}
-              value={selectedTemplate}
-              onChange={(event) => onTemplateChange?.(event.target.value)}
-              disabled={isActionPending}
-            >
-              {templateOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        {isActionBlocked && (
-          <p className={styles.blockedHint}>{actionBlockedReason}</p>
-        )}
-        <Button variant="primary" onClick={onPrimaryAction} disabled={!onPrimaryAction || isActionPending || isActionBlocked}>
-          {primaryActionLabel}
-        </Button>
-        <Button variant="secondary" onClick={onViewLogs}>View Logs</Button>
-      </div>
-    </div>
+      {hint && <p className={styles.hint}>{hint}</p>}
+      <div className={styles.footer}>{footer}</div>
+    </aside>
   )
 }

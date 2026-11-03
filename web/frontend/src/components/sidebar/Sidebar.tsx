@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import styles from './sidebar.module.css'
 
 function navItemClassName({ isActive }: { isActive: boolean }): string {
@@ -16,14 +16,9 @@ export function LogoMark({ size = 28 }: { size?: number }) {
   )
 }
 
-export default function Sidebar() {
-  const navigate = useNavigate()
-
-  function handleLogout() {
-    localStorage.removeItem('token')
-    navigate('/login', { replace: true })
-  }
-
+// activeRuns is the number of runs in progress, shown on Runs; null or 0
+// shows nothing. Log out is in AppLayout's header.
+export default function Sidebar({ activeRuns = null }: { activeRuns?: number | null }) {
   return (
     <aside className={styles.sidebar}>
       <div>
@@ -48,18 +43,15 @@ export default function Sidebar() {
           <NavLink to="/tester/status" className={navItemClassName}>Testers</NavLink>
           <NavLink to="/tester" end className={navItemClassName}>Setup</NavLink>
           <NavLink to="/tester/profiles" className={navItemClassName}>Profiles</NavLink>
-          <NavLink to="/tester/run" className={navItemClassName}>Runs</NavLink>
+          <NavLink to="/tester/run" className={navItemClassName}>
+            Runs
+            {activeRuns ? <span className={styles.badge} aria-label={`${activeRuns} in progress`}>{activeRuns}</span> : null}
+          </NavLink>
           <NavLink to="/tester/history" className={navItemClassName}>History</NavLink>
           <NavLink to="/tester/bench" className={navItemClassName}>Bench</NavLink>
         </nav>
       </div>
 
-      <button type="button" className={styles.logout} onClick={handleLogout}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <path d="M6 2.5H3.5v11H6M10 5l3 3-3 3M13 8H6" />
-        </svg>
-        Log out
-      </button>
     </aside>
   )
 }

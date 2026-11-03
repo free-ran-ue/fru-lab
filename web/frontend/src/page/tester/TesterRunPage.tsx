@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import Sidebar from '../../components/sidebar/Sidebar'
+import AppLayout from '../../components/layout/AppLayout'
 import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type {
-  TesterCpLoopSnapshot,
-  TesterCpPoint,
-  TesterDataplaneSnapshot, TesterGnbTraffic, TesterRunSnapshot, TesterStageSnapshot, TesterTrafficDirection,
-  TesterTrafficPoint, TesterUeSummary,
+  TesterCauseCount, TesterCpLoopSnapshot, TesterCpPoint, TesterGnbTraffic, TesterRunSnapshot, TesterStageSnapshot,
+  TesterTrafficDirection, TesterTrafficPoint, TesterUeSummary,
 } from '../../api'
-import { buildTesterStreamUrl, formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
+import { buildTesterStreamUrl, formatBps, formatBits, formatClock, formatLoss, formatMs } from './testerFormat'
 import { useTesters } from './useTesters'
 import styles from './tester.module.css'
 
@@ -19,27 +17,36 @@ const RECONNECT_MS = 2000
 
 const STATE_LABELS: Record<TesterRunSnapshot['state'], string> = {
   idle: 'No run yet',
-  configuring: 'Configuring gNB IPs',
-  n2: 'N2 setup in progress',
+  configuring: 'Configuring',
+  n2: 'N2 setup',
   running: 'Running',
-  stopping: 'Cleaning up: deregistering UEs, closing N2',
+  stopping: 'Cleaning up',
   stopped: 'Stopped',
   failed: 'Failed',
 }
 
-// UE_STATES orders the UE summary chips: key, label, pill style.
-const UE_STATES: [keyof TesterUeSummary, string, 'pillOk' | 'pillBad' | 'pillActive' | 'pillMuted'][] = [
-  ['established', 'Established', 'pillOk'],
-  ['establishing', 'Establishing', 'pillActive'],
-  ['registered', 'Registered', 'pillActive'],
-  ['registering', 'Registering', 'pillActive'],
-  ['pending', 'Pending', 'pillMuted'],
-  ['failed', 'Failed', 'pillBad'],
-  ['skipped', 'gNB down', 'pillMuted'],
-  ['cancelled', 'Cancelled', 'pillMuted'],
-  ['deregistering', 'Deregistering', 'pillActive'],
-  ['deregistered', 'Deregistered', 'pillMuted'],
+// STATE_TITLES say more than the pill has room for.
+const STATE_TITLES: Partial<Record<TesterRunSnapshot['state'], string>> = {
+  configuring: 'Configuring gNB IPs',
+  n2: 'N2 setup in progress',
+  stopping: 'Cleaning up: deregistering UEs, closing N2',
+}
+
+// UE_STATES orders the UE summary chips: key, label, tone.
+const UE_STATES: [keyof TesterUeSummary, string, 'ok' | 'bad' | 'accent' | 'idle'][] = [
+  ['established', 'Established', 'ok'],
+  ['establishing', 'Establishing', 'accent'],
+  ['registered', 'Registered', 'accent'],
+  ['registering', 'Registering', 'accent'],
+  ['pending', 'Pending', 'idle'],
+  ['failed', 'Failed', 'bad'],
+  ['skipped', 'gNB down', 'idle'],
+  ['cancelled', 'Cancelled', 'idle'],
+  ['deregistering', 'Deregistering', 'accent'],
+  ['deregistered', 'Deregistered', 'idle'],
 ]
+
+const TONES = { ok: styles.stateOk, bad: styles.stateBad, accent: styles.stateAccent, warn: styles.stateWarn, idle: '' }
 
 // gnbTraffic renders one gNB's received bytes and loss for a direction.
 function gnbTraffic(t: TesterGnbTraffic | undefined, dir: 'ul' | 'dl'): string {
@@ -50,6 +57,19 @@ function gnbTraffic(t: TesterGnbTraffic | undefined, dir: 'ul' | 'dl'): string {
   return `${formatBits(rx)} (${formatLoss(rx < tx ? 1 - rx / tx : 0)} lost)`
 }
 
+// formatPps renders a packet rate, e.g. 3.21 Mpps.
+function formatPps(pps: number): string {
+  if (pps >= 1e6) return `${(pps / 1e6).toFixed(2)} Mpps`
+  if (pps >= 1e3) return `${(pps / 1e3).toFixed(1)} kpps`
+  return `${Math.round(pps)} pps`
+}
+
+// splitUnit splits "38.2 Gbps" into its value and unit.
+function splitUnit(s: string): [string, string] {
+  const i = s.lastIndexOf(' ')
+  return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]
+}
+
 // niceStep rounds a grid step up to 1, 2, 2.5 or 5 x 10^n so the grid
 // lines land on round rates.
 function niceStep(v: number): number {
@@ -57,10 +77,13 @@ function niceStep(v: number): number {
   return ([1, 2, 2.5, 5, 10].find((m) => m * p >= v) ?? 10) * p
 }
 
-// clock renders seconds since traffic started as h:mm:ss.
+// clock renders seconds since traffic started as m:ss or h:mm:ss.
 function clock(sec: number): string {
   const s = Math.max(0, Math.round(sec))
-  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+  const h = Math.floor(s / 3600)
+  const mm = Math.floor(s / 60) % 60
+  const ss = String(s % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`
 }
 
 // axisBps is a short rate for the chart axis, e.g. 500M or 1.5G.
@@ -71,7 +94,7 @@ function axisBps(bps: number): string {
 }
 
 // useWidth tracks an element's rendered width, so the chart is drawn in
-// real pixels and its text stays small however wide the card is.
+// real pixels and its text stays small however wide the panel is.
 function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
   const [el, setEl] = useState<T | null>(null)
   const [width, setWidth] = useState(0)
@@ -85,132 +108,97 @@ function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
 }
 
 // remScale is the root font size over 16px: the UI's sizes are in rem and
-// follow the window, so the charts' height and margins follow it too.
+// follow the window, so the charts' margins follow it too.
 function remScale(): number {
   return (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
 }
 
-type Dir = 'ul' | 'dl'
-
-// RateChart plots one direction's sent (Tx) and received (Rx) rate over
-// the whole run: the time axis always starts at 0 and shrinks as the run
-// goes on.
-function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) {
-  const [ref, W] = useWidth<HTMLDivElement>()
-  const [hover, setHover] = useState<number | null>(null)
-  const u = remScale()
-  const H = Math.round(150 * u)
-  const pad = { l: 40 * u, r: 8 * u, t: 8 * u, b: 20 * u }
-  const tx = (p: TesterTrafficPoint) => (dir === 'ul' ? p.ulTxBps : p.dlTxBps)
-  const rx = (p: TesterTrafficPoint) => (dir === 'ul' ? p.ulRxBps : p.dlRxBps)
-  if (series.length < 2) {
-    return <div ref={ref} className={styles.chartEmpty}>The chart starts after two seconds of traffic.</div>
-  }
-  const t0 = 0
-  const t1 = series[series.length - 1].t
-  const peak = Math.max(1000, ...series.flatMap((p) => [tx(p), rx(p)]))
-  const gridStep = niceStep(peak / 4)
-  const top = Math.ceil(peak / gridStep) * gridStep
-  const plotW = Math.max(1, W - pad.l - pad.r)
-  const x = (t: number) => pad.l + ((t - t0) / Math.max(1, t1 - t0)) * plotW
-  const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
-  const line = (f: (p: TesterTrafficPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
-  const span = Math.max(1, t1 - t0)
+// timeTicks picks round time ticks that fit plotW.
+function timeTicks(t1: number, plotW: number): number[] {
+  const span = Math.max(1, t1)
   const maxTicks = Math.max(2, Math.floor(plotW / 70))
   const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
     .find((s) => span / s <= maxTicks) ?? 86400
   const ticks: number[] = []
   for (let t = 0; t <= t1; t += step) ticks.push(t)
+  return ticks
+}
+
+// sampleStep is the usual gap between two samples, in seconds.
+function sampleStep(series: { t: number }[]): number | null {
+  if (series.length < 2) return null
+  const gaps = series.slice(1).map((p, i) => p.t - series[i].t).sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
+}
+
+// ThroughputChart plots one direction's sent (Tx, dashed) and received
+// (Rx, solid) rate over the whole run; the two lines overlap when nothing
+// is lost. Downlink and uplink each get their own chart so their scales
+// don't hide each other.
+function ThroughputChart({ series, dir }: { series: TesterTrafficPoint[], dir: 'dl' | 'ul' }) {
+  const [ref, W] = useWidth<HTMLDivElement>()
+  const [hover, setHover] = useState<number | null>(null)
+  const tx = (p: TesterTrafficPoint) => (dir === 'dl' ? p.dlTxBps : p.ulTxBps)
+  const rx = (p: TesterTrafficPoint) => (dir === 'dl' ? p.dlRxBps : p.ulRxBps)
+  if (series.length < 2) {
+    return <div ref={ref} className={styles.wideChartEmpty}>The chart starts after two seconds of traffic.</div>
+  }
+  const u = remScale()
+  const H = Math.max(Math.round(140 * u), Math.round((W * 160) / 760))
+  const pad = { l: 40 * u, r: 10 * u, t: 12 * u, b: 22 * u }
+  const t1 = series[series.length - 1].t
+  const peak = Math.max(1000, ...series.flatMap((p) => [tx(p), rx(p)]))
+  const gridStep = niceStep(peak / 4)
+  const top = Math.ceil(peak / gridStep) * gridStep
+  const plotW = Math.max(1, W - pad.l - pad.r)
+  const span = Math.max(1, t1)
+  const x = (t: number) => pad.l + (t / span) * plotW
+  const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
+  const line = (f: (p: TesterTrafficPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
   const h = hover === null ? null : series[hover]
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
-    const px = ev.clientX - ev.currentTarget.getBoundingClientRect().left
-    const t = t0 + ((px - pad.l) / plotW) * span
+    const t = ((ev.clientX - ev.currentTarget.getBoundingClientRect().left - pad.l) / plotW) * span
     let best = 0
     series.forEach((p, k) => { if (Math.abs(p.t - t) < Math.abs(series[best].t - t)) best = k })
     setHover(best)
   }
+  const grid = Array.from({ length: Math.round(top / gridStep) + 1 }, (_, k) => k * gridStep)
+  const rxLine = dir === 'dl' ? styles.lineDl : styles.lineUl
+  const rxDot = dir === 'dl' ? styles.dotDl : styles.dotUl
+  const rxKey = dir === 'dl' ? styles.keyDl : styles.keyUl
   return (
-    <div ref={ref} className={styles.chartBox}>
+    <div ref={ref} className={styles.wideChart} style={{ height: H || undefined }}>
       {W > 0 && (
-        <svg width={W} height={H} className={styles.chart} role="img" aria-label={`${dir === 'ul' ? 'Uplink' : 'Downlink'} rate over time`}
+        <svg width={W} height={H} className={styles.chart} role="img" aria-label={`${dir === 'dl' ? 'Downlink' : 'Uplink'} sent and received rate over the run`}
           onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-          {Array.from({ length: Math.round(top / gridStep) + 1 }, (_, k) => k * gridStep).map((v) => (
+          {grid.map((v) => (
             <g key={v}>
-              <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className={styles.chartGrid} />
-              <text x={pad.l - 6} y={y(v) + 3.5} textAnchor="end" className={styles.chartAxis}>{axisBps(v)}</text>
+              <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className={v === 0 ? styles.axisLine : styles.chartGrid} />
+              <text x={pad.l - 8} y={y(v) + 4} textAnchor="end" className={styles.chartAxis}>{axisBps(v)}</text>
             </g>
           ))}
-          {ticks.map((t) => (
-            <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
+          {timeTicks(t1, plotW).map((t) => (
+            <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : x(t) > W - pad.r - 24 ? 'end' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
           ))}
-          <polyline points={line(rx)} className={styles.lineRx} />
           <polyline points={line(tx)} className={styles.lineTx} />
+          <polyline points={line(rx)} className={rxLine} />
           {h && (
             <g>
               <line x1={x(h.t)} x2={x(h.t)} y1={pad.t} y2={H - pad.b} className={styles.chartCursor} />
-              <circle cx={x(h.t)} cy={y(rx(h))} r={3} className={styles.dotRx} />
               <circle cx={x(h.t)} cy={y(tx(h))} r={3} className={styles.dotTx} />
+              <circle cx={x(h.t)} cy={y(rx(h))} r={3} className={rxDot} />
             </g>
           )}
         </svg>
       )}
       {h && W > 0 && (
-        <div className={styles.chartTip} style={{ left: Math.min(x(h.t) + 10, W - 150) }}>
+        <div className={styles.chartTip} style={{ left: Math.min(x(h.t) + 10, W - 200) }}>
           <b>{clock(h.t)}</b>
-          <span><i className={styles.swatchTx} />Tx {formatBps(tx(h))}</span>
-          <span><i className={styles.swatchRx} />Rx {formatBps(rx(h))}</span>
+          <span><i className={styles.keyTx} />Sent {formatBps(tx(h))}</span>
+          <span><i className={rxKey} />Received {formatBps(rx(h))}</span>
         </div>
       )}
     </div>
-  )
-}
-
-function Stat({ label, value }: { label: string, value: React.ReactNode }) {
-  return <div className={styles.stat}><span>{label}</span><b>{value}</b></div>
-}
-
-// DirectionPanel is one direction: live Tx/Rx, its chart and its numbers.
-function DirectionPanel({ dir, d, series }: { dir: Dir, d: TesterTrafficDirection, series: TesterTrafficPoint[] }) {
-  const lossy = d.lossRate > 0.001
-  return (
-    <div className={styles.dirPanel}>
-      <div className={styles.dirHead}>
-        <div>
-          <h4 className={styles.dirTitle}>{dir === 'ul' ? 'Uplink' : 'Downlink'}</h4>
-          <span className={styles.dirPath}>{dir === 'ul' ? 'UE → N3 → UPF → N6' : 'N6 → UPF → N3 → UE'}</span>
-        </div>
-        <span className={`${styles.pill} ${lossy ? styles.pillBad : styles.pillOk}`}>loss {formatLoss(d.lossRate)}</span>
-      </div>
-      <div className={styles.legend}>
-        <span><i className={styles.swatchTx} />Tx <b>{formatBps(d.txBps)}</b></span>
-        <span><i className={styles.swatchRx} />Rx <b>{formatBps(d.rxBps)}</b></span>
-      </div>
-      <RateChart series={series} dir={dir} />
-      <div className={styles.statGrid}>
-        <Stat label="Packets/s Tx / Rx" value={`${Math.round(d.txPps).toLocaleString()} / ${Math.round(d.rxPps).toLocaleString()}`} />
-        <Stat label="Total Tx / Rx" value={`${formatBits(d.txBytes)} / ${formatBits(d.rxBytes)}`} />
-        <Stat label="Latency p50 / p99" value={`${formatMs(d.latency.p50Ms)} / ${formatMs(d.latency.p99Ms)}`} />
-        <Stat label="Out of order" value={d.outOfOrder.toLocaleString()} />
-        <Stat label="Send errors" value={d.sendErrors.toLocaleString()} />
-        {d.misrouted > 0 && <Stat label="Misrouted" value={d.misrouted.toLocaleString()} />}
-      </div>
-    </div>
-  )
-}
-
-function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
-  return (
-    <section className={styles.card}>
-      <div className={styles.stageTop}>
-        <h3 className={styles.cardTitle}>Data plane</h3>
-        <span className={`${styles.pill} ${dp.activeUes ? styles.pillActive : styles.pillMuted}`}>{dp.activeUes} UEs sending</span>
-      </div>
-      {dp.engine && <p className={styles.hint} style={{ margin: '0 0 12px' }}>Engine: <span className={styles.mono}>{dp.engine}</span></p>}
-      <div className={styles.dirRow}>
-        <DirectionPanel dir="ul" d={dp.ul} series={dp.series} />
-        <DirectionPanel dir="dl" d={dp.dl} series={dp.series} />
-      </div>
-    </section>
   )
 }
 
@@ -234,11 +222,6 @@ function CpChart({ series }: { series: TesterCpPoint[] }) {
   const x = (t: number) => pad.l + (t / span) * plotW
   const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
   const line = (f: (p: TesterCpPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
-  const maxTicks = Math.max(2, Math.floor(plotW / 70))
-  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
-    .find((s) => span / s <= maxTicks) ?? 86400
-  const ticks: number[] = []
-  for (let t = 0; t <= t1; t += step) ticks.push(t)
   const h = hover === null ? null : series[hover]
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
     const t = ((ev.clientX - ev.currentTarget.getBoundingClientRect().left - pad.l) / plotW) * span
@@ -254,12 +237,12 @@ function CpChart({ series }: { series: TesterCpPoint[] }) {
           onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
           {Array.from({ length: Math.round(top / gridStep) + 1 }, (_, k) => k * gridStep).map((v) => (
             <g key={v}>
-              <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className={styles.chartGrid} />
+              <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className={v === 0 ? styles.axisLine : styles.chartGrid} />
               <text x={pad.l - 6} y={y(v) + 3.5} textAnchor="end" className={styles.chartAxis}>{Number(v.toFixed(1))}</text>
             </g>
           ))}
-          {ticks.map((t) => (
-            <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
+          {timeTicks(t1, plotW).map((t) => (
+            <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : x(t) > W - pad.r - 24 ? 'end' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
           ))}
           <polyline points={line((p) => p.failPerSec)} className={styles.lineFail} />
           <polyline points={line((p) => p.deregPerSec)} className={styles.lineDereg} />
@@ -279,123 +262,142 @@ function CpChart({ series }: { series: TesterCpPoint[] }) {
   )
 }
 
-// ProcedureStats is one procedure of the loop: outcomes and latency.
-function ProcedureStats({ title, s }: { title: string, s: TesterStageSnapshot }) {
-  const finished = s.accepted + s.rejected + s.timedOut + s.failed
+const failuresOf = (s: TesterStageSnapshot) => s.rejected + s.timedOut + s.failed
+
+// ProcTable is the control-plane procedures: one row per stage.
+function ProcTable({ rows }: { rows: [string, TesterStageSnapshot][] }) {
   return (
-    <div className={styles.dirPanel}>
-      <div className={styles.dirHead}>
-        <h4 className={styles.dirTitle}>{title}</h4>
-        <span className={`${styles.pill} ${finished > s.accepted ? styles.pillBad : styles.pillOk}`}>
-          {finished ? `${((s.accepted / finished) * 100).toFixed(finished > s.accepted ? 2 : 0)} % ok` : '—'}
-        </span>
-      </div>
-      <dl className={styles.kv}>
-        <dt>Accepted</dt><dd>{s.accepted.toLocaleString()}</dd>
-        <dt>Rejected</dt><dd>{s.rejected.toLocaleString()}</dd>
-        <dt>Timed out</dt><dd>{s.timedOut.toLocaleString()}</dd>
-        <dt>Connection errors</dt><dd>{s.failed.toLocaleString()}</dd>
-        <dt>In flight</dt><dd>{s.inFlight.toLocaleString()}</dd>
-        <dt>Average</dt><dd>{formatMs(s.avgMs)}</dd>
-        <dt>p50 / p95 / p99</dt><dd>{formatMs(s.p50Ms)} / {formatMs(s.p95Ms)} / {formatMs(s.p99Ms)}</dd>
-        <dt>Max</dt><dd>{formatMs(s.maxMs)}</dd>
-      </dl>
-      {s.causes.length > 0 && (
-        <div className={styles.causes}>
-          <h4>Failure causes</h4>
-          <ul>{s.causes.map((c) => <li key={c.cause}><span className={styles.mono}>{c.cause}</span> × {c.count}</li>)}</ul>
-        </div>
-      )}
+    <div className={styles.tableScroll}>
+      <table className={styles.procTable}>
+        <thead>
+          <tr>
+            <th>Stage</th><th>Attempts</th><th>Accepted</th><th>Rejected</th><th>Timed out</th>
+            <th title="SCTP / connection errors">Conn. errors</th><th>In flight</th><th>Average</th><th>p95</th><th>p99</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([name, s]) => (
+            <tr key={name} title={`Retries ${s.retries} · not started ${s.skipped} · max ${formatMs(s.maxMs)} · total time ${formatMs(s.totalTimeMs)}`}>
+              <td>{name}</td>
+              <td>{s.attempted.toLocaleString()}</td>
+              <td>{s.accepted.toLocaleString()}</td>
+              <td className={s.rejected > 0 ? styles.tdBad : undefined}>{s.rejected.toLocaleString()}</td>
+              <td className={s.timedOut > 0 ? styles.tdBad : undefined}>{s.timedOut.toLocaleString()}</td>
+              <td className={s.failed > 0 ? styles.tdBad : undefined}>{s.failed.toLocaleString()}</td>
+              <td>{s.inFlight.toLocaleString()}</td>
+              <td>{formatMs(s.avgMs)}</td>
+              <td>{formatMs(s.p95Ms)}</td>
+              <td>{formatMs(s.p99Ms)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
 
-const CP_STATE: Record<TesterCpLoopSnapshot['state'], [string, string]> = {
-  off: ['Off', 'pillMuted'],
-  waiting: ['Waiting for the throughput UEs', 'pillMuted'],
-  running: ['Running', 'pillActive'],
-  stopped: ['Stopped', 'pillOk'],
+// mergeCauses adds up the causes of several stages, largest first.
+function mergeCauses(stages: TesterStageSnapshot[]): TesterCauseCount[] {
+  const m = new Map<string, number>()
+  for (const s of stages) for (const c of s.causes) m.set(c.cause, (m.get(c.cause) ?? 0) + c.count)
+  return [...m].map(([cause, count]) => ({ cause, count })).sort((a, b) => b.count - a.count || a.cause.localeCompare(b.cause))
 }
 
-// CpLoopCard is the control-plane test: UEs registering and
-// deregistering in a loop.
-function CpLoopCard({ cp }: { cp: TesterCpLoopSnapshot }) {
-  const [label, tone] = CP_STATE[cp.state]
-  const last = cp.series.length ? cp.series[cp.series.length - 1] : null
-  const avg = (n: number) => (cp.durationSec > 0 ? `${(n / cp.durationSec).toFixed(1)}/s` : '—')
+function CauseBars({ causes }: { causes: TesterCauseCount[] }) {
+  const total = causes.reduce((a, c) => a + c.count, 0)
   return (
-    <section className={styles.card}>
-      <div className={styles.stageTop}>
-        <h3 className={styles.cardTitle}>Control-plane loop</h3>
-        <span className={`${styles.pill} ${styles[tone]}`}>{label}</span>
-      </div>
-      <p className={styles.hint} style={{ margin: '0 0 12px' }}>
-        {cp.ues.toLocaleString()} UEs register, stay registered, deregister and start over; they have no PDU session.
-      </p>
-      <div className={styles.statGrid} style={{ margin: '0 0 12px' }}>
-        <Stat label="Cycles completed" value={cp.cycles.toLocaleString()} />
-        <Stat label="Registered now" value={cp.registered.toLocaleString()} />
-        <Stat label="Running for" value={cp.startedAt ? clock(cp.durationSec) : '—'} />
-        <Stat label="Registrations · last second / average" value={`${last ? `${last.regPerSec.toFixed(0)}/s` : '—'} / ${avg(cp.registration.accepted)}`} />
-        <Stat label="Deregistrations · last second / average" value={`${last ? `${last.deregPerSec.toFixed(0)}/s` : '—'} / ${avg(cp.deregistration.accepted)}`} />
-        <Stat label="Failed · last second" value={last ? `${last.failPerSec.toFixed(0)}/s` : '—'} />
-      </div>
-      <div className={styles.legend}>
-        <span><i className={styles.swatchRx} />Registrations/s</span>
-        <span><i className={styles.swatchDereg} />Deregistrations/s</span>
-        <span><i className={styles.swatchFail} />Failed/s</span>
-      </div>
-      <CpChart series={cp.series} />
-      <div className={styles.dirRow} style={{ marginTop: 16 }}>
-        <ProcedureStats title="Registration" s={cp.registration} />
-        <ProcedureStats title="Deregistration" s={cp.deregistration} />
-      </div>
-    </section>
+    <>
+      {causes.map((c) => (
+        <div key={c.cause} className={styles.causeRow}>
+          <div className={styles.causeTop}><span>{c.cause}</span><span className="num">{c.count.toLocaleString()}</span></div>
+          <div className={`${styles.track} ${styles.causeFill}`}><i style={{ width: `${total ? (c.count / total) * 100 : 0}%` }} /></div>
+        </div>
+      ))}
+    </>
   )
 }
 
-const ACTIVE_STATES: TesterRunSnapshot['state'][] = ['configuring', 'n2', 'running']
+const CP_STATE: Record<TesterCpLoopSnapshot['state'], [string, keyof typeof TONES]> = {
+  off: ['Off', 'idle'],
+  waiting: ['Waiting for the throughput UEs', 'idle'],
+  running: ['Running', 'ok'],
+  stopped: ['Stopped', 'idle'],
+}
 
-function StageCard({ title, stage }: { title: string, stage: TesterStageSnapshot }) {
-  const pct = (n: number) => (stage.expected ? `${(n / stage.expected) * 100}%` : '0%')
+// CpLoopPanel is the control-plane test: UEs registering and
+// deregistering in a loop.
+function CpLoopPanel({ cp }: { cp: TesterCpLoopSnapshot }) {
+  const [label, tone] = CP_STATE[cp.state]
+  const last = cp.series.length ? cp.series[cp.series.length - 1] : null
+  const avg = (n: number) => (cp.durationSec > 0 ? `${(n / cp.durationSec).toFixed(1)}/s` : '—')
+  const causes = mergeCauses([cp.registration, cp.deregistration, cp.cleanup])
+  const tiles: [string, string][] = [
+    ['Cycles completed', cp.cycles.toLocaleString()],
+    ['Registered now', cp.registered.toLocaleString()],
+    ['Running for', cp.startedAt ? formatClock(cp.durationSec) : '—'],
+    ['Registrations · last s / avg', `${last ? `${last.regPerSec.toFixed(0)}/s` : '—'} / ${avg(cp.registration.accepted)}`],
+    ['Deregistrations · last s / avg', `${last ? `${last.deregPerSec.toFixed(0)}/s` : '—'} / ${avg(cp.deregistration.accepted)}`],
+    ['Failed · last second', last ? `${last.failPerSec.toFixed(0)}/s` : '—'],
+  ]
   return (
-    <section className={styles.card}>
-      <div className={styles.stageTop}>
-        <h3 className={styles.cardTitle}>{title}</h3>
-        <span className={`${styles.pill} ${stage.done ? styles.pillOk : styles.pillActive}`}>
-          {stage.done ? 'Done' : stage.attempted === 0 ? 'Waiting' : `${stage.inFlight} in flight`}
-        </span>
+    <section className={`${styles.panel} ${styles.panelFlush}`}>
+      <div className={styles.panelHead}>
+        <h2 className={styles.panelTitle}>Control-plane loop</h2>
+        <span className={`${styles.state} ${TONES[tone]}`}>{label}</span>
       </div>
-      <div className={styles.bigNumber}>
-        {stage.accepted}<small> / {stage.expected} accepted</small>
+      <div className={styles.panelBody}>
+        <p className={styles.panelText}>{cp.ues.toLocaleString()} UEs register, stay registered, deregister and start over; they have no PDU session.</p>
+        <div className={styles.kpis}>
+          {tiles.map(([k, v]) => (
+            <div key={k} className={styles.kpi}><span className={styles.kpiLabel}>{k}</span><span className={`num ${styles.kpiValue}`} style={{ fontSize: '1.25rem' }}>{v}</span></div>
+          ))}
+        </div>
+        <div className={styles.panelHead}>
+          <span className={styles.legendKey}><i className={styles.keyDl} />Registrations/s</span>
+          <span className={styles.legendKey}><i className={styles.keyDereg} style={{ background: 'repeating-linear-gradient(90deg, var(--violet) 0 0.25rem, transparent 0.25rem 0.4375rem)' }} />Deregistrations/s</span>
+          <span className={styles.legendKey}><i className={styles.keyFail} />Failed/s</span>
+        </div>
+        <CpChart series={cp.series} />
       </div>
-      <div className={styles.bar} aria-hidden="true">
-        <span className={styles.barOk} style={{ width: pct(stage.accepted) }} />
-        <span className={styles.barBad} style={{ width: pct(stage.rejected + stage.timedOut + stage.failed) }} />
-        <span className={styles.barActive} style={{ width: pct(stage.inFlight) }} />
-      </div>
-      <dl className={styles.kv}>
-        <dt>Rejected</dt><dd>{stage.rejected}</dd>
-        <dt>Timed out</dt><dd>{stage.timedOut}</dd>
-        <dt>Connection errors</dt><dd>{stage.failed}</dd>
-        <dt>Retries</dt><dd>{stage.retries}</dd>
-        <dt>Not started</dt><dd>{stage.skipped}</dd>
-        <dt>Total time</dt><dd>{formatMs(stage.totalTimeMs)}</dd>
-        <dt>Average</dt><dd>{formatMs(stage.avgMs)}</dd>
-        <dt>p50 / p95 / p99</dt><dd>{formatMs(stage.p50Ms)} / {formatMs(stage.p95Ms)} / {formatMs(stage.p99Ms)}</dd>
-        <dt>Max</dt><dd>{formatMs(stage.maxMs)}</dd>
-      </dl>
-      {stage.causes.length > 0 && (
-        <div className={styles.causes}>
-          <h4>Failure causes</h4>
-          <ul>
-            {stage.causes.map((c) => <li key={c.cause}><span className={styles.mono}>{c.cause}</span> × {c.count}</li>)}
-          </ul>
+      <ProcTable rows={[['Registration', cp.registration], ['Deregistration', cp.deregistration]]} />
+      {causes.length > 0 && (
+        <div className={styles.panelBody} style={{ paddingTop: '1rem', borderTop: '1px solid var(--border-soft)', gap: '0.875rem' }}>
+          <div className={styles.panelHead}><h3 className={styles.panelTitle}>Failure causes</h3><span className={`num ${styles.panelNote}`}>{causes.reduce((a, c) => a + c.count, 0).toLocaleString()} total</span></div>
+          <CauseBars causes={causes} />
         </div>
       )}
     </section>
   )
 }
+
+// DIRECTION_ROWS are the per-direction numbers of the details table.
+const DIRECTION_ROWS: [string, (d: TesterTrafficDirection) => string][] = [
+  ['Sent', (d) => `${formatBps(d.txBps)} · ${formatPps(d.txPps)}`],
+  ['Received', (d) => `${formatBps(d.rxBps)} · ${formatPps(d.rxPps)}`],
+  ['Total sent / received', (d) => `${formatBits(d.txBytes)} / ${formatBits(d.rxBytes)}`],
+  ['Loss', (d) => formatLoss(d.lossRate)],
+  ['Latency p50 / p99', (d) => `${formatMs(d.latency.p50Ms)} / ${formatMs(d.latency.p99Ms)}`],
+  ['Out of order', (d) => d.outOfOrder.toLocaleString()],
+  ['Send errors', (d) => d.sendErrors.toLocaleString()],
+  ['Misrouted', (d) => d.misrouted.toLocaleString()],
+]
+
+const ACTIVE_STATES: TesterRunSnapshot['state'][] = ['configuring', 'n2', 'running']
+
+// useNow ticks every second while on, for the elapsed time.
+function useNow(on: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!on) return
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [on])
+  return now
+}
+
+const StopIcon = () => (
+  <svg className={styles.btnIcon} viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="1.5" fill="currentColor" /></svg>
+)
 
 // TesterRunDetailPage is the run on one tester, live.
 export default function TesterRunDetailPage() {
@@ -440,6 +442,7 @@ export default function TesterRunDetailPage() {
 
   const isActive = snapshot ? ACTIVE_STATES.includes(snapshot.state) : false
   const isCleaningUp = snapshot?.state === 'stopping'
+  const now = useNow(isActive || isCleaningUp)
 
   // Stop during cleanup skips the deregistrations still pending.
   const handleStop = useCallback(async () => {
@@ -457,128 +460,266 @@ export default function TesterRunDetailPage() {
 
   if (testers !== null && !tester) return <Navigate to="/tester/run" replace />
 
+  const s = snapshot
+  const hasRun = s !== null && s.state !== 'idle'
+  const overlay = <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
+  const crumbs = [{ label: 'Runs', to: '/tester/run' }, { label: hasRun ? <span className="num">{s.runId}</span> : (tester?.name ?? 'Run') }]
+
+  // the pill: the state, and while running the stage it is at
+  let pillText = s ? STATE_LABELS[s.state] : ''
+  if (s?.state === 'running') {
+    const at = !s.n2.done ? 'N2 setup' : !s.registration.done ? 'Registration' : !s.pdu.done ? 'PDU sessions' : 'Traffic'
+    pillText = `Running · ${at}`
+  }
+  const pillTone = !s ? '' : s.state === 'failed' ? styles.stateBad : s.state === 'stopping' ? styles.stateWarn : isActive ? styles.stateOk : ''
+
+  const elapsed = s?.startedAt
+    ? ((s.stoppedAt ? new Date(s.stoppedAt).getTime() : now) - new Date(s.startedAt).getTime()) / 1000
+    : null
+
   return (
-    <div className={styles.layout}>
-      <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
-      <Sidebar />
-
-      <main className={styles.content}>
-        <header className={styles.header}>
-          <div>
-            <Link to="/tester/run" className={styles.backLink}>← All runs</Link>
-            <h2 className={styles.title}>
-              <span>Run{snapshot && snapshot.state !== 'idle' && <> <span className={styles.titleId}>{snapshot.runId}</span></>}</span>
-              {snapshot && <span className={`${styles.pill} ${isActive ? styles.pillActive : snapshot.state === 'failed' ? styles.pillBad : styles.pillMuted}`}>{STATE_LABELS[snapshot.state]}</span>}
-            </h2>
-            {snapshot && snapshot.state !== 'idle'
-              ? (
-                <p className={styles.meta}>
-                  {tester && <span>Tester <b>{tester.name}</b></span>}
-                  <span>Profile <b>{snapshot.profileName}</b></span>
-                  {snapshot.startedAt && <span>Started <b className={styles.mono}>{new Date(snapshot.startedAt).toLocaleString()}</b></span>}
-                  <span>CPUs {snapshot.cpus.cpCpus || snapshot.cpus.dpCpus
-                    ? <b className={styles.mono}>control plane {snapshot.cpus.cpCpus || 'any'}, data plane {snapshot.cpus.dpCpus || 'any'}</b>
-                    : <b>not pinned</b>}</span>
-                </p>
-              )
-              : (
-                <p className={styles.subtitle}>
-                  {tester && <>Tester <b>{tester.name}</b>. </>}No run has been started yet. <Link to="/tester" className={styles.linkButton}>Set one up</Link>.
-                </p>
-              )}
+    <AppLayout crumbs={crumbs} overlay={overlay}>
+      <section className={styles.pageHead}>
+        <div className={styles.runHeadText}>
+          <div className={styles.titleRow}>
+            <h1 className={styles.pageTitle}>Run{hasRun && <> <span className="num">{s.runId}</span></>}</h1>
+            {s && <span className={`${styles.state} ${styles.stateLg} ${pillTone}`} title={STATE_TITLES[s.state]}>{pillText}</span>}
           </div>
-          <div className={styles.headerActions}>
-            {snapshot?.stopReason === 'maxDuration' && <span className={`${styles.pill} ${styles.pillMuted}`}>Stopped at max run time</span>}
-            {!isConnected && <span className={`${styles.pill} ${styles.pillBad}`}>Live updates disconnected</span>}
-            <Button variant="danger" onClick={handleStop} disabled={!(isActive || isCleaningUp) || isStopping}>
-              {isStopping ? 'Stopping…' : isCleaningUp ? 'Skip cleanup' : 'Stop'}
-            </Button>
-          </div>
-        </header>
-
-        {snapshot?.error && <p className={styles.runError}>{snapshot.error}</p>}
-
-        {snapshot && snapshot.state !== 'idle' && (
-          <>
-            {(snapshot.state === 'stopping' || snapshot.state === 'stopped') && (
-              <div className={styles.stageRow}>
-                <StageCard title={snapshot.cpLoop.state === 'off' ? 'Cleanup · UE deregistration' : 'Cleanup · throughput UE deregistration'} stage={snapshot.deregistration} />
-                {snapshot.cpLoop.state !== 'off' && <StageCard title="Cleanup · control-plane UE deregistration" stage={snapshot.cpLoop.cleanup} />}
-                <StageCard title="Cleanup · gNB SCTP close" stage={snapshot.n2Release} />
-              </div>
-            )}
-            <div className={styles.stageRow}>
-              <StageCard title="N2 setup" stage={snapshot.n2} />
-              <StageCard title="Registration" stage={snapshot.registration} />
-              <StageCard title="PDU session" stage={snapshot.pdu} />
+          {hasRun ? (
+            <div className={styles.runMeta}>
+              {tester && <span>Tester <b>{tester.name}</b></span>}
+              <span>Profile <b>{s.profileName || '—'}</b></span>
+              <span>Engine <b>{s.dataplane.engine || '—'}</b></span>
+              <span>Started <b className="num">{s.startedAt ? new Date(s.startedAt).toLocaleString() : '—'}</b></span>
+              <span>Elapsed <b className="num">{elapsed === null ? '—' : formatClock(elapsed)}</b></span>
             </div>
+          ) : (
+            <p className={styles.pageSub}>
+              {tester && <>Tester <b>{tester.name}</b>. </>}No run has been started yet. <Link to="/tester">Set one up</Link>.
+            </p>
+          )}
+        </div>
+        <div className={styles.pageActions}>
+          {s?.stopReason === 'maxDuration' && <span className={styles.state}>Stopped at max run time</span>}
+          {!isConnected && <span className={`${styles.state} ${styles.stateBad}`}>Live updates disconnected</span>}
+          <Button variant="danger" onClick={handleStop} disabled={!(isActive || isCleaningUp) || isStopping}>
+            <StopIcon />{isStopping ? 'Stopping…' : isCleaningUp ? 'Skip cleanup' : 'Stop run'}
+          </Button>
+        </div>
+      </section>
 
-            <DataplaneCard dp={snapshot.dataplane} />
+      {s?.error && <p className={styles.runError}>{s.error}</p>}
 
-            {snapshot.cpLoop.state !== 'off' && <CpLoopCard cp={snapshot.cpLoop} />}
+      {hasRun && <RunBody s={s} />}
+    </AppLayout>
+  )
+}
 
-            <section className={styles.card}>
-              <h3 className={styles.cardTitle}>UEs</h3>
-              <div className={styles.ueChips}>
-                {UE_STATES.map(([key, label, tone]) => (
-                  <span key={key} className={`${styles.pill} ${styles[tone]}`}>{label} {snapshot.ues[key]}</span>
-                ))}
-              </div>
-              {snapshot.failedUes.length > 0 && (
-                <div className={styles.tableWrap}>
-                  <h4 className={styles.subTitle}>
-                    Failed UEs{snapshot.ues.failed > snapshot.failedUes.length && ` (first ${snapshot.failedUes.length} of ${snapshot.ues.failed})`}
-                  </h4>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr><th>SUPI</th><th>gNB</th><th>Stage</th><th>Cause</th><th className={styles.numCol}>Attempts</th></tr>
-                    </thead>
-                    <tbody>
-                      {snapshot.failedUes.map((f) => (
-                        <tr key={f.supi}>
-                          <td className={styles.mono}>{f.supi}</td>
-                          <td>{f.gnb}</td>
-                          <td>{f.stage === 'pdu' ? 'PDU session' : 'Registration'}</td>
-                          <td className={styles.mono}>{f.cause}</td>
-                          <td className={styles.numCol}>{f.attempts}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+// RunBody is everything under the run's header.
+function RunBody({ s }: { s: TesterRunSnapshot }) {
+  const cleaning = s.state === 'stopping' || s.state === 'stopped'
+  const dp = s.dataplane
+  const cpOn = ['waiting', 'running', 'stopped'].includes(s.cpLoop.state)
+
+  // stage progress strip
+  const stages: { name: string, st: TesterStageSnapshot, note: string }[] = [
+    { name: 'Attach gNBs', st: s.n2, note: `${s.n2.accepted} / ${s.n2.expected}` },
+    { name: 'Register UEs', st: s.registration, note: `${s.registration.accepted.toLocaleString()} / ${s.registration.expected.toLocaleString()}` },
+    { name: 'PDU sessions', st: s.pdu, note: s.pdu.accepted.toLocaleString() },
+    { name: 'Deregister', st: s.deregistration, note: s.deregistration.attempted === 0 && !cleaning ? 'on stop' : `${s.deregistration.accepted.toLocaleString()} / ${s.deregistration.expected.toLocaleString()}` },
+  ]
+
+  // key figures
+  const reg = s.registration
+  const pct = (n: number, of: number) => (of > 0 ? `${((n / of) * 100).toFixed(1)}%` : '—')
+  const regRate = reg.totalTimeMs > 0 ? reg.accepted / (reg.totalTimeMs / 1000) : null
+  const throughputStages = [s.n2, s.registration, s.pdu, s.deregistration, s.n2Release]
+  const failures = throughputStages.reduce((a, st) => a + failuresOf(st), 0)
+  const attempts = throughputStages.reduce((a, st) => a + st.attempted, 0)
+  const [dlValue, dlUnit] = splitUnit(formatBps(dp.dl.rxBps))
+  const kpis = [
+    { label: 'Registered UEs', value: reg.accepted.toLocaleString(), unit: `/ ${reg.expected.toLocaleString()}`, sub: `${pct(reg.accepted, reg.expected)} of target` },
+    { label: 'Registrations/s', value: regRate === null ? '—' : Math.round(regRate).toLocaleString(), unit: '/s', sub: regRate === null ? 'not started' : `average over ${formatClock(reg.totalTimeMs / 1000)}` },
+    { label: 'PDU sessions', value: s.ues.established.toLocaleString(), unit: 'active', sub: `${pct(s.ues.established, reg.accepted)} of registered` },
+    { label: 'Downlink', value: dlValue, unit: dlUnit, sub: `loss ${formatLoss(dp.dl.lossRate)}` },
+    { label: 'Failures', value: failures.toLocaleString(), unit: 'total', sub: `${pct(failures, attempts)} of attempts`, bad: failures > 0 },
+  ]
+
+  const procRows: [string, TesterStageSnapshot][] = [
+    ['N2 setup', s.n2],
+    ['Registration', s.registration],
+    ['PDU session establishment', s.pdu],
+    [cpOn ? 'Deregistration (throughput UEs)' : 'Deregistration', s.deregistration],
+  ]
+  if (cleaning && cpOn) procRows.push(['Deregistration (control-plane UEs)', s.cpLoop.cleanup])
+  if (cleaning) procRows.push(['gNB SCTP close', s.n2Release])
+
+  const causes = mergeCauses(throughputStages)
+  const causeTotal = causes.reduce((a, c) => a + c.count, 0)
+  const step = sampleStep(dp.series)
+
+  return (
+    <>
+      <section aria-label="Run progress" className={`${styles.panel} ${styles.stageStrip}`}>
+        <div className={styles.stageGrid}>
+          {stages.map(({ name, st, note }) => {
+            const ratio = st.expected > 0 ? Math.min(1, st.accepted / st.expected) : 0
+            const pending = st.attempted === 0 && !st.done
+            const bar = ratio >= 1 ? 'var(--accent)'
+              : ratio <= 0 ? 'var(--border)'
+                : `linear-gradient(90deg, var(--accent) ${(ratio * 100).toFixed(1)}%, var(--border) ${(ratio * 100).toFixed(1)}%)`
+            return (
+              <div key={name} className={styles.stageItem}>
+                <div className={styles.stageBar} style={{ background: bar }} />
+                <div className={`${styles.stageLabel} ${pending ? styles.stagePending : ''}`}>
+                  <span>{name}</span><span className="num">{note}</span>
                 </div>
-              )}
-            </section>
-
-            <section className={styles.card}>
-              <h3 className={styles.cardTitle}>gNBs</h3>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr><th className={styles.numCol}>#</th><th>Name</th><th>N2 IP</th><th>State</th><th className={styles.numCol}>Attempts</th><th className={styles.numCol}>Setup time</th><th className={styles.numCol}>Registered</th><th className={styles.numCol}>PDU sessions</th><th className={styles.numCol}>UL received</th><th className={styles.numCol}>DL received</th><th>Last error</th></tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.gnbs.map((g) => (
-                      <tr key={g.index}>
-                        <td className={styles.numCol}>{g.index}</td>
-                        <td>{g.name}</td>
-                        <td className={styles.mono}>{g.n2Ip}</td>
-                        <td><span className={`${styles.pill} ${g.state === 'up' ? styles.pillOk : g.state === 'failed' || g.state === 'lost' ? styles.pillBad : g.state === 'connecting' ? styles.pillActive : styles.pillMuted}`}>{g.state}</span></td>
-                        <td className={styles.numCol}>{g.attempts}</td>
-                        <td className={styles.numCol}>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
-                        <td className={styles.numCol}>{g.registered} / {g.ueCount}</td>
-                        <td className={styles.numCol}>{g.established} / {g.ueCount}</td>
-                        <td className={styles.numCol}>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'ul')}</td>
-                        <td className={styles.numCol}>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'dl')}</td>
-                        <td className={styles.causeCell}>{g.cause || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
-            </section>
+            )
+          })}
+        </div>
+      </section>
+
+      <section aria-label="Key figures" className={`${styles.kpis} ${styles.kpisRun}`}>
+        {kpis.map((k) => (
+          <div key={k.label} className={styles.kpi}>
+            <span className={styles.kpiLabel}>{k.label}</span>
+            <span className={styles.kpiLine}><span className={`num ${styles.kpiBig}`}>{k.value}</span><span className={styles.kpiUnit}>{k.unit}</span></span>
+            <span className={`num ${styles.kpiSub} ${k.bad ? styles.kpiSubBad : ''}`}>{k.sub}</span>
+          </div>
+        ))}
+      </section>
+
+      <section className={styles.split}>
+        <div className={`${styles.panel} ${styles.span2}`}>
+          <div className={styles.panelHead}>
+            <h2 className={styles.panelTitle}>Data plane throughput</h2>
+            <span className={styles.legendKey}><i className={styles.keyTx} />Sent</span>
+            <span className={styles.legendKey}><i className={styles.keyDl} /><i className={styles.keyUl} />Received</span>
+            <span className={styles.panelNote}>bps{step ? ` · ${step} s samples` : ''}</span>
+          </div>
+          <h3 className={styles.chartTitle}>Downlink <span className="num">{formatBps(dp.dl.rxBps)}</span></h3>
+          <ThroughputChart series={dp.series} dir="dl" />
+          <h3 className={styles.chartTitle}>Uplink <span className="num">{formatBps(dp.ul.rxBps)}</span></h3>
+          <ThroughputChart series={dp.series} dir="ul" />
+        </div>
+
+        <div className={`${styles.panel} ${styles.panelKv}`}>
+          <h2 className={styles.panelTitle}>Data plane</h2>
+          <div className={styles.kvRow}><span>DL sent</span><span className="num">{formatBps(dp.dl.txBps)} · {formatPps(dp.dl.txPps)}</span></div>
+          <div className={styles.kvRow}><span>DL received</span><span className="num">{formatBps(dp.dl.rxBps)} · {formatPps(dp.dl.rxPps)}</span></div>
+          <div className={styles.kvRow}><span>UL sent</span><span className="num">{formatBps(dp.ul.txBps)} · {formatPps(dp.ul.txPps)}</span></div>
+          <div className={styles.kvRow}><span>UL received</span><span className="num">{formatBps(dp.ul.rxBps)} · {formatPps(dp.ul.rxPps)}</span></div>
+          <div className={styles.kvRow}><span>Loss DL / UL</span><span className="num">{formatLoss(dp.dl.lossRate)} / {formatLoss(dp.ul.lossRate)}</span></div>
+          <div className={styles.kvRow}><span>DP CPUs</span><span className="num">{s.cpus.dpCpus || 'not pinned'}</span></div>
+          <div className={styles.kvRow}><span>CP CPUs</span><span className="num">{s.cpus.cpCpus || 'not pinned'}</span></div>
+        </div>
+      </section>
+
+      <section className={styles.split}>
+        <div className={`${styles.panel} ${styles.panelFlush} ${styles.span2}`}>
+          <div className={styles.panelHead}><h2 className={styles.panelTitle}>Control plane procedures</h2></div>
+          <ProcTable rows={procRows} />
+        </div>
+
+        <div className={`${styles.panel} ${styles.panelKv}`}>
+          <div className={styles.panelHead}>
+            <h2 className={styles.panelTitle}>Failure causes</h2>
+            <span className={`num ${styles.panelNote}`}>{causeTotal.toLocaleString()} total</span>
+          </div>
+          {causes.length === 0 ? <p className={styles.panelText}>No failures.</p> : <CauseBars causes={causes} />}
+        </div>
+      </section>
+
+      <section className={`${styles.panel} ${styles.panelFlush}`}>
+        <div className={styles.panelHead}>
+          <h2 className={styles.panelTitle}>Data plane details</h2>
+          <span className={`${styles.state} ${dp.activeUes ? styles.stateOk : ''}`}>{dp.activeUes.toLocaleString()} UEs sending</span>
+        </div>
+        <div className={styles.tableScroll}>
+          <table className={styles.procTable}>
+            <thead><tr><th /><th>Downlink · N6 → UPF → N3 → UE</th><th>Uplink · UE → N3 → UPF → N6</th></tr></thead>
+            <tbody>
+              {DIRECTION_ROWS.map(([label, f]) => (
+                <tr key={label}><td>{label}</td><td>{f(dp.dl)}</td><td>{f(dp.ul)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {cpOn && <CpLoopPanel cp={s.cpLoop} />}
+
+      <section className={`${styles.panel} ${styles.panelFlush}`}>
+        <div className={styles.panelHead}><h2 className={styles.panelTitle}>UEs</h2></div>
+        <div className={styles.panelBody}>
+          <div className={styles.chips}>
+            {UE_STATES.map(([key, label, tone]) => (
+              <span key={key} className={`${styles.state} ${TONES[tone]}`}>{label} <span className="num">{s.ues[key].toLocaleString()}</span></span>
+            ))}
+          </div>
+        </div>
+        {s.failedUes.length > 0 && (
+          <>
+            <div className={styles.panelHead} style={{ borderTop: '1px solid var(--border-soft)' }}>
+              <h3 className={styles.panelTitle}>
+                Failed UEs{s.ues.failed > s.failedUes.length && ` (first ${s.failedUes.length} of ${s.ues.failed})`}
+              </h3>
+            </div>
+            <div className={styles.tableScroll}>
+              <table className={styles.dataTable}>
+                <thead><tr><th>SUPI</th><th>gNB</th><th>Stage</th><th>Cause</th><th className={styles.r}>Attempts</th></tr></thead>
+                <tbody>
+                  {s.failedUes.map((f) => (
+                    <tr key={f.supi}>
+                      <td className="num">{f.supi}</td>
+                      <td>{f.gnb}</td>
+                      <td>{f.stage === 'pdu' ? 'PDU session' : 'Registration'}</td>
+                      <td className="num">{f.cause}</td>
+                      <td className={`num ${styles.r}`}>{f.attempts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
-      </main>
-    </div>
+      </section>
+
+      <section className={`${styles.panel} ${styles.panelFlush}`}>
+        <div className={styles.panelHead}><h2 className={styles.panelTitle}>gNBs</h2></div>
+        <div className={styles.tableScroll}>
+          <table className={styles.dataTable}>
+            <thead>
+              <tr>
+                <th className={styles.r}>#</th><th>Name</th><th>N2 IP</th><th>State</th><th className={styles.r}>Attempts</th>
+                <th className={styles.r}>Setup time</th><th className={styles.r}>Registered</th><th className={styles.r}>PDU sessions</th>
+                <th className={styles.r}>UL received</th><th className={styles.r}>DL received</th><th>Last error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.gnbs.map((g) => {
+                const tone = g.state === 'up' ? 'ok' : g.state === 'failed' || g.state === 'lost' ? 'bad' : g.state === 'connecting' ? 'accent' : 'idle'
+                return (
+                  <tr key={g.index}>
+                    <td className={`num ${styles.r}`}>{g.index}</td>
+                    <td>{g.name}</td>
+                    <td className="num">{g.n2Ip}</td>
+                    <td><span className={`${styles.state} ${TONES[tone]}`}>{g.state}</span></td>
+                    <td className={`num ${styles.r}`}>{g.attempts}</td>
+                    <td className={`num ${styles.r}`}>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
+                    <td className={`num ${styles.r}`}>{g.registered.toLocaleString()} / {g.ueCount.toLocaleString()}</td>
+                    <td className={`num ${styles.r}`}>{g.established.toLocaleString()} / {g.ueCount.toLocaleString()}</td>
+                    <td className={`num ${styles.r}`}>{gnbTraffic(dp.gnbs[g.index - 1], 'ul')}</td>
+                    <td className={`num ${styles.r}`}>{gnbTraffic(dp.gnbs[g.index - 1], 'dl')}</td>
+                    <td className={styles.tdWrap}>{g.cause || '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
   )
 }

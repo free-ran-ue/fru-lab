@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import Sidebar from '../../components/sidebar/Sidebar'
-import Button from '../../components/button/button'
+import AppLayout from '../../components/layout/AppLayout'
 import Modal from '../../components/modal/modal'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -9,8 +8,16 @@ import type { ImageInfo } from '../../api'
 import styles from './images-page.module.css'
 
 const GROUP_LABELS: Record<string, string> = {
-  free5gc: 'free5GC Core',
-  'free-ran-ue': 'free-ran-ue',
+  free5gc: 'free5GC',
+  'free-ran-ue': 'RAN · free-ran-ue',
+}
+
+// splitRef splits "repo/name:tag" into repo and tag; a ":" before the
+// last "/" is a registry port, not a tag.
+function splitRef(ref: string): { repo: string; tag: string } {
+  const colon = ref.lastIndexOf(':')
+  if (colon > ref.lastIndexOf('/')) return { repo: ref.slice(0, colon), tag: ref.slice(colon + 1) }
+  return { repo: ref, tag: 'latest' }
 }
 
 function groupLabel(group: string): string {
@@ -26,7 +33,7 @@ function formatSize(bytes?: number): string {
     value /= 1024
     unitIndex += 1
   }
-  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+  return `${value.toFixed(unitIndex === 0 ? 0 : unitIndex >= 3 ? 2 : 1)} ${units[unitIndex]}`
 }
 
 // Which action (if any) is in flight for a given image, keyed by its route
@@ -72,6 +79,34 @@ export default function ImagesPage() {
         return next
       })
     }
+  }
+
+  // pullMissing pulls every image not on this host, one after another
+  // (each is a full docker pull), with the same per-image pull as the rows.
+  async function pullMissing() {
+    const missing = images.filter((image) => !image.present && !pending[image.key])
+    if (missing.length === 0) return
+    setPending((current) => {
+      const next = { ...current }
+      for (const image of missing) next[image.key] = 'pull'
+      return next
+    })
+    const failed: string[] = []
+    for (const image of missing) {
+      try {
+        await api.imagePull(image.key)
+      } catch (error) {
+        failed.push(`${image.name}: ${extractErrorMessage(error, 'pull failed')}`)
+      }
+      setPending((current) => {
+        const next = { ...current }
+        delete next[image.key]
+        return next
+      })
+    }
+    if (failed.length < missing.length) addSuccess(`Pulled ${missing.length - failed.length} of ${missing.length} missing image${missing.length === 1 ? '' : 's'}`)
+    if (failed.length > 0) addError(`Failed to pull ${failed.length}, e.g. ${failed[0]}`)
+    await refresh()
   }
 
   async function handleConfirmClear() {
@@ -126,108 +161,120 @@ export default function ImagesPage() {
 
   const groups = Array.from(new Set(images.map((image) => image.group)))
   const presentCount = images.filter((image) => image.present).length
+  const missingCount = images.length - presentCount
+  const totalSize = images.reduce((sum, image) => sum + (image.present ? image.size ?? 0 : 0), 0)
   const isAnyPending = Object.keys(pending).length > 0
 
   return (
-    <div className={styles.layout}>
-      <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
+    <AppLayout
+      crumbs={[{ label: 'Images' }]}
+      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+    >
+      <section className={styles.header}>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>Images</h1>
+          <p className={styles.subtitle}>
+            {isLoading
+              ? 'Checking this host…'
+              : <><span className="num">{presentCount} of {images.length}</span> images present on this host · <span className="num">{formatSize(totalSize)}</span></>}
+          </p>
+        </div>
+        <div className={styles.headerActions}>
+          <button type="button" className={styles.btn} onClick={refresh} disabled={isLoading}>
+            {isLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnDangerText}`}
+            onClick={() => setConfirmClearAll(true)}
+            disabled={presentCount === 0 || isAnyPending}
+          >
+            Clear all
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={pullMissing}
+            disabled={missingCount === 0 || isAnyPending}
+          >
+            Pull missing ({missingCount})
+          </button>
+        </div>
+      </section>
 
-      <Sidebar />
-
-      <main className={styles.content}>
-        <header className={styles.header}>
-          <div className={styles.titleBlock}>
-            <h1 className={styles.title}>Images</h1>
-            <p className={styles.subtitle}>Docker images this app deploys, all pinned to their template&apos;s tag. Clear one to force a fresh pull on the next deploy.</p>
-          </div>
-          <div className={styles.headerActions}>
-            {presentCount > 0 && (
-              <button type="button" className={styles.clearAllButton} onClick={() => setConfirmClearAll(true)} disabled={isAnyPending}>
-                {isAnyPending ? 'Clearing…' : 'Clear all'}
-              </button>
-            )}
-            <Button variant="secondary" onClick={refresh} disabled={isLoading}>
-              {isLoading ? 'Refreshing…' : 'Refresh'}
-            </Button>
-          </div>
-        </header>
-
-        {isLoading ? (
-          <p className={styles.emptyState}>Loading images…</p>
-        ) : (
-          groups.map((group) => {
-            const groupImages = images.filter((image) => image.group === group)
-            return (
-              <section key={group} className={styles.group}>
-                <div className={styles.groupHead}>
-                  <h2 className={styles.groupTitle}>{groupLabel(group)}</h2>
-                  <span className={styles.groupCount}>
-                    {groupImages.filter((image) => image.present).length} of {groupImages.length} pulled
-                  </span>
-                </div>
-                <div className={styles.tableWrap}>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        <th>Image</th>
-                        <th>Status</th>
-                        <th className={styles.right}>Size</th>
-                        <th>Created</th>
-                        <th className={styles.right}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupImages.map((image) => {
-                        const action = pending[image.key]
-                        return (
-                          <tr key={image.key}>
-                            <td>
-                              <div className={styles.imageInfo}>
-                                <span className={styles.imageName}>{image.name}</span>
-                                <span className={styles.imageRef}>{image.image}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <span className={`${styles.statusPill} ${image.present ? styles.statusPillPresent : styles.statusPillAbsent}`}>
-                                <span className={styles.statusDot} />
-                                {image.present ? 'Pulled' : 'Not pulled'}
-                              </span>
-                            </td>
-                            <td className={`${styles.metaText} ${styles.right}`}>{image.present ? formatSize(image.size) : '—'}</td>
-                            <td className={styles.metaText}>
-                              {image.present && image.createdAt ? new Date(image.createdAt).toLocaleString() : '—'}
-                            </td>
-                            <td className={styles.right}>
-                              <div className={styles.imageActions}>
-                                <button
-                                  type="button"
-                                  className={styles.rowButton}
-                                  onClick={() => handlePull(image)}
-                                  disabled={Boolean(action)}
-                                >
-                                  {action === 'pull' ? 'Pulling…' : 'Pull'}
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`${styles.rowButton} ${styles.rowButtonDanger}`}
-                                  onClick={() => setConfirmClearTarget(image)}
-                                  disabled={!image.present || Boolean(action)}
-                                >
-                                  {action === 'clear' ? 'Clearing…' : 'Clear'}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )
-          })
-        )}
-      </main>
+      {isLoading ? (
+        <section className={styles.group}><p className={styles.emptyState}>Loading images…</p></section>
+      ) : (
+        groups.map((group) => {
+          const groupImages = images.filter((image) => image.group === group)
+          return (
+            <section key={group} className={styles.group}>
+              <div className={styles.groupHead}>
+                <h2 className={styles.groupTitle}>{groupLabel(group)}</h2>
+                <span className={`num ${styles.groupCount}`}>
+                  {groupImages.filter((image) => image.present).length} of {groupImages.length} present
+                </span>
+              </div>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th className={styles.th}>Image</th>
+                      <th className={styles.th}>Tag</th>
+                      <th className={`${styles.th} ${styles.right}`}>Size</th>
+                      <th className={styles.th}>Status</th>
+                      <th className={styles.th}>Created</th>
+                      <th className={`${styles.th} ${styles.right}`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupImages.map((image) => {
+                      const action = pending[image.key]
+                      const { repo, tag } = splitRef(image.image)
+                      return (
+                        <tr key={image.key}>
+                          <td className={`${styles.td} num`} title={image.name}>{repo}</td>
+                          <td className={`${styles.td} num ${styles.muted}`}>{tag}</td>
+                          <td className={`${styles.td} num ${styles.right}`}>{image.present ? formatSize(image.size) : '—'}</td>
+                          <td className={styles.td}>
+                            <span className={`${styles.status} ${image.present ? styles.statusPresent : styles.statusMissing}`}>
+                              <span className={styles.statusDot} aria-hidden="true" />
+                              {image.present ? 'PRESENT' : 'MISSING'}
+                            </span>
+                          </td>
+                          <td className={`${styles.td} num ${styles.muted}`}>
+                            {image.present && image.createdAt ? new Date(image.createdAt).toLocaleString() : '—'}
+                          </td>
+                          <td className={`${styles.td} ${styles.right}`}>
+                            <span className={styles.rowActions}>
+                              <button
+                                type="button"
+                                className={`${styles.btn} ${styles.btnSm}`}
+                                onClick={() => handlePull(image)}
+                                disabled={Boolean(action)}
+                              >
+                                {action === 'pull' ? 'Pulling…' : image.present ? 'Update' : 'Pull'}
+                              </button>
+                              <button
+                                type="button"
+                                className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerText}`}
+                                onClick={() => setConfirmClearTarget(image)}
+                                disabled={!image.present || Boolean(action)}
+                              >
+                                {action === 'clear' ? 'Clearing…' : 'Clear'}
+                              </button>
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )
+        })
+      )}
 
       <Modal
         isOpen={confirmClearTarget !== null}
@@ -246,6 +293,6 @@ export default function ImagesPage() {
       >
         <p>Clear all {presentCount} pulled image{presentCount === 1 ? '' : 's'} from the local cache? The next deploy will pull each one fresh.</p>
       </Modal>
-    </div>
+    </AppLayout>
   )
 }

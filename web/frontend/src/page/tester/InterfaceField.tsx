@@ -1,5 +1,5 @@
 import type { TesterFieldError, TesterInterface } from '../../api'
-import styles from './tester.module.css'
+import styles from './setup.module.css'
 
 interface InterfaceFieldProps {
   label: string
@@ -26,11 +26,11 @@ function menuOrder(list: TesterInterface[], current: string): TesterInterface[] 
 // list could not be loaded it falls back to typing the name.
 export default function InterfaceField({ label, path, value, errors, interfaces, onChange, onRefresh }: InterfaceFieldProps) {
   const message = errors.find((e) => e.field === path)?.message
-  const className = `${styles.input} ${message ? styles.inputError : ''}`
+  const className = `${styles.in} ${message ? styles.inError : ''}`
   const known = interfaces?.some((i) => i.name === value) ?? false
 
   return (
-    <div className={styles.field}>
+    <div className={styles.fld}>
       <label htmlFor={path}>{label}</label>
       {interfaces === undefined ? (
         <input id={path} className={className} type="text" value={value} onChange={(e) => onChange(path, e.target.value)} />

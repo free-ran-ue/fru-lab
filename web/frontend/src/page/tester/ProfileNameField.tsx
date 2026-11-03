@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TesterStoredProfile } from '../../api'
-import styles from './tester.module.css'
+import styles from './setup.module.css'
 
 interface ProfileNameFieldProps {
   value: string
@@ -39,14 +39,14 @@ export default function ProfileNameField({ value, profiles, currentId, message, 
   }
 
   return (
-    <div className={`${styles.field} ${styles.combo}`} ref={box}
+    <div className={`${styles.fld} ${styles.combo}`} ref={box}
       onKeyDown={(e) => {
         if (e.key === 'Escape') setOpen(false)
         if (e.key === 'ArrowDown' && !open) setOpen(true)
       }}>
       <label htmlFor="name">Profile name</label>
       <div className={styles.comboBox}>
-        <input id="name" className={`${styles.input} ${message ? styles.inputError : ''}`} type="text" value={value}
+        <input id="name" className={`${styles.in} ${message ? styles.inError : ''}`} type="text" value={value}
           autoComplete="off" role="combobox" aria-expanded={open} aria-controls="profile-menu"
           onChange={(e) => onChange(e.target.value)} />
         <button type="button" className={styles.comboToggle} aria-label="Saved profiles" title="Saved profiles"

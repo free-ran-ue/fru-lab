@@ -6,16 +6,19 @@
   color: var(--ink);
 }
 
-/* Left: brand panel with the logo banner. */
+/* Left: brand panel with the logo banner and three feature lines.
+   Its tint (#F1F0FB in the prototype) sits between --accent-soft and
+   --surface-sunken, so it is a local value. */
 .brandPanel {
+  --login-brand-bg: #F1F0FB;
   flex: 999 1 35rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
   padding: 3rem 2.5rem;
-  background: var(--surface-muted);
+  gap: 2rem;
+  background: var(--login-brand-bg);
 }
 
 .banner {
@@ -23,7 +26,34 @@
   width: 100%;
   max-width: 55rem;
   height: auto;
-  border-radius: var(--radius);
+  border-radius: 0.75rem;
+  align-self: center;
+}
+
+.features {
+  width: 100%;
+  max-width: 55rem;
+  align-self: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(12.5rem, 100%), 1fr));
+  gap: 1.5rem;
+}
+
+.feature {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.featureTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.featureText {
+  font-size: 0.8125rem;
+  color: var(--muted);
 }
 
 /* Right: sign-in form. */
@@ -90,7 +120,7 @@
 .label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
 .input {
@@ -111,11 +141,30 @@
   border-color: var(--accent);
 }
 
-/* Full-width, 2.75rem primary button (Button takes no className). */
-.actionRow > button {
+/* Full-width 44px primary button */
+.submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   min-height: 2.75rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--surface);
+  font: inherit;
   font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (max-width: 480px) {

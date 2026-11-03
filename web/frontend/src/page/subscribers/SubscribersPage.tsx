@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '../../components/sidebar/Sidebar'
-import Button from '../../components/button/button'
+import AppLayout from '../../components/layout/AppLayout'
 import Modal from '../../components/modal/modal'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -9,11 +8,21 @@ import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleAp
 import type { Subscriber } from '../../webconsoleApi'
 import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
 import { BULK_CONCURRENCY, runLimited } from './bulk'
-import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
-
-const PAGE_SIZE = 10
 import styles from './webconsole-style.module.css'
+
+const PAGE_SIZES = [10, 50, 100]
+
+// pageButtons is the numbered buttons of the footer pager: the first and
+// last page, the current one and its neighbours, null for a gap.
+function pageButtons(current: number, pages: number): Array<number | null> {
+  const out: Array<number | null> = []
+  for (let n = 1; n <= pages; n++) {
+    if (n === 1 || n === pages || Math.abs(n - current) <= 1) out.push(n)
+    else if (out[out.length - 1] !== null) out.push(null)
+  }
+  return out
+}
 
 export default function SubscribersPage() {
   const navigate = useNavigate()
@@ -24,6 +33,8 @@ export default function SubscribersPage() {
   const [deletingUeId, setDeletingUeId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Subscriber | null>(null)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0])
+  const [plmn, setPlmn] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [isConfirmingBulk, setIsConfirmingBulk] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<number | null>(null) // deletions done, while running
@@ -66,14 +77,18 @@ export default function SubscribersPage() {
   // would shuffle the pages
   const filteredSubscribers = useMemo(() => {
     const query = search.trim().toLowerCase()
-    const matching = !query ? subscribers : subscribers.filter((subscriber) =>
-      subscriber.ueId.toLowerCase().includes(query) ||
-      subscriber.plmnID.toLowerCase().includes(query) ||
-      (subscriber.gpsi || '').toLowerCase().includes(query))
+    const matching = subscribers.filter((subscriber) =>
+      (!plmn || subscriber.plmnID === plmn) &&
+      (!query ||
+        subscriber.ueId.toLowerCase().includes(query) ||
+        subscriber.plmnID.toLowerCase().includes(query) ||
+        (subscriber.gpsi || '').toLowerCase().includes(query)))
     return [...matching].sort((a, b) => a.ueId.localeCompare(b.ueId) || a.plmnID.localeCompare(b.plmnID))
-  }, [subscribers, search])
+  }, [subscribers, search, plmn])
+  const plmns = useMemo(() => Array.from(new Set(subscribers.map((s) => s.plmnID))).sort(), [subscribers])
+  const isFiltered = Boolean(search.trim() || plmn)
 
-  const shown = pageOf(filteredSubscribers, page, PAGE_SIZE)
+  const shown = pageOf(filteredSubscribers, page, pageSize)
   const keyOf = (s: Subscriber) => `${s.ueId}|${s.plmnID}`
   const selectedSubscribers = subscribers.filter((s) => selected.has(keyOf(s)))
   // the header checkbox selects every subscriber matching the search, on
@@ -134,123 +149,181 @@ export default function SubscribersPage() {
   }
 
   return (
-    <div className={styles.layout}>
-      <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
-      <Sidebar />
+    <AppLayout
+      crumbs={[{ label: 'Subscribers' }]}
+      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+    >
+      <section className={styles.pageHeader}>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>Subscribers</h1>
+          <p className={styles.subtitle}>Subscriptions in free5GC&apos;s UDR, managed through its WebConsole.</p>
+        </div>
+        <div className={styles.headerActions}>
+          {selectedSubscribers.length > 0 && (
+            <>
+              <button type="button" className={styles.btn} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
+                Clear selection
+              </button>
+              <button type="button" className={`${styles.btn} ${styles.btnDangerText}`} onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
+                {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete ${selectedSubscribers.length} selected`}
+              </button>
+            </>
+          )}
+          <button type="button" className={styles.btn} onClick={() => { setUeCount('2'); setIsAskingCount(true) }}>Add in bulk</button>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/subscribers/new')}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M7 2v10M2 7h10" /></svg>
+            Add subscriber
+          </button>
+        </div>
+      </section>
 
-      <main className={styles.content}>
-        <header className={styles.pageHeader}>
-          <div className={styles.titleBlock}>
-            <h1 className={styles.title}>Subscribers</h1>
-            <p className={styles.subtitle}>Subscriptions in free5GC&apos;s UDR, managed through its WebConsole.</p>
-          </div>
-          <div className={styles.headerActions}>
-            {selectedSubscribers.length > 0 && (
-              <>
-                <Button variant="secondary" onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
-                  Clear selection
-                </Button>
-                <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
-                  {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
-                </Button>
-              </>
-            )}
-            <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add subscriber</Button>
-          </div>
-        </header>
+      <section className={styles.panel}>
+        <div className={styles.toolbar}>
+          <input
+            className={`${styles.in} ${styles.search}`}
+            aria-label="Search subscribers"
+            placeholder="Search SUPI or GPSI"
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); setPage(1) }}
+          />
+          <select
+            className={styles.in}
+            aria-label="PLMN"
+            value={plmn}
+            onChange={(event) => { setPlmn(event.target.value); setPage(1) }}
+          >
+            <option value="">All PLMNs</option>
+            {plmns.map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+          {!isLoading && !loadError && (
+            <span className={`num ${styles.range}`}>
+              {shown.from}–{shown.to} of {filteredSubscribers.length.toLocaleString()}
+              {filteredSubscribers.length !== subscribers.length && <> (of {subscribers.length.toLocaleString()})</>}
+            </span>
+          )}
+        </div>
 
-        <section className={styles.panel}>
-          <div className={styles.toolbar}>
-            <input
-              className={`${styles.input} ${styles.search}`}
-              aria-label="Search subscribers"
-              placeholder={`Search Subscriber (${filteredSubscribers.length} / ${subscribers.length})`}
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1) }}
-            />
-          </div>
-
-          {isLoading ? (
-            <p className={styles.emptyState}>Loading subscribers…</p>
-          ) : loadError ? (
-            <p className={styles.emptyState}>{loadError}</p>
-          ) : filteredSubscribers.length === 0 ? (
-            <p className={styles.emptyState}>No Subscription</p>
-          ) : (
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th className={styles.checkCell}>
+        {isLoading ? (
+          <p className={styles.emptyState}>Loading subscribers…</p>
+        ) : loadError ? (
+          <p className={styles.emptyState}>{loadError}</p>
+        ) : filteredSubscribers.length === 0 ? (
+          <p className={styles.emptyState}>No Subscription</p>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={`${styles.th} ${styles.checkCell}`}>
+                    <input
+                      type="checkbox"
+                      aria-label={isFiltered ? 'Select all matching subscribers' : 'Select all subscribers'}
+                      title={`Select all ${filteredSubscribers.length}${isFiltered ? ' matching' : ''}, on every page`}
+                      checked={allMatchingSelected}
+                      ref={(el) => { if (el) el.indeterminate = someMatchingSelected && !allMatchingSelected }}
+                      onChange={() => setMany(filteredSubscribers, !allMatchingSelected)}
+                      disabled={isBulkDeleting}
+                    />
+                  </th>
+                  <th className={styles.th}>UE ID</th>
+                  <th className={styles.th}>PLMN</th>
+                  <th className={styles.th}>GPSI</th>
+                  <th className={`${styles.th} ${styles.right}`}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.items.map((subscriber) => (
+                  <tr key={`${subscriber.ueId}-${subscriber.plmnID}`} className={styles.row}>
+                    <td className={styles.td}>
                       <input
                         type="checkbox"
-                        aria-label={search.trim() ? 'Select all matching subscribers' : 'Select all subscribers'}
-                        title={`Select all ${filteredSubscribers.length}${search.trim() ? ' matching' : ''}, on every page`}
-                        checked={allMatchingSelected}
-                        ref={(el) => { if (el) el.indeterminate = someMatchingSelected && !allMatchingSelected }}
-                        onChange={() => setMany(filteredSubscribers, !allMatchingSelected)}
+                        aria-label={`Select ${subscriber.ueId}`}
+                        checked={selected.has(keyOf(subscriber))}
+                        onChange={() => toggle(subscriber)}
                         disabled={isBulkDeleting}
                       />
-                    </th>
-                    <th>UE ID</th>
-                    <th>PLMN</th>
-                    <th>GPSI</th>
-                    <th className={styles.right}>Actions</th>
+                    </td>
+                    <td className={`${styles.td} num`}>{subscriber.ueId}</td>
+                    <td className={`${styles.td} num`}>{subscriber.plmnID}</td>
+                    <td className={`${styles.td} num ${styles.mutedCell}`}>{subscriber.gpsi || '—'}</td>
+                    <td className={`${styles.td} ${styles.right}`}>
+                      <button
+                        type="button"
+                        className={styles.link}
+                        onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
+                      >
+                        View
+                      </button>
+                      <span className={styles.sep} aria-hidden="true">|</span>
+                      <button
+                        type="button"
+                        className={styles.link}
+                        onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
+                      >
+                        Edit
+                      </button>
+                      <span className={styles.sep} aria-hidden="true">|</span>
+                      <button
+                        type="button"
+                        className={styles.linkDanger}
+                        onClick={() => setConfirmTarget(subscriber)}
+                        disabled={deletingUeId === subscriber.ueId}
+                      >
+                        {deletingUeId === subscriber.ueId ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {shown.items.map((subscriber) => (
-                    <tr key={`${subscriber.ueId}-${subscriber.plmnID}`}>
-                      <td className={styles.checkCell}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${subscriber.ueId}`}
-                          checked={selected.has(keyOf(subscriber))}
-                          onChange={() => toggle(subscriber)}
-                          disabled={isBulkDeleting}
-                        />
-                      </td>
-                      <td className={styles.mono}>{subscriber.ueId}</td>
-                      <td className={styles.mono}>{subscriber.plmnID}</td>
-                      <td className={`${styles.mono} ${styles.mutedCell}`}>{subscriber.gpsi || '—'}</td>
-                      <td className={styles.right}>
-                        <button
-                          type="button"
-                          className={styles.btnLink}
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
-                        >
-                          View
-                        </button>
-                        <span className={styles.sep} aria-hidden="true">|</span>
-                        <button
-                          type="button"
-                          className={styles.btnLink}
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
-                        >
-                          Edit
-                        </button>
-                        <span className={styles.sep} aria-hidden="true">|</span>
-                        <button
-                          type="button"
-                          className={styles.btnLinkDanger}
-                          onClick={() => setConfirmTarget(subscriber)}
-                          disabled={deletingUeId === subscriber.ueId}
-                        >
-                          {deletingUeId === subscriber.ueId ? 'Deleting…' : 'Delete'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {!isLoading && !loadError && (
-            <div className={styles.footer}><Pager page={shown} total={filteredSubscribers.length} onChange={setPage} /></div>
-          )}
-        </section>
-      </main>
+        {!isLoading && !loadError && filteredSubscribers.length > 0 && (
+          <div className={styles.footer}>
+            <label htmlFor="rows-per-page">Rows per page</label>
+            <select
+              id="rows-per-page"
+              className={`${styles.in} ${styles.footerSelect}`}
+              value={pageSize}
+              onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1) }}
+            >
+              {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <nav className={styles.pages} aria-label="Pages">
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSm} ${styles.btnMuted}`}
+                onClick={() => setPage(shown.page - 1)}
+                disabled={shown.page === 1}
+              >
+                Previous
+              </button>
+              {pageButtons(shown.page, shown.pages).map((n, i) => n === null
+                ? <span key={`gap-${i}`} className={styles.ellipsis} aria-hidden="true">…</span>
+                : (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`${styles.btn} ${styles.btnSm} num ${n === shown.page ? styles.btnCurrent : ''}`}
+                    aria-current={n === shown.page ? 'page' : undefined}
+                    onClick={() => setPage(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSm}`}
+                onClick={() => setPage(shown.page + 1)}
+                disabled={shown.page === shown.pages}
+              >
+                Next
+              </button>
+            </nav>
+          </div>
+        )}
+      </section>
 
       <Modal
         isOpen={confirmTarget !== null}
@@ -281,7 +354,7 @@ export default function SubscribersPage() {
         onSubmit={startAdd}
       >
         <form className={styles.countForm} onSubmit={(event) => { event.preventDefault(); startAdd() }}>
-          <div className={styles.field}>
+          <div className={styles.fld}>
             <label htmlFor="ue-count">How many UEs?</label>
             <input
               id="ue-count"
@@ -301,6 +374,6 @@ export default function SubscribersPage() {
           </p>
         </form>
       </Modal>
-    </div>
+    </AppLayout>
   )
 }

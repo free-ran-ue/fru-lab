@@ -1,100 +1,131 @@
+/* The prototype's topology body: UE column → Uu → RAN → N2 / N3 → core box */
 .canvas {
+  padding: 1.5rem 1.25rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  row-gap: 0.75rem;
-  width: 100%;
-  margin: auto 0;
-  padding: 1.5rem 0.5rem;
-  box-sizing: border-box;
+  gap: 0.5rem;
+  overflow-x: auto;
+  background: #FBFBFE;
 }
 
-.node {
-  flex: 1 1 12.5rem;
-  max-width: 16.25rem;
-  min-width: 10rem;
-  padding: 0.75rem 0.875rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  text-align: left;
+.colLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.colLabelButton {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-family: inherit;
-  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.colLabelButton:hover,
+.colLabelButton[aria-pressed='true'] {
+  color: var(--accent-ink);
+}
+
+.ueColumn {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  gap: 0.5rem;
+}
+
+.ranColumn {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.coreColumn {
+  flex: 1 0 26.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* .node */
+.node {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
 }
 
 .node:hover {
   border-color: var(--border-strong);
 }
 
-.nodeSelected,
-.nodeSelected:hover {
+/* .node-on */
+.nodeOn,
+.nodeOn:hover {
   border-color: var(--accent);
-  box-shadow: 0 0 0 0.1875rem var(--accent-ring);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-.nodeHead {
+.ueChip {
+  padding: 0.5rem 0.625rem;
+}
+
+.ueId {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.ueEmpty {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gnbNode {
+  padding: 0.875rem 1rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+
+.gnbHead {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.nodeDot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 62.4375rem;
-  flex-shrink: 0;
-}
-
-.nodeLabel {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.nodeSublabel {
-  margin-bottom: 0.375rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.statusPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 2px 0.5rem;
-  border-radius: 62.4375rem;
+.gnbSub {
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 400;
+  white-space: nowrap;
 }
 
-.statusDot {
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 62.4375rem;
-  display: inline-block;
-}
-
-.connector {
+/* .link */
+.link {
+  flex: 1 1 2.5rem;
+  min-width: 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
-  flex: 0 1 4.5rem;
-  min-width: 2rem;
-  padding: 0 0.375rem;
-}
-
-.connectorLabel {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 500;
@@ -102,9 +133,36 @@
   white-space: nowrap;
 }
 
-.connectorLine {
+.linkLine {
   display: block;
   width: 100%;
   height: 0;
-  border-top: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--surface));
+  border-top: 2px dashed #A9A4E8;
+}
+
+.coreBox {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  background: var(--surface);
+}
+
+.coreBoxOn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.nfName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coreEmpty {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-weight: 400;
 }
