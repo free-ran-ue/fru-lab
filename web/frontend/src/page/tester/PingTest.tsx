@@ -2,12 +2,14 @@ import { useState } from 'react'
 import Button from '../../components/button/button'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterFieldError, TesterPingResult, TesterPingRequestPlaneEnum, TesterProfile } from '../../api'
+import { forTester } from './testerDefaults'
 import styles from './tester.module.css'
 
 interface PingTestProps {
   plane: TesterPingRequestPlaneEnum
   label: string
   profile: TesterProfile
+  testerId: string
 }
 
 type PingState =
@@ -31,13 +33,13 @@ function avgMs(rtts: number[]): string {
 // PingTest checks one network the way a run would use it: fru-tester puts
 // the run's address on the interface, pings the core's address and removes
 // it again.
-export default function PingTest({ plane, label, profile }: PingTestProps) {
+export default function PingTest({ plane, label, profile, testerId }: PingTestProps) {
   const [state, setState] = useState<PingState>({ kind: 'idle' })
 
   async function handlePing() {
     setState({ kind: 'busy' })
     try {
-      const response = await api.testerNetworkPing({ plane, profile })
+      const response = await api.testerByIdNetworkPing(testerId, { plane, profile: forTester(profile) })
       setState({ kind: 'done', result: response.data })
     } catch (error) {
       setState({ kind: 'failed', message: extractErrorMessage(error, 'Ping test failed'), fields: fieldErrorsOf(error) })

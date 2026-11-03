@@ -7,10 +7,11 @@ import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
 import LogsPage from './page/logs/LogsPage'
 import ImagesPage from './page/images/ImagesPage'
 import TesterSetupPage from './page/tester/TesterSetupPage'
-import TesterRunPage from './page/tester/TesterRunPage'
+import TesterRunDetailPage from './page/tester/TesterRunPage'
+import TesterRunsPage from './page/tester/TesterRunsPage'
 import TesterHistoryPage from './page/tester/TesterHistoryPage'
 import TesterProfilesPage from './page/tester/TesterProfilesPage'
-import TesterSystemPage from './page/tester/TesterSystemPage'
+import TesterStatusPage, { TesterDetailPage } from './page/tester/TesterStatusPage'
 import TesterBenchPage from './page/tester/TesterBenchPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -102,7 +103,15 @@ export default function App() {
         path="/tester/run"
         element={(
           <RequireAuth>
-            <TesterRunPage />
+            <TesterRunsPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/tester/run/:testerId"
+        element={(
+          <RequireAuth>
+            <TesterRunDetailPage />
           </RequireAuth>
         )}
       />
@@ -115,13 +124,23 @@ export default function App() {
         )}
       />
       <Route
-        path="/tester/system"
+        path="/tester/status"
         element={(
           <RequireAuth>
-            <TesterSystemPage />
+            <TesterStatusPage />
           </RequireAuth>
         )}
       />
+      <Route
+        path="/tester/status/:testerId"
+        element={(
+          <RequireAuth>
+            <TesterDetailPage />
+          </RequireAuth>
+        )}
+      />
+      {/* the Status page replaced the System page */}
+      <Route path="/tester/system" element={<Navigate to="/tester/status" replace />} />
       <Route
         path="/tester/bench"
         element={(

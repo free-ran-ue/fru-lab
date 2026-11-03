@@ -43,7 +43,7 @@ type Deps struct {
 	// MaxDurationUnit is what one unit of Traffic.MaxDurationMin lasts;
 	// zero = time.Minute (tests shorten it).
 	MaxDurationUnit time.Duration
-	// Cpus keeps the System page's CPU allocation; nil = never pin.
+	// Cpus keeps the Status page's CPU allocation; nil = never pin.
 	Cpus CpuStore
 	// SetProcessCpus moves the whole process to a set of CPUs; nil =
 	// cpuset.SetProcess (tests record the calls instead).
@@ -341,7 +341,7 @@ type run struct {
 	pduStage         *procStage
 	teids            gnb.TeidAllocator
 	cp               *cpLoop // the control-plane test
-	// cpus is the System page's allocation when the run started: cpCpus
+	// cpus is the Status page's allocation when the run started: cpCpus
 	// holds the process for the run, dpCpus the data plane's threads.
 	cpus           cpuset.Allocation
 	cpCpus, dpCpus cpuset.Set

@@ -41,8 +41,31 @@ export function formatLoss(rate: number): string {
 // A browser WebSocket can't set an Authorization header, so the stream
 // takes the JWT as ?token= (checked by fru-lab's handleTesterStream),
 // mirroring dashboard/terminalSocket.ts.
-export function buildTesterStreamUrl(): string {
+export function buildTesterStreamUrl(testerId: string): string {
   const wsBase = apiBaseUrl.replace(/^http/, 'ws')
   const token = localStorage.getItem('token') ?? ''
-  return `${wsBase}/api/tester/run/stream?token=${encodeURIComponent(token)}`
+  return `${wsBase}/api/testers/${encodeURIComponent(testerId)}/run/stream?token=${encodeURIComponent(token)}`
+}
+
+// formatBytes renders a memory size in binary units, e.g. 3.2 GiB.
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
+  let v = bytes
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i += 1
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+// formatDuration renders seconds as the two largest units, e.g. 3d 4h.
+export function formatDuration(sec: number): string {
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${sec % 60}s`
+  return `${sec}s`
 }

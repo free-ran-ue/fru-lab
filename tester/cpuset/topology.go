@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-// Topology is what the System page shows to help choose CPUs.
+// Topology is what the Status page shows to help choose CPUs.
 type Topology struct {
 	Online     string      `json:"online"`  // CPUs the kernel runs
 	Allowed    string      `json:"allowed"` // of those, the ones fru-tester may use

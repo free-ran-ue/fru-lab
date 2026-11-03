@@ -1057,7 +1057,7 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
   /api/tester/system:
     get:
-      summary: The tester host's CPU allocation and layout (System page)
+      summary: The tester host's CPU allocation and layout (Status page)
       description: Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
       operationId: testerSystemGet
       security:
@@ -1071,7 +1071,7 @@ paths:
                 $ref: '#/components/schemas/TesterSystemInfo'
   /api/tester/system/cpuload:
     get:
-      summary: How busy each CPU of the tester host is (System page)
+      summary: How busy each CPU of the tester host is (Status page)
       description: Forwarded to fru-tester, which reads /proc/stat. The whole host's load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
       operationId: testerSystemCpuLoad
       security:
@@ -1083,6 +1083,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TesterCpuLoad'
+  /api/tester/status:
+    get:
+      summary: The tester host and process (Status page)
+      description: Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
+      operationId: testerStatusGet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStatus'
+        '502':
+          description: fru-tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/system/cpus:
     put:
       summary: Set the CPU allocation for the next runs
@@ -1115,6 +1135,410 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/testers:
+    get:
+      summary: Every tester fru-lab can reach (Status page)
+      description: The tester in config.yaml (backend.tester, id "default", builtIn) first, then the ones added here. API tokens are never returned; each tester's name comes from its own status.
+      operationId: testersList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterEntry'
+    post:
+      summary: Add a tester
+      description: fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
+      operationId: testersAdd
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterAddRequest'
+      responses:
+        '201':
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterAdded'
+        '400':
+          description: Not added; the message says why (unreachable, wrong token, already listed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}:
+    delete:
+      summary: Remove an added tester
+      description: Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
+      operationId: testersDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: The tester in config.yaml
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/status:
+    get:
+      summary: One tester's host and process
+      description: Forwarded to that tester's /api/status, like /api/tester/status is to the tester in config.yaml.
+      operationId: testerByIdStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStatus'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/run:
+    get:
+      summary: One tester's run
+      description: Forwarded to that tester's /api/run, like /api/tester/run is to the tester in config.yaml.
+      operationId: testerByIdRun
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Start a run on one tester
+      description: Forwarded to that tester's /api/run, like /api/tester/run is to the tester in config.yaml.
+      operationId: testerByIdRunStart
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '202':
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '400':
+          description: Invalid profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run or a bench is already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/run/stop:
+    post:
+      summary: Stop the active run on one tester
+      description: Forwarded to that tester's /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run's live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+      operationId: testerByIdRunStop
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '202':
+          description: Stop requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '409':
+          description: No active run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/profile/validate:
+    post:
+      summary: Validate a profile on one tester
+      description: Forwarded to that tester's /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
+      operationId: testerByIdProfileValidate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterValidateResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/network/interfaces:
+    get:
+      summary: One tester's network interfaces
+      description: Forwarded to that tester's /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
+      operationId: testerByIdNetworkInterfaces
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TesterInterface'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/network/ping:
+    post:
+      summary: Ping test from one tester
+      description: Forwarded to that tester's /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
+      operationId: testerByIdNetworkPing
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterPingRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterPingResult'
+        '400':
+          description: Invalid profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterStartErrorResponse'
+        '409':
+          description: A run is active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/system:
+    get:
+      summary: One tester's CPU allocation and layout
+      description: Forwarded to that tester's /api/system, like /api/tester/system is to the tester in config.yaml.
+      operationId: testerByIdSystem
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterSystemInfo'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/system/cpuload:
+    get:
+      summary: How busy each CPU of one tester's host is
+      description: Forwarded to that tester's /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
+      operationId: testerByIdCpuLoad
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpuLoad'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/system/cpus:
+    put:
+      summary: Set one tester's CPU allocation
+      description: Forwarded to that tester's /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
+      operationId: testerByIdCpusPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterCpuAllocation'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterCpuAllocation'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/history:
     get:
       summary: Finished runs, newest first
@@ -1141,6 +1565,7 @@ paths:
         - name: runId
           in: path
           required: true
+          description: The run's id from the history list (TesterHistorySummary.id).
           schema:
             type: string
       responses:
@@ -1167,6 +1592,7 @@ paths:
         - name: runId
           in: path
           required: true
+          description: The run's id from the history list (TesterHistorySummary.id).
           schema:
             type: string
       responses:
@@ -1189,6 +1615,14 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    TesterId:
+      name: id
+      in: path
+      required: true
+      description: A tester from GET /api/testers; "default" is the one in config.yaml.
+      schema:
+        type: string
+        example: default
     UeInstance:
       name: instance
       in: path
@@ -1448,6 +1882,10 @@ components:
         name:
           type: string
           example: 1000 UE baseline
+        testerId:
+          type: string
+          description: Which tester (GET /api/testers) runs this profile; absent means "default", the one in config.yaml. Only fru-lab reads it; leave it out of what is sent to a tester, which rejects fields it does not know.
+          example: default
         scale:
           type: object
           required: [gnbCount, ueCount, throughputUeCount]
@@ -1875,6 +2313,123 @@ components:
           $ref: '#/components/schemas/TesterCpuAllocation'
         topology:
           $ref: '#/components/schemas/TesterTopology'
+    TesterEntry:
+      type: object
+      required: [id, url, builtIn]
+      properties:
+        id:
+          type: string
+          description: '"default" for the tester in config.yaml.'
+        url:
+          type: string
+        builtIn:
+          type: boolean
+          description: The tester in config.yaml; it cannot be removed.
+    TesterAddRequest:
+      type: object
+      required: [url, apiToken]
+      properties:
+        url:
+          type: string
+          example: http://10.0.0.2:9100
+        apiToken:
+          type: string
+          description: The apiToken in that tester's tester.yaml.
+    TesterAdded:
+      allOf:
+        - $ref: '#/components/schemas/TesterEntry'
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+              description: The name the tester reported.
+    TesterStatus:
+      type: object
+      required: [name, hostname, version, goVersion, kernel, pid, startedAt, uptimeSec, memory, cpu, capabilities]
+      properties:
+        name:
+          type: string
+          description: The tester's testerName (tester.yaml); its host name when that is empty.
+        hostname:
+          type: string
+        version:
+          type: string
+          description: VCS revision fru-tester was built from; empty when the build does not say.
+        goVersion:
+          type: string
+        kernel:
+          type: string
+          description: Kernel release of the tester host.
+        pid:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        uptimeSec:
+          type: integer
+          format: int64
+        memory:
+          type: object
+          description: Bytes.
+          required: [hostTotal, hostAvailable, processRss, goHeap, cgroupLimit, cgroupUsage]
+          properties:
+            hostTotal:
+              type: integer
+              format: int64
+            hostAvailable:
+              type: integer
+              format: int64
+            processRss:
+              type: integer
+              format: int64
+              description: fru-tester's resident memory.
+            goHeap:
+              type: integer
+              format: int64
+            cgroupLimit:
+              type: integer
+              format: int64
+              nullable: true
+              description: Memory limit of fru-tester's cgroup (its container); null when there is none.
+            cgroupUsage:
+              type: integer
+              format: int64
+              nullable: true
+              description: What the cgroup uses, page cache included; null when it cannot be read.
+        cpu:
+          type: object
+          required: [online, allowed, load1, load5, load15, goroutines]
+          properties:
+            online:
+              type: integer
+            allowed:
+              type: integer
+              description: CPUs fru-tester may use.
+            load1:
+              type: number
+            load5:
+              type: number
+            load15:
+              type: number
+            goroutines:
+              type: integer
+        capabilities:
+          type: object
+          required: [netAdmin, bpf, ipcLock, sctp]
+          properties:
+            netAdmin:
+              type: boolean
+              description: Needed to add the gNB IPs and the UE route.
+            bpf:
+              type: boolean
+              description: Needed by the AF_XDP engine (CAP_BPF, or CAP_SYS_ADMIN before Linux 5.8).
+            ipcLock:
+              type: boolean
+              description: Needed by the AF_XDP engine.
+            sctp:
+              type: boolean
+              description: The sctp kernel module is loaded.
     TesterCpuLoad:
       type: object
       required: [intervalMs, cpus]
@@ -2191,8 +2746,18 @@ components:
           $ref: '#/components/schemas/TesterRunSnapshot'
     TesterHistorySummary:
       type: object
-      required: [runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
+      required: [id, testerId, testerName, runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
       properties:
+        id:
+          type: string
+          description: Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester's runs; the run ID, "@" and the tester's id for another tester's.
+          example: 20261030-105502@6e465eabcfd7a7a9
+        testerId:
+          type: string
+          description: The tester that ran it ("default" for the one in config.yaml, and for runs stored before testers could be added).
+        testerName:
+          type: string
+          description: That tester's name when the run was stored; empty for runs stored before testers could be added.
         runId:
           type: string
         profileName:

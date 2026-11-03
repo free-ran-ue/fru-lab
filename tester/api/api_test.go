@@ -14,6 +14,7 @@ import (
 
 	"tester/bench"
 	"tester/cpuset"
+	"tester/hoststat"
 	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
@@ -72,7 +73,7 @@ func (f *fakeBench) Result() bench.Result                       { return f.resul
 func (f *fakeBench) Running() bool                              { return f.running }
 
 func newTestRouter(ctrl Controller, token string) http.Handler {
-	return NewRouter(ctrl, &fakeBench{}, token)
+	return NewRouter(ctrl, &fakeBench{}, token, "lab-1")
 }
 
 func do(t *testing.T, h http.Handler, method, path, body, token string) *httptest.ResponseRecorder {
@@ -200,7 +201,7 @@ func TestReportsCarryProfileAndSnapshot(t *testing.T) {
 
 func TestBenchStartAndResult(t *testing.T) {
 	b := &fakeBench{result: bench.Result{State: bench.StateRunning, Cpus: 6, PlannedSenders: []int{1, 2, 4, 6}, Steps: []bench.Step{}}}
-	h := NewRouter(&fakeCtrl{}, b, "t")
+	h := NewRouter(&fakeCtrl{}, b, "t", "lab-1")
 	rec := do(t, h, http.MethodPost, "/api/bench", `{"packetSize":1400,"stepSeconds":3}`, "t")
 	require.Equal(t, http.StatusAccepted, rec.Code)
 	require.Contains(t, rec.Body.String(), `"plannedSenders":[1,2,4,6]`)
@@ -215,14 +216,14 @@ func TestBenchRejectsBadSettingsAndConflicts(t *testing.T) {
 		bench.ErrBenchRunning:    http.StatusConflict,
 		bench.ErrRunActive:       http.StatusConflict,
 	} {
-		h := NewRouter(&fakeCtrl{}, &fakeBench{startErr: err}, "t")
+		h := NewRouter(&fakeCtrl{}, &fakeBench{startErr: err}, "t", "lab-1")
 		rec := do(t, h, http.MethodPost, "/api/bench", `{"packetSize":1400,"stepSeconds":3}`, "t")
 		require.Equal(t, code, rec.Code, err.Error())
 	}
 }
 
 func TestARunCannotStartDuringABench(t *testing.T) {
-	h := NewRouter(&fakeCtrl{}, &fakeBench{running: true}, "t")
+	h := NewRouter(&fakeCtrl{}, &fakeBench{running: true}, "t", "lab-1")
 	rec := do(t, h, http.MethodPost, "/api/run", `{}`, "t")
 	require.Equal(t, http.StatusConflict, rec.Code)
 	require.Contains(t, rec.Body.String(), "bench")
@@ -292,4 +293,17 @@ func TestSystemCpuLoad(t *testing.T) {
 	require.NotEmpty(t, l.Cpus)
 	require.Positive(t, l.IntervalMs)
 	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/system/cpuload", "", "x").Code)
+}
+
+// The status page reads the tester host's state with the API token.
+func TestStatus(t *testing.T) {
+	h := newTestRouter(&fakeCtrl{}, "t")
+	rec := do(t, h, http.MethodGet, "/api/status", "", "t")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var s hoststat.Status
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &s))
+	require.Equal(t, "lab-1", s.Name)
+	require.NotEmpty(t, s.Hostname)
+	require.NotZero(t, s.Memory.HostTotal)
+	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/status", "", "x").Code)
 }

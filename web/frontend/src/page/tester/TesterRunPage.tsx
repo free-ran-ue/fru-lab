@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import Sidebar from '../../components/sidebar/Sidebar'
 import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
@@ -12,6 +12,7 @@ import type {
   TesterTrafficPoint, TesterUeSummary,
 } from '../../api'
 import { buildTesterStreamUrl, formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
+import { useTesters } from './useTesters'
 import styles from './tester.module.css'
 
 const RECONNECT_MS = 2000
@@ -388,17 +389,22 @@ function StageCard({ title, stage }: { title: string, stage: TesterStageSnapshot
   )
 }
 
-export default function TesterRunPage() {
+// TesterRunDetailPage is the run on one tester, live.
+export default function TesterRunDetailPage() {
+  const { testerId = '' } = useParams()
+  const { testers } = useTesters()
+  const tester = testers?.find((t) => t.id === testerId)
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [snapshot, setSnapshot] = useState<TesterRunSnapshot | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
 
   useEffect(() => {
-    api.testerRunGet()
+    setSnapshot(null)
+    api.testerByIdRun(testerId)
       .then((response) => setSnapshot(response.data))
       .catch((error) => addError(extractErrorMessage(error, 'Failed to load the run')))
-  }, [addError])
+  }, [addError, testerId])
 
   // Keep one stream open while the page is mounted; reconnect after drops
   // (fru-tester restart, network blip) so the numbers never silently freeze.
@@ -408,7 +414,7 @@ export default function TesterRunPage() {
     let closedByPage = false
 
     const connect = () => {
-      socket = new WebSocket(buildTesterStreamUrl())
+      socket = new WebSocket(buildTesterStreamUrl(testerId))
       socket.onopen = () => setIsConnected(true)
       socket.onmessage = (event) => setSnapshot(JSON.parse(event.data) as TesterRunSnapshot)
       socket.onclose = () => {
@@ -422,7 +428,7 @@ export default function TesterRunPage() {
       window.clearTimeout(retryTimer)
       socket?.close()
     }
-  }, [])
+  }, [testerId])
 
   const isActive = snapshot ? ACTIVE_STATES.includes(snapshot.state) : false
   const isCleaningUp = snapshot?.state === 'stopping'
@@ -432,14 +438,16 @@ export default function TesterRunPage() {
     if (isCleaningUp && !window.confirm('Skip the remaining deregistrations? SCTP is still closed and the IPs removed.')) return
     setIsStopping(true)
     try {
-      await api.testerRunStop()
+      await api.testerByIdRunStop(testerId)
       addSuccess(isCleaningUp ? 'Skipping the rest of the cleanup' : 'Stopping: deregistering UEs, then closing N2')
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to stop the run'))
     } finally {
       setIsStopping(false)
     }
-  }, [addError, addSuccess, isCleaningUp])
+  }, [addError, addSuccess, isCleaningUp, testerId])
+
+  if (testers !== null && !tester) return <Navigate to="/tester/run" replace />
 
   return (
     <div className={styles.layout}>
@@ -449,7 +457,8 @@ export default function TesterRunPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · Run</h2>
+            <Link to="/tester/run" className={styles.linkButton}>← All runs</Link>
+            <h2 className={styles.title}>Throughput Tester · Run{tester ? ` · ${tester.name}` : ''}</h2>
             <p className={styles.subtitle}>
               {snapshot && snapshot.state !== 'idle'
                 ? <>Run <span className={styles.mono}>{snapshot.runId}</span> · {snapshot.profileName}{snapshot.startedAt && ` · started ${new Date(snapshot.startedAt).toLocaleString()}`}

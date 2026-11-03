@@ -30,14 +30,46 @@ type testerRunStore interface {
 	GetTesterRun(runID string) ([]byte, error)
 }
 
-// testerHistoryWatcher copies each finished run from fru-tester into
-// fru-lab's DB. fru-tester keeps its last few finished runs; fru-lab polls
-// them and stores every one it has not seen yet.
+// testerHistoryWatcher copies each finished run from every tester into
+// fru-lab's DB. A tester keeps its last few finished runs; fru-lab polls
+// them and stores every one it has not seen yet, noting which tester ran
+// it.
 type testerHistoryWatcher struct {
-	url, token string
-	client     *http.Client
-	store      testerRunStore
-	log        loggergoModel.LoggerInterface
+	testers *testerRegistry
+	client  *http.Client
+	store   testerRunStore
+	log     loggergoModel.LoggerInterface
+}
+
+// historyKey is where a run is stored. The default tester's runs keep
+// their run ID, as before testers could be added; another tester's get
+// its id appended, so two testers' runs started in the same second do
+// not collide, and keys still sort by time.
+func historyKey(testerID, runID string) string {
+	if testerID == defaultTesterID {
+		return runID
+	}
+	return runID + "@" + testerID
+}
+
+// storedTester is which tester ran a stored run; fru-lab adds it to the
+// report it stores.
+type storedTester struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func withTester(raw []byte, t storedTester) ([]byte, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	b, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+	obj["tester"] = b
+	return json.Marshal(obj)
 }
 
 func (w *testerHistoryWatcher) run(ctx context.Context) {
@@ -55,13 +87,24 @@ func (w *testerHistoryWatcher) run(ctx context.Context) {
 	}
 }
 
-// poll stores fru-tester's finished runs that are new.
+// poll stores every tester's finished runs that are new; a tester that
+// does not answer does not hold up the others.
 func (w *testerHistoryWatcher) poll(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(w.url, "/")+"/api/run/reports", nil)
+	var errs []error
+	for _, t := range w.testers.all() {
+		if err := w.pollTester(ctx, t); err != nil {
+			errs = append(errs, fmt.Errorf("tester %s: %w", t.id, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (w *testerHistoryWatcher) pollTester(ctx context.Context, t *testerTarget) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(t.url, "/")+"/api/run/reports", nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+w.token)
+	req.Header.Set("Authorization", "Bearer "+t.token)
 	resp, err := w.client.Do(req)
 	if err != nil {
 		return err
@@ -83,12 +126,27 @@ func (w *testerHistoryWatcher) poll(ctx context.Context) error {
 		if err := json.Unmarshal(raw, &head); err != nil || head.Snapshot.RunID == "" {
 			return errors.New("report without a run id")
 		}
-		saved, err := w.store.SaveTesterRun(head.Snapshot.RunID, raw, testerHistoryKeep)
+		key := historyKey(t.id, head.Snapshot.RunID)
+		if old, err := w.store.GetTesterRun(key); err != nil {
+			return err
+		} else if old != nil {
+			continue
+		}
+		// the name it reports now; the id if it does not say
+		name, err := w.testers.probe(ctx, t.url, t.token)
+		if err != nil || name == "" {
+			name = t.id
+		}
+		stored, err := withTester(raw, storedTester{ID: t.id, Name: name})
+		if err != nil {
+			return fmt.Errorf("report %s: %w", head.Snapshot.RunID, err)
+		}
+		saved, err := w.store.SaveTesterRun(key, stored, testerHistoryKeep)
 		if err != nil {
 			return err
 		}
 		if saved {
-			w.log.Infof("Saved tester run %s to the history", head.Snapshot.RunID)
+			w.log.Infof("Saved %s's run %s to the history", name, head.Snapshot.RunID)
 		}
 	}
 	return nil
@@ -97,6 +155,10 @@ func (w *testerHistoryWatcher) poll(ctx context.Context) error {
 // testerHistorySummary is one row of the History page, read from a
 // stored report.
 type testerHistorySummary struct {
+	// ID is where the run is stored: the history routes take it.
+	ID                string     `json:"id"`
+	TesterID          string     `json:"testerId"`
+	TesterName        string     `json:"testerName"` // as it was when the run was stored; "" for older runs
 	RunID             string     `json:"runId"`
 	ProfileName       string     `json:"profileName"`
 	State             string     `json:"state"`
@@ -132,6 +194,7 @@ type storedDirection struct {
 
 // storedReport is the part of fru-tester's report the history reads.
 type storedReport struct {
+	Tester   *storedTester `json:"tester"` // absent: the default tester, stored before testers could be added
 	Snapshot struct {
 		RunID          string      `json:"runId"`
 		ProfileName    string      `json:"profileName"`
@@ -151,13 +214,18 @@ type storedReport struct {
 	} `json:"snapshot"`
 }
 
-func summarize(raw []byte) (testerHistorySummary, error) {
+func summarize(key string, raw []byte) (testerHistorySummary, error) {
 	var r storedReport
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return testerHistorySummary{}, err
 	}
+	tester := storedTester{ID: defaultTesterID}
+	if r.Tester != nil {
+		tester = *r.Tester
+	}
 	s, dp := r.Snapshot, r.Snapshot.Dataplane
 	return testerHistorySummary{
+		ID: key, TesterID: tester.ID, TesterName: tester.Name,
 		RunID: s.RunID, ProfileName: s.ProfileName, State: s.State, Error: s.Error, StopReason: s.StopReason,
 		StartedAt: s.StartedAt, StoppedAt: s.StoppedAt, GnbCount: s.N2.Expected, UeCount: s.Registration.Expected,
 		Registered: s.Registration.Accepted, RegistrationP95Ms: s.Registration.P95Ms,
@@ -179,7 +247,7 @@ func addTesterHistoryRoutes(group *gin.RouterGroup, store testerRunStore) {
 		}
 		out := []testerHistorySummary{}
 		for _, kv := range runs {
-			if s, err := summarize(kv.Value); err == nil {
+			if s, err := summarize(kv.Key, kv.Value); err == nil {
 				out = append(out, s)
 			}
 		}

@@ -21,12 +21,14 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	require.Equal(t, "tester-system.json", filepath.Base(cfg.SystemFile), "next to the config file")
 	require.True(t, filepath.IsAbs(cfg.SystemFile) || filepath.Dir(cfg.SystemFile) != ".")
 	cfg.SystemFile = ""
-	require.Equal(t, &Config{Listen: "0.0.0.0:9100", ApiToken: "abc", Logger: Logger{Level: "info"}}, cfg)
+	host, _ := os.Hostname()
+	require.Equal(t, &Config{TesterName: host, Listen: "0.0.0.0:9100", ApiToken: "abc", Logger: Logger{Level: "info"}}, cfg, "unnamed: the host name")
 }
 
 func TestLoadOverrides(t *testing.T) {
-	cfg, err := Load(write(t, "listen: 127.0.0.1:9200\napiToken: abc\nlogger:\n  level: debug\n"))
+	cfg, err := Load(write(t, "testerName: lab-2\nlisten: 127.0.0.1:9200\napiToken: abc\nlogger:\n  level: debug\n"))
 	require.NoError(t, err)
+	require.Equal(t, "lab-2", cfg.TesterName)
 	require.Equal(t, "127.0.0.1:9200", cfg.Listen)
 	require.Equal(t, "debug", cfg.Logger.Level)
 }

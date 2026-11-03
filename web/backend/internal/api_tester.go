@@ -46,6 +46,8 @@ func (b *backend) getTesterRoutes() util.Routes {
 			HandlerFunc: b.handleTesterProxy}, // polled; not logged per request
 		{Name: "TesterSystemCpusPut", Method: http.MethodPut, Pattern: "/tester/system/cpus",
 			HandlerFunc: withLogging("TesterSystemCpusPut", b.TesterLog, b.handleTesterProxy)},
+		{Name: "TesterStatusGet", Method: http.MethodGet, Pattern: "/tester/status",
+			HandlerFunc: b.handleTesterProxy}, // polled; not logged per request
 	}
 }
 
@@ -55,6 +57,8 @@ func (b *backend) getTesterStreamRoutes() util.Routes {
 	return util.Routes{
 		{Name: "TesterRunStream", Method: http.MethodGet, Pattern: "/tester/run/stream",
 			HandlerFunc: b.handleTesterStream},
+		{Name: "TesterByIdRunStream", Method: http.MethodGet, Pattern: "/testers/:id/run/stream",
+			HandlerFunc: b.handleTesterByIDStream},
 	}
 }
 

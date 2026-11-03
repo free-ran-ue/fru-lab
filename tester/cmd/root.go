@@ -56,11 +56,11 @@ func serve(cmd *cobra.Command, _ []string) error {
 		Cpus:   cpuset.NewStore(cfg.SystemFile),
 	})
 	runner := bench.NewRunner(func() bool { return !ctrl.Snapshot().State.Finished() })
-	srv := &http.Server{Addr: cfg.Listen, Handler: api.NewRouter(ctrl, runner, cfg.ApiToken)}
+	srv := &http.Server{Addr: cfg.Listen, Handler: api.NewRouter(ctrl, runner, cfg.ApiToken, cfg.TesterName)}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	mainLog.Infof("fru-tester listening on %s", cfg.Listen)
+	mainLog.Infof("fru-tester %q listening on %s", cfg.TesterName, cfg.Listen)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)

@@ -186,6 +186,7 @@ type reportSettingGroup struct {
 // reportView is what the template renders.
 type reportView struct {
 	S           reportSnapshot
+	Tester      string // the tester that ran it; "" for runs stored before that was kept
 	Result      string
 	ResultClass string // ok, bad or muted
 	Duration    string
@@ -203,11 +204,15 @@ func renderTesterReport(raw []byte, now time.Time) ([]byte, error) {
 	var r struct {
 		Profile  json.RawMessage `json:"profile"`
 		Snapshot reportSnapshot  `json:"snapshot"`
+		Tester   *storedTester   `json:"tester"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return nil, err
 	}
 	v := newReportView(r.Snapshot, r.Profile, now)
+	if r.Tester != nil {
+		v.Tester = r.Tester.Name
+	}
 	v.Raw = raw
 	var b bytes.Buffer
 	if err := testerReportTmpl.Execute(&b, v); err != nil {

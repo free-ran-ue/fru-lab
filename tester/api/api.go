@@ -15,6 +15,7 @@ import (
 
 	"tester/bench"
 	"tester/cpuset"
+	"tester/hoststat"
 	"tester/netcfg"
 	"tester/profile"
 	"tester/run"
@@ -81,7 +82,8 @@ const (
 	minFrameGap    = 200 * time.Millisecond
 )
 
-func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
+// NewRouter serves the API; name is this tester's name in /status.
+func NewRouter(ctrl Controller, b Bench, apiToken, name string) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -111,6 +113,11 @@ func NewRouter(ctrl Controller, b Bench, apiToken string) *gin.Engine {
 		c.JSON(http.StatusOK, info)
 	})
 	g.PUT("/system/cpus", handleSetCpus(ctrl))
+	g.GET("/status", func(c *gin.Context) {
+		s := hoststat.Read()
+		s.Name = name
+		c.JSON(http.StatusOK, s)
+	})
 	cpuLoad := cpuset.NewSampler()
 	g.GET("/system/cpuload", func(c *gin.Context) {
 		l, err := cpuLoad.Read()
@@ -193,7 +200,7 @@ func handleStart(ctrl Controller, b Bench) gin.HandlerFunc {
 		case errors.Is(err, run.ErrRunActive), errors.Is(err, run.ErrPingActive):
 			c.JSON(http.StatusConflict, MessageResponse{Message: err.Error()})
 		case errors.As(err, &aerr):
-			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error() + " (fix it on the System page)"})
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error() + " (fix it on the Status page)"})
 		default:
 			c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		}
