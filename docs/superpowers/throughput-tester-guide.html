@@ -641,6 +641,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <div>
           <h3>History</h3>
           <p>最近 50 個已結束的 run（fru-lab 保存）。勾兩筆可以並排比較。每一筆的 <b>View</b> 在新分頁打開完整的測試報告，<b>Download</b> 把同一份報告存成一個 HTML 檔，不用連線、不用 fru-lab 也能打開，可以直接寄給別人或列印。fru-tester 自己只保留最近 10 個，fru-lab 關著時如果結束了超過 10 個，較舊的不會進到 History。</p>
+          <p>History 收的是 Status 頁上<b>每一台</b> tester 的 run，<b>Tester</b> 欄顯示是哪一台跑的（存檔當下它的 <code>testerName</code>），比較表的標題和報告開頭也會寫。加入多台 tester 之前存的 run 當成預設 tester 的。兩台 tester 在同一秒開始的 run，run ID 會一樣，兩筆都會各自保留。</p>
           <p>報告內容：結果與時間、引擎；UL／DL 平均與最高接收速率、掉包、延遲、註冊與 PDU 成功率；UL／DL 吞吐圖（滑鼠移上去看每一點的數字）；每個控制面階段的成功／拒絕／逾時／重試與耗時分佈、失敗原因；有 CP 測試時另有一節：循環數、平均與最高每秒註冊數、每秒註冊／Dereg／失敗圖、兩個程序的成功率與耗時分佈；資料面收送量、掉包、亂序、送出錯誤、延遲；每個 gNB 的狀態與流量；失敗的 UE；這次 run 用的完整設定（K、OPc 只顯示頭尾）。最下面的 <b>Download raw data (JSON)</b> 可以拿到原始資料。</p>
           <p class="hint">報告裡的平均速率是「收到的量 ÷ 流量時間」，流量時間從第一個 UE 開始打流量算起，不含 N2、註冊、PDU 建立和收尾的時間。</p>
         </div>
@@ -670,7 +671,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <li><b>預設 tester</b>：就是 fru-lab <code>config.yaml</code> 裡 <code>backend.tester</code> 的那台，卡片下方寫著「From config.yaml」，不能在頁面上刪除。</li>
         <li><b>新增</b>：另一台機器只部署 fru-tester（它的 <code>listen</code> 要是 fru-lab 連得到的位址），然後在 Status 頁按 <b>Add tester</b>，填它的 URL（例如 <code>http://10.0.0.2:9100</code>）和它 <code>tester.yaml</code> 裡的 <code>apiToken</code>。fru-lab 會先實際請那台 tester 回報狀態，連不到、token 不對、或已經在列表上都不會加入，並顯示原因。加入後存在 fru-lab 的資料庫，重啟也還在。</li>
         <li><b>移除</b>：手動加入的 tester 卡片下方有 <b>Remove</b>，只是讓 fru-lab 忘掉它，tester 本身照常執行。URL 或 token 要改就移除再重新加入。</li>
-        <li><b>目前的範圍</b>：Setup 可以選任一台 tester 跑（見「設定檔」），Run 頁列出每台 tester 的 run（見「Run 頁怎麼看」）；History、Bench 仍然只看預設 tester。</li>
+        <li><b>目前的範圍</b>：Setup 可以選任一台 tester 跑（見「設定檔」），Run 頁列出每台 tester 正在跑的 run（見「Run 頁怎麼看」），History 收每台 tester 的 run 並標出是哪一台；Bench 仍然只看預設 tester。</li>
       </ul>
       <h3>總覽</h3>
       <div class="tbl"><table>

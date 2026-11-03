@@ -32,6 +32,7 @@ type testerStore interface {
 type testerTarget struct {
 	id      string
 	url     string
+	token   string
 	builtIn bool
 	proxy   *httputil.ReverseProxy
 }
@@ -100,7 +101,7 @@ func newTesterTarget(id, testerURL, apiToken string, builtIn bool) (*testerTarge
 	if err != nil {
 		return nil, err
 	}
-	return &testerTarget{id: id, url: testerURL, builtIn: builtIn, proxy: proxy}, nil
+	return &testerTarget{id: id, url: testerURL, token: apiToken, builtIn: builtIn, proxy: proxy}, nil
 }
 
 func (r *testerRegistry) list() []TesterEntry {
@@ -111,6 +112,13 @@ func (r *testerRegistry) list() []TesterEntry {
 		out = append(out, TesterEntry{ID: t.id, URL: t.url, BuiltIn: t.builtIn})
 	}
 	return out
+}
+
+// all is every tester as it is now.
+func (r *testerRegistry) all() []*testerTarget {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]*testerTarget(nil), r.targets...)
 }
 
 func (r *testerRegistry) get(id string) *testerTarget {

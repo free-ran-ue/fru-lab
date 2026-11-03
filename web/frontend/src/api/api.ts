@@ -382,6 +382,18 @@ export interface TesterGnbTraffic {
     'dlRxBytes': number;
 }
 export interface TesterHistorySummary {
+    /**
+     * Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester\'s runs; the run ID, \"@\" and the tester\'s id for another tester\'s.
+     */
+    'id': string;
+    /**
+     * The tester that ran it (\"default\" for the one in config.yaml, and for runs stored before testers could be added).
+     */
+    'testerId': string;
+    /**
+     * That tester\'s name when the run was stored; empty for runs stored before testers could be added.
+     */
+    'testerName': string;
     'runId': string;
     'profileName': string;
     'state': string;
@@ -2205,7 +2217,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * 
          * @summary One finished run\'s full report (JSON)
-         * @param {string} runId 
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -2277,7 +2289,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
          * @summary One finished run\'s report as a self-contained HTML page
-         * @param {string} runId 
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -3425,7 +3437,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary One finished run\'s full report (JSON)
-         * @param {string} runId 
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -3450,7 +3462,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
          * @summary One finished run\'s report as a self-contained HTML page
-         * @param {string} runId 
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -4035,7 +4047,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * 
          * @summary One finished run\'s full report (JSON)
-         * @param {string} runId 
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -4054,7 +4066,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
          * @summary One finished run\'s report as a self-contained HTML page
-         * @param {string} runId 
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -4614,7 +4626,7 @@ export class DefaultApi extends BaseAPI {
     /**
      * 
      * @summary One finished run\'s full report (JSON)
-     * @param {string} runId 
+     * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -4635,7 +4647,7 @@ export class DefaultApi extends BaseAPI {
     /**
      * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
      * @summary One finished run\'s report as a self-contained HTML page
-     * @param {string} runId 
+     * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */

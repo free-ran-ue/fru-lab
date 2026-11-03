@@ -1841,7 +1841,7 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let runId: string; // (default to undefined)
+let runId: string; //The run\'s id from the history list (TesterHistorySummary.id). (default to undefined)
 
 const { status, data } = await apiInstance.testerHistoryGet(
     runId
@@ -1852,7 +1852,7 @@ const { status, data } = await apiInstance.testerHistoryGet(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **runId** | [**string**] |  | defaults to undefined|
+| **runId** | [**string**] | The run\&#39;s id from the history list (TesterHistorySummary.id). | defaults to undefined|
 
 
 ### Return type
@@ -1937,7 +1937,7 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let runId: string; // (default to undefined)
+let runId: string; //The run\'s id from the history list (TesterHistorySummary.id). (default to undefined)
 
 const { status, data } = await apiInstance.testerHistoryReportHtml(
     runId
@@ -1948,7 +1948,7 @@ const { status, data } = await apiInstance.testerHistoryReportHtml(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **runId** | [**string**] |  | defaults to undefined|
+| **runId** | [**string**] | The run\&#39;s id from the history list (TesterHistorySummary.id). | defaults to undefined|
 
 
 ### Return type

@@ -1565,6 +1565,7 @@ paths:
         - name: runId
           in: path
           required: true
+          description: The run's id from the history list (TesterHistorySummary.id).
           schema:
             type: string
       responses:
@@ -1591,6 +1592,7 @@ paths:
         - name: runId
           in: path
           required: true
+          description: The run's id from the history list (TesterHistorySummary.id).
           schema:
             type: string
       responses:
@@ -2744,8 +2746,18 @@ components:
           $ref: '#/components/schemas/TesterRunSnapshot'
     TesterHistorySummary:
       type: object
-      required: [runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
+      required: [id, testerId, testerName, runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
       properties:
+        id:
+          type: string
+          description: Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester's runs; the run ID, "@" and the tester's id for another tester's.
+          example: 20261030-105502@6e465eabcfd7a7a9
+        testerId:
+          type: string
+          description: The tester that ran it ("default" for the one in config.yaml, and for runs stored before testers could be added).
+        testerName:
+          type: string
+          description: That tester's name when the run was stored; empty for runs stored before testers could be added.
         runId:
           type: string
         profileName:

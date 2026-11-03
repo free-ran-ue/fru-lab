@@ -5,6 +5,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterHistorySummary } from '../../api'
 import { formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
+import { useTesters } from './useTesters'
 import styles from './tester.module.css'
 import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
@@ -64,6 +65,9 @@ export default function TesterHistoryPage() {
   const { errors, successes, addError, removeNotification } = useNotifications()
   const [runs, setRuns] = useState<TesterHistorySummary[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
+  const { testers } = useTesters()
+  // the tester's name when the run was stored, else its name now
+  const testerName = (r: TesterHistorySummary) => r.testerName || testers?.find((t) => t.id === r.testerId)?.name || r.testerId
   const [page, setPage] = useState(1)
 
   useEffect(() => {
@@ -82,7 +86,7 @@ export default function TesterHistoryPage() {
     // user's, so pop-up blockers let it through
     const tab = how === 'view' ? window.open('', '_blank') : null
     try {
-      const response = await api.testerHistoryReportHtml(r.runId, { responseType: 'blob' })
+      const response = await api.testerHistoryReportHtml(r.id, { responseType: 'blob' })
       const blob = new Blob([response.data as unknown as Blob], { type: 'text/html' })
       if (tab) {
         const url = URL.createObjectURL(blob)
@@ -97,7 +101,7 @@ export default function TesterHistoryPage() {
     }
   }
 
-  const compared = (runs ?? []).filter((r) => selected.includes(r.runId))
+  const compared = (runs ?? []).filter((r) => selected.includes(r.id))
   const shown = pageOf(runs ?? [], page, HISTORY_PAGE)
 
   return (
@@ -122,7 +126,7 @@ export default function TesterHistoryPage() {
                   <tr>
                     <th />
                     {compared.map((r) => (
-                      <th key={r.runId}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : r.runId} · {r.profileName}</th>
+                      <th key={r.id}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : r.runId} · {r.profileName} · {testerName(r)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -130,7 +134,7 @@ export default function TesterHistoryPage() {
                   {METRICS.map(([label, f]) => (
                     <tr key={label}>
                       <td>{label}</td>
-                      {compared.map((r) => <td key={r.runId} className={styles.mono}>{f(r)}</td>)}
+                      {compared.map((r) => <td key={r.id} className={styles.mono}>{f(r)}</td>)}
                     </tr>
                   ))}
                 </tbody>
@@ -151,6 +155,7 @@ export default function TesterHistoryPage() {
                     <th />
                     <th>Started</th>
                     <th>Profile</th>
+                    <th>Tester</th>
                     <th>Result</th>
                     <th>Report</th>
                     {METRICS.map(([label]) => <th key={label}>{label}</th>)}
@@ -158,13 +163,14 @@ export default function TesterHistoryPage() {
                 </thead>
                 <tbody>
                   {shown.items.map((r) => (
-                    <tr key={r.runId}>
+                    <tr key={r.id}>
                       <td>
                         <input type="checkbox" aria-label={`Compare run ${r.runId}`}
-                          checked={selected.includes(r.runId)} onChange={() => toggle(r.runId)} />
+                          checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
                       </td>
                       <td>{r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}</td>
                       <td>{r.profileName}</td>
+                      <td>{testerName(r)}</td>
                       <td>
                         <span className={`${styles.pill} ${r.state === 'failed' ? styles.pillBad : styles.pillMuted}`} title={r.error || undefined}>
                           {result(r)}

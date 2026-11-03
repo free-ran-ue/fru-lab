@@ -79,7 +79,8 @@ func TestWatcherStoresEachRunOnce(t *testing.T) {
 	defer tester.Close()
 	store := &memRuns{}
 	w := testLog()
-	w.url, w.token, w.client, w.store = tester.URL, "engine-token", tester.Client(), store
+	w.testers, _ = newTesterRegistry(tester.URL, "engine-token", &memTesters{})
+	w.client, w.store = tester.Client(), store
 
 	for range 3 {
 		if err := w.poll(context.Background()); err != nil {
@@ -93,8 +94,14 @@ func TestWatcherStoresEachRunOnce(t *testing.T) {
 	if strings.Join(store.ids, ",") != "20261002-150405,20261002-150410" {
 		t.Fatalf("stored %v; want each run once", store.ids)
 	}
-	if string(store.runs["20261002-150405"]) != sampleReport {
-		t.Fatalf("stored %q; want the report as fru-tester sent it", store.runs["20261002-150405"])
+	// the report as fru-tester sent it, plus the tester that ran it (named
+	// by its id here: this fake has no /api/status)
+	var stored map[string]json.RawMessage
+	if err := json.Unmarshal(store.runs["20261002-150405"], &stored); err != nil {
+		t.Fatal(err)
+	}
+	if string(stored["tester"]) != `{"id":"default","name":"default"}` || stored["snapshot"] == nil || stored["profile"] == nil {
+		t.Fatalf("stored %s", store.runs["20261002-150405"])
 	}
 }
 
@@ -105,7 +112,8 @@ func TestWatcherStoresNothingWhileNoRunFinished(t *testing.T) {
 	defer tester.Close()
 	store := &memRuns{}
 	w := testLog()
-	w.url, w.token, w.client, w.store = tester.URL, "t", tester.Client(), store
+	w.testers, _ = newTesterRegistry(tester.URL, "t", &memTesters{})
+	w.client, w.store = tester.Client(), store
 	if err := w.poll(context.Background()); err != nil {
 		t.Fatalf("no finished run is not an error: %v", err)
 	}
@@ -184,5 +192,65 @@ func TestHistoryJSONAndHTMLExports(t *testing.T) {
 	}
 	if rec := get(t, h, "/api/tester/history/nope/report.html"); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown run report: %d", rec.Code)
+	}
+}
+
+// Runs from an added tester are stored too, under a key of their own, so
+// a run ID both testers used is kept twice; the list says which tester ran
+// each, and a run stored before testers could be added counts as the
+// default tester's.
+func TestHistoryKeepsWhichTesterRanEachRun(t *testing.T) {
+	reports := func(name string) *httptest.Server {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/status":
+				_, _ = w.Write([]byte(`{"name":"` + name + `"}`))
+			case "/api/run/reports":
+				_, _ = w.Write([]byte("[" + sampleReport + "]"))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		t.Cleanup(s.Close)
+		return s
+	}
+	def, lab2 := reports("default-tester"), reports("lab-2")
+	reg, _ := newTesterRegistry(def.URL, "t", &memTesters{})
+	added, err := reg.add(context.Background(), lab2.URL, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &memRuns{}
+	_, _ = store.SaveTesterRun("20261002-140000", []byte(strings.Replace(sampleReport, "20261002-150405", "20261002-140000", 1)), 50)
+	w := testLog()
+	w.testers, w.client, w.store = reg, http.DefaultClient, store
+	if err := w.poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := get(t, historyRouter(store), "/api/tester/history")
+	var list []testerHistorySummary
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, s := range list {
+		got[s.ID] = s.TesterID + "/" + s.TesterName
+	}
+	want := map[string]string{
+		"20261002-150405":             "default/default-tester",
+		"20261002-150405@" + added.ID: added.ID + "/lab-2",
+		"20261002-140000":             "default/",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("history %v; want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("history %v; want %v", got, want)
+		}
+	}
+	if rec := get(t, historyRouter(store), "/api/tester/history/20261002-150405@"+added.ID); rec.Code != http.StatusOK {
+		t.Fatalf("an added tester's run by its id: %d", rec.Code)
 	}
 }

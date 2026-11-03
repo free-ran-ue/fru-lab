@@ -43,7 +43,7 @@ type backend struct {
 	testerProxy *httputil.ReverseProxy
 	// testers is every tester, for the Status page.
 	testers *testerRegistry
-	// testerHistory copies finished runs into the DB; nil like testerProxy.
+	// testerHistory copies every tester's finished runs into the DB.
 	testerHistory     *testerHistoryWatcher
 	stopTesterHistory context.CancelFunc
 
@@ -113,10 +113,6 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 			return nil
 		}
 		b.testerProxy = proxy
-		b.testerHistory = &testerHistoryWatcher{
-			url: config.Backend.Tester.URL, token: config.Backend.Tester.ApiToken,
-			client: &http.Client{Timeout: 10 * time.Second}, store: flCtx, log: logger.TesterLog,
-		}
 	} else {
 		logger.BckLog.Warnln("backend.tester.url is empty; Throughput Tester routes will answer 503")
 	}
@@ -127,6 +123,9 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 		return nil
 	}
 	b.testers = testers
+	b.testerHistory = &testerHistoryWatcher{
+		testers: testers, client: &http.Client{Timeout: 10 * time.Second}, store: flCtx, log: logger.TesterLog,
+	}
 
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
 

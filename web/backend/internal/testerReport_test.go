@@ -58,3 +58,26 @@ func TestReportSettingsKeepOrderAndHideKeys(t *testing.T) {
 		t.Errorf("nested = %+v", got)
 	}
 }
+
+// A run stored with its tester names it in the report; an older run has
+// no Tester entry.
+func TestReportNamesTheTester(t *testing.T) {
+	withName, err := withTester([]byte(sampleReport), storedTester{ID: "x", Name: "lab-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := renderTesterReport(withName, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), "Tester <b>lab-2</b>") {
+		t.Fatal("report does not name the tester")
+	}
+	page, err = renderTesterReport([]byte(sampleReport), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(page), "Tester <b>") {
+		t.Fatal("an older run names a tester")
+	}
+}
