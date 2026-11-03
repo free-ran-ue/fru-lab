@@ -64,12 +64,6 @@ function formatPps(pps: number): string {
   return `${Math.round(pps)} pps`
 }
 
-// splitUnit splits "38.2 Gbps" into its value and unit.
-function splitUnit(s: string): [string, string] {
-  const i = s.lastIndexOf(' ')
-  return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]
-}
-
 // niceStep rounds a grid step up to 1, 2, 2.5 or 5 x 10^n so the grid
 // lines land on round rates.
 function niceStep(v: number): number {
@@ -536,12 +530,10 @@ function RunBody({ s }: { s: TesterRunSnapshot }) {
   const throughputStages = [s.n2, s.registration, s.pdu, s.deregistration, s.n2Release]
   const failures = throughputStages.reduce((a, st) => a + failuresOf(st), 0)
   const attempts = throughputStages.reduce((a, st) => a + st.attempted, 0)
-  const [dlValue, dlUnit] = splitUnit(formatBps(dp.dl.rxBps))
   const kpis = [
     { label: 'Registered UEs', value: reg.accepted.toLocaleString(), unit: `/ ${reg.expected.toLocaleString()}`, sub: `${pct(reg.accepted, reg.expected)} of target` },
     { label: 'Registrations/s', value: regRate === null ? '—' : Math.round(regRate).toLocaleString(), unit: '/s', sub: regRate === null ? 'not started' : `average over ${formatClock(reg.totalTimeMs / 1000)}` },
     { label: 'PDU sessions', value: s.ues.established.toLocaleString(), unit: 'active', sub: `${pct(s.ues.established, reg.accepted)} of registered` },
-    { label: 'Downlink', value: dlValue, unit: dlUnit, sub: `loss ${formatLoss(dp.dl.lossRate)}` },
     { label: 'Failures', value: failures.toLocaleString(), unit: 'total', sub: `${pct(failures, attempts)} of attempts`, bad: failures > 0 },
   ]
 
@@ -595,22 +587,22 @@ function RunBody({ s }: { s: TesterRunSnapshot }) {
           <div className={styles.panelHead}>
             <h2 className={styles.panelTitle}>Data plane throughput</h2>
             <span className={styles.legendKey}><i className={styles.keyTx} />Sent</span>
-            <span className={styles.legendKey}><i className={styles.keyDl} /><i className={styles.keyUl} />Received</span>
+            <span className={styles.legendKey}><i className={styles.keyUl} /><i className={styles.keyDl} />Received</span>
             <span className={styles.panelNote}>bps{step ? ` · ${step} s samples` : ''}</span>
           </div>
-          <h3 className={styles.chartTitle}>Downlink <span className="num">{formatBps(dp.dl.rxBps)}</span></h3>
-          <ThroughputChart series={dp.series} dir="dl" />
           <h3 className={styles.chartTitle}>Uplink <span className="num">{formatBps(dp.ul.rxBps)}</span></h3>
           <ThroughputChart series={dp.series} dir="ul" />
+          <h3 className={styles.chartTitle}>Downlink <span className="num">{formatBps(dp.dl.rxBps)}</span></h3>
+          <ThroughputChart series={dp.series} dir="dl" />
         </div>
 
         <div className={`${styles.panel} ${styles.panelKv}`}>
           <h2 className={styles.panelTitle}>Data plane</h2>
-          <div className={styles.kvRow}><span>DL sent</span><span className="num">{formatBps(dp.dl.txBps)} · {formatPps(dp.dl.txPps)}</span></div>
-          <div className={styles.kvRow}><span>DL received</span><span className="num">{formatBps(dp.dl.rxBps)} · {formatPps(dp.dl.rxPps)}</span></div>
           <div className={styles.kvRow}><span>UL sent</span><span className="num">{formatBps(dp.ul.txBps)} · {formatPps(dp.ul.txPps)}</span></div>
           <div className={styles.kvRow}><span>UL received</span><span className="num">{formatBps(dp.ul.rxBps)} · {formatPps(dp.ul.rxPps)}</span></div>
-          <div className={styles.kvRow}><span>Loss DL / UL</span><span className="num">{formatLoss(dp.dl.lossRate)} / {formatLoss(dp.ul.lossRate)}</span></div>
+          <div className={styles.kvRow}><span>DL sent</span><span className="num">{formatBps(dp.dl.txBps)} · {formatPps(dp.dl.txPps)}</span></div>
+          <div className={styles.kvRow}><span>DL received</span><span className="num">{formatBps(dp.dl.rxBps)} · {formatPps(dp.dl.rxPps)}</span></div>
+          <div className={styles.kvRow}><span>Loss UL / DL</span><span className="num">{formatLoss(dp.ul.lossRate)} / {formatLoss(dp.dl.lossRate)}</span></div>
           <div className={styles.kvRow}><span>DP CPUs</span><span className="num">{s.cpus.dpCpus || 'not pinned'}</span></div>
           <div className={styles.kvRow}><span>CP CPUs</span><span className="num">{s.cpus.cpCpus || 'not pinned'}</span></div>
         </div>
@@ -638,10 +630,10 @@ function RunBody({ s }: { s: TesterRunSnapshot }) {
         </div>
         <div className={styles.tableScroll}>
           <table className={styles.procTable}>
-            <thead><tr><th /><th>Downlink · N6 → UPF → N3 → UE</th><th>Uplink · UE → N3 → UPF → N6</th></tr></thead>
+            <thead><tr><th /><th>Uplink · UE → N3 → UPF → N6</th><th>Downlink · N6 → UPF → N3 → UE</th></tr></thead>
             <tbody>
               {DIRECTION_ROWS.map(([label, f]) => (
-                <tr key={label}><td>{label}</td><td>{f(dp.dl)}</td><td>{f(dp.ul)}</td></tr>
+                <tr key={label}><td>{label}</td><td>{f(dp.ul)}</td><td>{f(dp.dl)}</td></tr>
               ))}
             </tbody>
           </table>

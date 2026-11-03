@@ -584,7 +584,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <li><b>第一層：進行中的 run。</b>從側邊欄點 Runs 一律先到這裡，就算只有一個 run 在跑也不會自動跳進去。每台正在跑的 tester 一張卡片：profile 名稱、狀態、哪一台 tester、run ID、開始時間、已建立的 UE 數、上下行的收到速率，每 3 秒更新。已經 stopped 的 run 不列（在 History 看）；failed 的 run 會留著並顯示錯誤，直到那台 tester 開始下一個 run；連不到的 tester 會列一張 Unreachable 的卡片。</li>
         <li><b>第二層：點卡片進入那個 run</b>（<code>/tester/run/&lt;tester id&gt;</code>），就是下面說明的即時畫面，標題顯示 tester 名稱，左上角「← All runs」回到列表。Setup 按 Start run 後會直接來到這一頁；Testers 頁的 Run 卡片也連到這裡。Stop 只停這台 tester 的 run。</li>
       </ul>
-      <p>詳細頁由上往下：標題列（run ID、狀態、Tester／Profile／Engine／開始時間／已跑多久，右邊 Stop run）；四段進度條（Attach gNBs → Register UEs → PDU sessions → Deregister）；一排五個數字（已註冊 UE／目標、Registrations/s、PDU sessions、Downlink 收到的速率與掉包、Failures 與佔嘗試的比例）；吞吐量圖與 Data plane 摘要；<b>Control plane procedures</b> 表與 <b>Failure causes</b>（各原因的次數與長條）。</p>
+      <p>詳細頁由上往下：標題列（run ID、狀態、Tester／Profile／Engine／開始時間／已跑多久，右邊 Stop run）；四段進度條（Attach gNBs → Register UEs → PDU sessions → Deregister）；一排四個數字（已註冊 UE／目標、Registrations/s、PDU sessions、Failures 與佔嘗試的比例；上下行速率看下面的吞吐量圖和 Data plane 面板）；吞吐量圖與 Data plane 摘要；<b>Control plane procedures</b> 表與 <b>Failure causes</b>（各原因的次數與長條）。</p>
       <p>Procedures 表一列一個階段：N2 setup（每個 gNB）、Registration（每個 UE）、PDU session（每個 UE）；按 Stop 後多兩列收尾：UE deregistration（每個 UE）和 gNB SCTP close（每個 gNB）。表上直接列 Attempts、Accepted、Rejected、Timed out、Conn. errors、In flight、Average、p95、p99；Retries、Not started、Max、Total time 在滑鼠移到那一列時顯示。各欄意思：</p>
       <div class="tbl"><table>
         <tr><th>數字</th><th>意思</th></tr>
@@ -620,14 +620,14 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       </ul>
       <h3>Data plane 卡片</h3>
       <ul>
-        <li><b>Engine</b>：實際使用的資料面引擎。<code>socket</code>；<code>socket (auto: …)</code> 表示選了 auto 但改用 socket，括號裡是原因；<code>af_xdp (ens1f0 zero-copy, 24 queues; …)</code> 列出每張網卡的模式（zero-copy 最快；copy mode 要複製；generic mode 表示驅動不支援原生 XDP，最慢）與佇列數。</li>
+        <li><b>Engine</b>（在詳細頁最上方、run ID 下面那一行，和 Tester、Profile 並列）：實際使用的資料面引擎。<code>socket</code>；<code>socket (auto: …)</code> 表示選了 auto 但改用 socket，括號裡是原因；<code>af_xdp (ens1f0 zero-copy, 24 queues; …)</code> 列出每張網卡的模式（zero-copy 最快；copy mode 要複製；generic mode 表示驅動不支援原生 XDP，最慢）與佇列數。</li>
         <li><b>Sent／received</b>：最近一秒的速率。received 是真正經過 UPF 回來的量，也就是 UPF 實際轉送的速率。</li>
         <li><b>Packets per second</b>、<b>Total sent／received</b>：總量算內層 IP 封包，單位是 bits（Mb、Gb）。</li>
         <li><b>Loss</b>：到目前為止的 <code>1 − received ÷ sent</code>。</li>
         <li><b>Latency p50／p99</b>：單向延遲，收送用同一台主機的時鐘。</li>
         <li><b>Out of order</b>、<b>Send errors</b>（本機 socket 拒絕送出的封包）。</li>
         <li><b>Misrouted</b>（不為 0 才顯示）：DL 從別的 UE 的隧道或別的 gNB 回來，不算收到。</li>
-        <li>吞吐量面板裡 Downlink、Uplink 各一張圖，從 0 秒顯示整個 run（h:mm:ss），各自有自己的刻度。灰色虛線是送出（Tx），實線是收到（Rx，Downlink 靛藍、Uplink 紫色），兩條重疊代表沒有掉包；滑鼠移到圖上會顯示那一刻的數值。前 10 分鐘每點 1 秒，之後每點是 2、4、8… 秒的平均。</li>
+        <li>吞吐量面板裡 Uplink、Downlink 各一張圖（全站 UL 都排在 DL 前面），從 0 秒顯示整個 run（h:mm:ss），各自有自己的刻度。灰色虛線是送出（Tx），實線是收到（Rx，Downlink 靛藍、Uplink 紫色），兩條重疊代表沒有掉包；滑鼠移到圖上會顯示那一刻的數值。前 10 分鐘每點 1 秒，之後每點是 2、4、8… 秒的平均。</li>
       </ul>
       <h3>UEs 卡片與 gNB 表</h3>
       <ul>
@@ -664,7 +664,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <h2>Status：tester 狀態與 CPU 分配</h2>
       <p>側邊欄 Throughput Tester 底下的第一頁 <b>Testers</b> 是 tester 的管理面板（取代原本的 System 頁，舊網址 <code>/tester/system</code> 會自動轉過來）。它分兩層：</p>
       <ul>
-        <li><b>第一層：所有 tester 的卡片。</b>卡片標題是 tester 的名稱，卡上顯示 URL、是否連得上、主機名稱、run 狀態、記憶體、CPU 和 uptime，每 3 秒更新。</li>
+        <li><b>第一層：Fleet 表。</b>一台 tester 一列：名稱（點了進入那台）、URL、狀態（CONNECTED 與延遲、UNREACHABLE）、主機、kernel、版本、可用 CPU、CPU 忙碌度、DP CPU、load、記憶體、uptime、目前的 run，每 3 秒更新；連不到的 tester 下方多一行錯誤訊息。表頭列有總數（幾台、幾台連得上、幾台在跑、隔離了幾顆 DP CPU）。</li>
         <li><b>第二層：點卡片進入那台 tester 的頁面</b>（<code>/tester/status/&lt;id&gt;</code>），左上角的「← All testers」回到列表。上半部看那台 tester 現在的狀況，下半部設定那台的 CPU 隔離。</li>
       </ul>
       <h3>多台 tester</h3>

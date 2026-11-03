@@ -26,20 +26,23 @@ const LEVEL_CLASS: Record<string, string> = { INF: 'lvInfo', WAR: 'lvWarn', ERR:
 // a leading timestamp (ISO or time of day), muted
 const STAMP = /^(\S*\d{2}:\d{2}:\d{2}\S*)/
 
-function LogLine({ line }: { line: string }) {
+function LogLine({ line, no }: { line: string; no: number }) {
   const stamp = line.match(STAMP)?.[1] ?? ''
   const rest = line.slice(stamp.length)
   const parts = rest.split(TOKEN)
   return (
     <div className={styles.ln}>
-      {stamp && <span className={styles.stamp}>{stamp}</span>}
-      {parts.map((part, i) => {
-        if (i % 2 === 0) return part
-        const word = part.replace(/[[\]]/g, '')
-        const level = LEVEL_CLASS[word.slice(0, 3).toUpperCase()]
-        const isLevel = level && /^(INFO|WARN|WARNING|ERRO|ERROR|FATA|FATAL|DEBU|DEBUG|TRAC|TRACE)$/.test(word)
-        return <span key={i} className={isLevel ? styles[level] : styles.cat}>{part}</span>
-      })}
+      <span className={styles.no}>{no}</span>
+      <span className={styles.msg}>
+        {stamp && <span className={styles.stamp}>{stamp}</span>}
+        {parts.map((part, i) => {
+          if (i % 2 === 0) return part
+          const word = part.replace(/[[\]]/g, '')
+          const level = LEVEL_CLASS[word.slice(0, 3).toUpperCase()]
+          const isLevel = level && /^(INFO|WARN|WARNING|ERRO|ERROR|FATA|FATAL|DEBU|DEBUG|TRAC|TRACE)$/.test(word)
+          return <span key={i} className={isLevel ? styles[level] : styles.cat}>{part}</span>
+        })}
+      </span>
     </div>
   )
 }
@@ -76,7 +79,7 @@ export default function LogsPage() {
   const isTwoSliceCore = detectFree5gcTemplate(free5gc.networkFunctions) === 'ulcl-2slice'
 
   const targets: LogTarget[] = useMemo(() => [
-    { kind: 'core', id: 'core', label: 'Core network' },
+    { kind: 'core', id: 'core', label: 'free5GC core' },
     ...(isTwoSliceCore
       ? [
         { kind: 'gnb-slice1' as const, id: 'gnb-slice1', label: 'gNB Slice 1' },
@@ -90,6 +93,7 @@ export default function LogsPage() {
   const [lines, setLines] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fetchedAt, setFetchedAt] = useState<Date | null>(null)
 
   const fetchLogs = useCallback(async (target: LogTarget, nf: string | null) => {
     setIsLoading(true)
@@ -105,6 +109,7 @@ export default function LogsPage() {
               ? await api.deployGnbSliceLogs('slice2')
               : await api.deployUeLogs(target.id)
       setLines(response.data.lines ?? [])
+      setFetchedAt(new Date())
     } catch (err) {
       setError(extractErrorMessage(err, 'Failed to load logs'))
     } finally {
@@ -172,20 +177,21 @@ export default function LogsPage() {
   function sourceButton(target: LogTarget) {
     const on = sameTarget(selected, target)
     return (
-      <button
-        key={`${target.kind}-${target.id}`}
-        type="button"
-        className={`${styles.tgt} ${on ? styles.tgtOn : ''}`}
-        aria-current={on ? 'true' : undefined}
-        onClick={() => handleSelect(target)}
-        title={getStatusMeta(statusOf(target)).text}
-      >
-        <span className={styles.dot} style={{ background: getStatusMeta(statusOf(target)).dot }} aria-hidden="true" />
-        {target.kind === 'ue' ? <span className={`num ${styles.tgtMono}`}>{target.label}</span> : target.label}
-        {target.kind === 'core' && free5gc.networkFunctions.length > 0 && (
-          <span className={`num ${styles.tgtCount}`}>{free5gc.networkFunctions.length}</span>
-        )}
-      </button>
+      <li key={`${target.kind}-${target.id}`}>
+        <button
+          type="button"
+          className={`${styles.tgt} ${on ? styles.tgtOn : ''}`}
+          aria-current={on ? 'true' : undefined}
+          onClick={() => handleSelect(target)}
+          title={getStatusMeta(statusOf(target)).text}
+        >
+          <span className={styles.dot} style={{ background: getStatusMeta(statusOf(target)).dot }} aria-hidden="true" />
+          {target.kind === 'ue' ? <span className={styles.tgtMono}>{target.label}</span> : target.label}
+          {target.kind === 'core' && free5gc.networkFunctions.length > 0 && (
+            <span className={`num ${styles.tgtCount}`}>{free5gc.networkFunctions.length}</span>
+          )}
+        </button>
+      </li>
     )
   }
 
@@ -198,17 +204,15 @@ export default function LogsPage() {
   return (
     <AppLayout crumbs={[{ label: 'Logs' }]}>
       <section className={styles.header}>
-        <div className={styles.titleBlock}>
-          <h1 className={styles.title}>Logs</h1>
-          <p className={styles.subtitle}>Container logs for the core, the gNB and each deployed UE instance.</p>
-        </div>
+        <h1 className={styles.title}>Logs</h1>
+        <span className={styles.subtitle}>Container logs for the core, gNB and each deployed UE instance</span>
         <div className={styles.headerActions}>
           <button type="button" className={styles.btn} onClick={handleDownload} disabled={isLoading || lines.length === 0}>
             Download
           </button>
           <button
             type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
+            className={styles.btn}
             onClick={() => selected && fetchLogs(selected, selected.kind === 'core' ? selectedNf : null)}
             disabled={!selected || isLoading}
           >
@@ -217,23 +221,28 @@ export default function LogsPage() {
         </div>
       </section>
 
-      <section className={styles.body}>
+      <div className={styles.body}>
         <nav className={styles.sources} aria-label="Log sources">
-          <span className={styles.groupLabel}>SOURCES</span>
-          {targets.filter((target) => target.kind !== 'ue').map(sourceButton)}
-          <span className={`${styles.groupLabel} ${styles.groupLabelNext}`}>UE INSTANCES</span>
-          {targets.filter((target) => target.kind === 'ue').map(sourceButton)}
-          {deployedUeRows.length === 0 && (
+          <div className={styles.ph}><h2>Sources</h2></div>
+          <ul className={styles.list}>
+            {targets.filter((target) => target.kind !== 'ue').map(sourceButton)}
+          </ul>
+          <h3 className={styles.groupLabel}>UE instances</h3>
+          {deployedUeRows.length === 0 ? (
             <p className={styles.emptyTargets}>No UE instances deployed yet.</p>
+          ) : (
+            <ul className={`${styles.list} ${styles.listTight}`}>
+              {targets.filter((target) => target.kind === 'ue').map(sourceButton)}
+            </ul>
           )}
         </nav>
 
         <div className={styles.viewerColumn}>
           {selected?.kind === 'core' && nfOptions.length > 0 && (
-            <div className={styles.chips} role="group" aria-label="Network function">
+            <div className={styles.seg} role="group" aria-label="Network function">
               <button
                 type="button"
-                className={`${styles.chip} ${selectedNf === null ? styles.chipOn : ''}`}
+                className={`${styles.segBtn} ${selectedNf === null ? styles.segOn : ''}`}
                 aria-pressed={selectedNf === null}
                 onClick={() => setSelectedNf(null)}
               >
@@ -243,7 +252,7 @@ export default function LogsPage() {
                 <button
                   key={nf}
                   type="button"
-                  className={`${styles.chip} ${selectedNf === nf ? styles.chipOn : ''}`}
+                  className={`${styles.segBtn} ${selectedNf === nf ? styles.segOn : ''}`}
                   aria-pressed={selectedNf === nf}
                   onClick={() => setSelectedNf(nf)}
                 >
@@ -253,28 +262,31 @@ export default function LogsPage() {
             </div>
           )}
 
-          <div className={styles.viewerFrame}>
+          <section className={styles.viewerFrame} aria-label="Log output">
             {selected && (
               <div className={styles.viewerHead}>
-                <span className={`num ${styles.viewerSource}`}>{headName}</span>
+                <span className={styles.viewerSource}>{headName}</span>
                 {headImage && <span>{headImage}</span>}
-                <span className={`num ${styles.viewerMeta}`}>{lines.length.toLocaleString()} line{lines.length === 1 ? '' : 's'}</span>
+                <span className={styles.viewerMeta}>
+                  {lines.length.toLocaleString()} line{lines.length === 1 ? '' : 's'}
+                  {fetchedAt && <> · fetched {fetchedAt.toISOString().slice(11, 19)} UTC</>}
+                </span>
               </div>
             )}
             <div className={styles.viewer}>
               {isLoading ? (
-                <div className={styles.ln}>Loading…</div>
+                <div className={styles.note}>Loading…</div>
               ) : error ? (
-                <div className={styles.ln}>{error}</div>
+                <div className={styles.note}>{error}</div>
               ) : lines.length === 0 ? (
-                <div className={styles.ln}>No log output yet.</div>
+                <div className={styles.note}>No log output yet.</div>
               ) : (
-                lines.map((line, index) => <LogLine key={index} line={line} />)
+                lines.map((line, index) => <LogLine key={index} no={index + 1} line={line} />)
               )}
             </div>
-          </div>
+          </section>
         </div>
-      </section>
+      </div>
     </AppLayout>
   )
 }

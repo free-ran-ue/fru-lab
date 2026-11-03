@@ -396,8 +396,8 @@ export default function TesterSetupPage() {
     ['Throughput UEs', tpUes.toLocaleString()],
     ['All registered after', about(regSec)],
     ['All PDU sessions after', about(pduSec)],
-    ['Offered downlink', offered(profile.traffic.dlMbps, tpUes)],
     ['Offered uplink', offered(profile.traffic.ulMbps, tpUes)],
+    ['Offered downlink', offered(profile.traffic.dlMbps, tpUes)],
     ['Stops after', profile.traffic.maxDurationMin > 0 ? `${profile.traffic.maxDurationMin} min` : 'Stop (no limit)'],
   ]
   if (cpUes > 0) preview.splice(2, 0, ['Control-plane loop UEs', cpUes.toLocaleString()])
@@ -604,10 +604,10 @@ export default function TesterSetupPage() {
               <section className={styles.sec}>
                 <div className={styles.secH}><h2>Traffic per UE</h2><span className={styles.hint}>data plane</span></div>
                 <div className={styles.secB}>
-                  <Field label="Downlink (Mbps)" path="traffic.dlMbps" numeric {...fieldProps} />
                   <Field label="Uplink (Mbps)" path="traffic.ulMbps" numeric {...fieldProps} />
-                  <Field label="Downlink packet size (bytes, inner IP)" path="traffic.dlPacketSize" numeric {...fieldProps} />
+                  <Field label="Downlink (Mbps)" path="traffic.dlMbps" numeric {...fieldProps} />
                   <Field label="Uplink packet size (bytes, inner IP)" path="traffic.ulPacketSize" numeric {...fieldProps} />
+                  <Field label="Downlink packet size (bytes, inner IP)" path="traffic.dlPacketSize" numeric {...fieldProps} />
                   <Field label="Data plane engine" path="traffic.engine" options={['auto', 'socket', 'afxdp']} {...fieldProps} />
                   <Field label="UDP port" path="traffic.port" numeric {...fieldProps} />
                   <Field label="Max run time (min, 0 = no limit)" path="traffic.maxDurationMin" numeric {...fieldProps} />

@@ -8,16 +8,16 @@ import type { ImageInfo } from '../../api'
 import styles from './images-page.module.css'
 
 const GROUP_LABELS: Record<string, string> = {
-  free5gc: 'free5GC',
-  'free-ran-ue': 'RAN · free-ran-ue',
+  free5gc: 'free5GC core',
+  'free-ran-ue': 'free-ran-ue',
 }
 
-// splitRef splits "repo/name:tag" into repo and tag; a ":" before the
-// last "/" is a registry port, not a tag.
-function splitRef(ref: string): { repo: string; tag: string } {
-  const colon = ref.lastIndexOf(':')
-  if (colon > ref.lastIndexOf('/')) return { repo: ref.slice(0, colon), tag: ref.slice(colon + 1) }
-  return { repo: ref, tag: 'latest' }
+// formatStamp shows a date as "YYYY-MM-DD HH:MM:SS" in local time.
+function formatStamp(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 function groupLabel(group: string): string {
@@ -171,25 +171,22 @@ export default function ImagesPage() {
       overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
     >
       <section className={styles.header}>
-        <div className={styles.titleBlock}>
-          <h1 className={styles.title}>Images</h1>
-          <p className={styles.subtitle}>
-            {isLoading
-              ? 'Checking this host…'
-              : <><span className="num">{presentCount} of {images.length}</span> images present on this host · <span className="num">{formatSize(totalSize)}</span></>}
-          </p>
-        </div>
+        <h1 className={styles.title}>Images</h1>
+        <span className={styles.subtitle}>
+          Docker images this app deploys, pinned to each template&apos;s tag. Clear one to force a fresh pull on the next deploy.
+          {!isLoading && <> · <span className="num">{presentCount} of {images.length}</span> on this host · <span className="num">{formatSize(totalSize)}</span></>}
+        </span>
         <div className={styles.headerActions}>
-          <button type="button" className={styles.btn} onClick={refresh} disabled={isLoading}>
-            {isLoading ? 'Refreshing…' : 'Refresh'}
-          </button>
           <button
             type="button"
-            className={`${styles.btn} ${styles.btnDangerText}`}
+            className={`${styles.btn} ${styles.btnDanger}`}
             onClick={() => setConfirmClearAll(true)}
             disabled={presentCount === 0 || isAnyPending}
           >
             Clear all
+          </button>
+          <button type="button" className={styles.btn} onClick={refresh} disabled={isLoading}>
+            {isLoading ? 'Refreshing…' : 'Refresh'}
           </button>
           <button
             type="button"
@@ -203,49 +200,51 @@ export default function ImagesPage() {
       </section>
 
       {isLoading ? (
-        <section className={styles.group}><p className={styles.emptyState}>Loading images…</p></section>
+        <section className={styles.panel}><p className={styles.emptyState}>Loading images…</p></section>
       ) : (
         groups.map((group) => {
           const groupImages = images.filter((image) => image.group === group)
           return (
-            <section key={group} className={styles.group}>
-              <div className={styles.groupHead}>
-                <h2 className={styles.groupTitle}>{groupLabel(group)}</h2>
-                <span className={`num ${styles.groupCount}`}>
-                  {groupImages.filter((image) => image.present).length} of {groupImages.length} present
+            <section key={group} className={styles.panel}>
+              <div className={styles.ph}>
+                <h2>{groupLabel(group)}</h2>
+                <span className={`num ${styles.aux}`}>
+                  {groupImages.filter((image) => image.present).length} of {groupImages.length} pulled
                 </span>
               </div>
               <div className={styles.tableWrap}>
-                <table className={styles.table}>
+                <table className={styles.tbl}>
                   <thead>
                     <tr>
-                      <th className={styles.th}>Image</th>
-                      <th className={styles.th}>Tag</th>
-                      <th className={`${styles.th} ${styles.right}`}>Size</th>
-                      <th className={styles.th}>Status</th>
-                      <th className={styles.th}>Created</th>
-                      <th className={`${styles.th} ${styles.right}`}>Actions</th>
+                      <th>Image</th>
+                      <th>Status</th>
+                      <th className={styles.r}>Size</th>
+                      <th>Created</th>
+                      <th className={styles.right}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {groupImages.map((image) => {
                       const action = pending[image.key]
-                      const { repo, tag } = splitRef(image.image)
                       return (
                         <tr key={image.key}>
-                          <td className={`${styles.td} num`} title={image.name}>{repo}</td>
-                          <td className={`${styles.td} num ${styles.muted}`}>{tag}</td>
-                          <td className={`${styles.td} num ${styles.right}`}>{image.present ? formatSize(image.size) : '—'}</td>
-                          <td className={styles.td}>
-                            <span className={`${styles.status} ${image.present ? styles.statusPresent : styles.statusMissing}`}>
-                              <span className={styles.statusDot} aria-hidden="true" />
-                              {image.present ? 'PRESENT' : 'MISSING'}
+                          <td>
+                            <div className={styles.imgName}>
+                              <b>{image.name}</b>
+                              <span>{image.image}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`${styles.tag} ${image.present ? styles.tagOk : styles.tagIdle}`}>
+                              <i aria-hidden="true" />
+                              {image.present ? 'Pulled' : 'Not pulled'}
                             </span>
                           </td>
-                          <td className={`${styles.td} num ${styles.muted}`}>
-                            {image.present && image.createdAt ? new Date(image.createdAt).toLocaleString() : '—'}
+                          <td className={styles.r}>{image.present ? formatSize(image.size) : '—'}</td>
+                          <td className={styles.m}>
+                            {image.present && image.createdAt ? formatStamp(image.createdAt) : '—'}
                           </td>
-                          <td className={`${styles.td} ${styles.right}`}>
+                          <td className={styles.right}>
                             <span className={styles.rowActions}>
                               <button
                                 type="button"
@@ -257,7 +256,7 @@ export default function ImagesPage() {
                               </button>
                               <button
                                 type="button"
-                                className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerText}`}
+                                className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}
                                 onClick={() => setConfirmClearTarget(image)}
                                 disabled={!image.present || Boolean(action)}
                               >

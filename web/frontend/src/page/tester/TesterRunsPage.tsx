@@ -78,8 +78,8 @@ function RunCard({ tester, state }: { tester: TesterOption, state: RunState }) {
             <dl className={styles.facts}>
               <div><dt>Started</dt><dd>{run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}</dd></div>
               <div><dt>Elapsed</dt><dd>{elapsed === null ? '—' : formatClock(elapsed)}</dd></div>
-              <div><dt>Downlink</dt><dd>{active ? formatBps(run.dataplane.dl.rxBps) : '—'}</dd></div>
               <div><dt>Uplink</dt><dd>{active ? formatBps(run.dataplane.ul.rxBps) : '—'}</dd></div>
+              <div><dt>Downlink</dt><dd>{active ? formatBps(run.dataplane.dl.rxBps) : '—'}</dd></div>
             </dl>
             {run.error && <p className={styles.runError}>{run.error}</p>}
           </div>

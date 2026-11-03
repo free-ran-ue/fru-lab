@@ -10,6 +10,7 @@ import { formatCpus, parseCpus } from './cpus'
 import { CpuMap, CpuUsage } from './TesterCpus'
 import { formatBytes, formatBytesPair, formatDuration } from './testerFormat'
 import styles from './tester.module.css'
+import fleet from './testers.module.css'
 
 type Side = 'cp' | 'dp'
 
@@ -418,9 +419,11 @@ interface FleetEntry {
   busy: number | null
   system?: TesterSystemInfo
   lastSeen: number | null
+  // round trip of the last status read, through fru-lab
+  latencyMs: number | null
 }
 
-const EMPTY: FleetEntry = { status: null, down: null, run: null, busy: null, lastSeen: null }
+const EMPTY: FleetEntry = { status: null, down: null, run: null, busy: null, lastSeen: null, latencyMs: null }
 
 // useFleet polls every tester: its status, run, CPU load, and its CPU
 // layout once each time it is reached.
@@ -435,10 +438,12 @@ function useFleet(testers: TesterEntry[] | null): Record<string, FleetEntry> {
     const read = () => {
       if (document.hidden) return
       for (const t of testers) {
+        const sent = performance.now()
         api.testerByIdStatus(t.id)
           .then((r) => {
             if (cancelled) return
-            set(t.id, (e) => ({ ...e, status: r.data, down: null, lastSeen: Date.now() }))
+            const latencyMs = performance.now() - sent
+            set(t.id, (e) => ({ ...e, status: r.data, down: null, lastSeen: Date.now(), latencyMs }))
             if (!reached.has(t.id)) {
               reached.add(t.id)
               api.testerByIdSystem(t.id)
@@ -466,72 +471,94 @@ function useFleet(testers: TesterEntry[] | null): Record<string, FleetEntry> {
   return fleet
 }
 
-const OpenArrow = () => (
-  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 2l4 4-4 4" /></svg>
-)
+// fleetFill is a fleet meter's fill: accent, then warn and bad near full.
+function fleetFill(ratio: number): string | undefined {
+  return ratio >= 0.95 ? fleet.fillBad : ratio >= 0.8 ? fleet.fillWarn : undefined
+}
 
-// TesterCard is one tester in the list; it opens that tester's page.
-function TesterCard({ tester, entry, onRemove }: { tester: TesterEntry, entry: FleetEntry, onRemove: (t: TesterEntry, name: string) => void }) {
-  const { status, down, run, busy, system, lastSeen } = entry
+// FleetMeter is a 72px track and its value, as in the fleet table.
+function FleetMeter({ ratio, value }: { ratio: number, value: string }) {
+  const r = Math.min(1, Math.max(0, ratio))
+  return (
+    <span className={fleet.meterCell}>
+      <span className={fleet.mtr}><span className={fleetFill(r)} style={{ width: `${r * 100}%` }} /></span>
+      <span className={fleet.mono}>{value}</span>
+    </span>
+  )
+}
+
+// FLEET_COLS is how many columns the fleet table has (for the error row).
+const FLEET_COLS = 14
+
+// FleetRow is one tester in the fleet table, and its error underneath
+// when it does not answer; its name opens the tester's page.
+function FleetRow({ tester, entry, onRemove }: { tester: TesterEntry, entry: FleetEntry, onRemove: (t: TesterEntry, name: string) => void }) {
+  const { status, down, run, busy, system, lastSeen, latencyMs } = entry
   const runActive = run !== null && !FINISHED.includes(run.state)
   const name = status?.name || tester.url
   const m = status?.memory
-  const to = `/tester/status/${tester.id}`
+  const up = !down && status !== null
+  const dash = <span className={fleet.dim}>—</span>
 
-  let pill = <span className={styles.state}>Connecting</span>
-  if (down) pill = <span className={`${styles.state} ${styles.stateBad}`}>Unreachable</span>
-  else if (status) pill = runActive
-    ? <span className={`${styles.state} ${run?.state === 'stopping' ? styles.stateWarn : styles.stateOk}`}>{RUN_LABELS[run!.state]}</span>
-    : <span className={styles.state}>Idle</span>
+  let tag = <span className={fleet.tag}><i />Connecting</span>
+  if (down) tag = <span className={`${fleet.tag} ${fleet.tBad}`}><i />Unreachable</span>
+  else if (status) tag = <span className={`${fleet.tag} ${fleet.tOk}`}><i />Connected{latencyMs !== null ? ` · ${latencyMs.toFixed(0)} ms` : ''}</span>
 
-  let foot = ''
-  if (down) foot = lastSeen ? `Last seen ${new Date(lastSeen).toLocaleTimeString()}` : 'No answer since this page opened'
-  else if (run && run.state !== 'idle') {
-    foot = runActive
-      ? `Run ${run.runId} · ${run.registration.expected.toLocaleString()} UEs`
-      : `Last run ${run.runId} · ${RUN_LABELS[run.state]}`
-  } else if (status) foot = 'No run yet'
+  let runCell: React.ReactNode = dash
+  if (up && run && runActive) {
+    runCell = (
+      <>
+        <Link to={`/tester/run/${tester.id}`} className={fleet.mono}>{run.runId}</Link>
+        <span className={fleet.dim}> · {run.profileName} · {RUN_LABELS[run.state]} · {run.registration.expected.toLocaleString()} UEs</span>
+      </>
+    )
+  } else if (up && run && run.state !== 'idle') {
+    runCell = <span className={fleet.dim}>Last <span className={fleet.mono}>{run.runId}</span> · {RUN_LABELS[run.state]}</span>
+  } else if (up) {
+    runCell = <span className={fleet.dim}>No run yet</span>
+  }
 
   return (
-    <div className={styles.tcard}>
-      <Link to={to} className={styles.tcardLink}>
-        <div className={styles.tcardHead}>
-          <div className={styles.tcardName}>
-            <div className={styles.tcardNameRow}>
-              <span className={styles.tcardTitle}>{name}</span>
-              {tester.builtIn && <span className={styles.defaultTag} title="From config.yaml · runs next to fru-lab">DEFAULT</span>}
-            </div>
-            <span className={`num ${styles.tcardUrl}`}>{tester.url}</span>
-          </div>
-          {pill}
-        </div>
-        {down && (
-          <div className={styles.tcardDown}>
-            <span>{lastSeen ? `No answer for ${formatDuration(Math.round((Date.now() - lastSeen) / 1000))}` : 'No answer'}</span>
-            <span>{down}</span>
-          </div>
-        )}
-        {!down && !status && <div className={styles.tcardWait}>Connecting to fru-tester…</div>}
-        {!down && status && m && (
-          <div className={styles.tcardBody}>
-            <Meter label="CPU" value={busy === null ? '—' : `${busy.toFixed(0)}% of ${status.cpu.online}`} ratio={(busy ?? 0) / 100} />
-            <Meter label="Memory" value={formatBytesPair(m.hostTotal - m.hostAvailable, m.hostTotal)}
-              ratio={m.hostTotal > 0 ? (m.hostTotal - m.hostAvailable) / m.hostTotal : 0} />
-            <dl className={styles.facts}>
-              <div><dt>DP CPUs</dt><dd>{dpFact(system)}</dd></div>
-              <div><dt>Kernel</dt><dd>{status.kernel || '—'}</dd></div>
-              <div><dt>Uptime</dt><dd>{formatDuration(status.uptimeSec)}</dd></div>
-              <div><dt>Version</dt><dd>{status.version || 'unknown'}</dd></div>
-            </dl>
-          </div>
-        )}
-      </Link>
-      <div className={styles.tcardFoot}>
-        <span>{foot}</span>
-        {!tester.builtIn && <button type="button" className={styles.removeLink} onClick={() => onRemove(tester, name)}>Remove</button>}
-        <Link to={to} className={styles.openLink} tabIndex={-1}>Open<OpenArrow /></Link>
-      </div>
-    </div>
+    <>
+      <tr className={down ? fleet.hasErr : undefined}>
+        <td>
+          <Link to={`/tester/status/${tester.id}`} className={fleet.name}>{name}</Link>
+          {tester.builtIn && <span className={`${fleet.tag} ${fleet.tagSm}`} title="From config.yaml · runs next to fru-lab">Default</span>}
+        </td>
+        <td className={`${fleet.mono} ${fleet.dim}`}>{tester.url}</td>
+        <td>{tag}</td>
+        <td className={fleet.mono}>{up ? status.hostname || '—' : dash}</td>
+        <td className={`${fleet.mono} ${fleet.dim}`}>{up ? status.kernel || '—' : '—'}</td>
+        <td className={`${fleet.mono} ${fleet.dim}`}>{up ? status.version || 'unknown' : '—'}</td>
+        <td className={fleet.r}>{up ? `${status.cpu.allowed} of ${status.cpu.online}` : '—'}</td>
+        <td>{up && busy !== null ? <FleetMeter ratio={busy / 100} value={`${busy.toFixed(0)} %`} /> : dash}</td>
+        <td className={fleet.mono}>{up ? dpFact(system) : dash}</td>
+        <td className={fleet.r}>{up ? `${status.cpu.load1.toFixed(2)} / ${status.cpu.load5.toFixed(2)} / ${status.cpu.load15.toFixed(2)}` : '—'}</td>
+        <td>
+          {up && m
+            ? <FleetMeter ratio={m.hostTotal > 0 ? (m.hostTotal - m.hostAvailable) / m.hostTotal : 0} value={formatBytesPair(m.hostTotal - m.hostAvailable, m.hostTotal)} />
+            : dash}
+        </td>
+        <td className={fleet.r}>{up ? formatDuration(status.uptimeSec) : '—'}</td>
+        <td>{runCell}</td>
+        <td>
+          {tester.builtIn
+            ? <span className={`${fleet.dim} ${fleet.small}`}>built in · config.yaml</span>
+            : <button type="button" className={`${fleet.lnk} ${fleet.lnkD}`} onClick={() => onRemove(tester, name)}>Remove</button>}
+        </td>
+      </tr>
+      {down && (
+        <tr className={fleet.err}>
+          <td />
+          <td colSpan={FLEET_COLS - 1}>
+            <span className={fleet.errSince}>
+              {lastSeen ? `No answer for ${formatDuration(Math.round((Date.now() - lastSeen) / 1000))} (last seen ${new Date(lastSeen).toLocaleTimeString()})` : 'No answer since this page opened'}
+            </span>
+            {down}
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
@@ -558,42 +585,45 @@ function AddTesterForm({ onAdded, onCancel }: { onAdded: (name: string) => void,
   }
 
   return (
-    <form className={styles.panel} onSubmit={handleAdd}>
-      <div className={styles.panelHead}><h2 className={styles.panelTitle}>Add a tester</h2></div>
-      <div className={styles.fieldGrid}>
-        <div className={styles.field}>
-          <label htmlFor="testerUrl">URL</label>
-          <input id="testerUrl" className={styles.input} type="text" placeholder="http://10.0.0.2:9100" autoFocus
-            value={url} onChange={(e) => setUrl(e.target.value)} />
-          <p className={styles.fieldHint}>Where fru-lab reaches it: its listen address in tester.yaml.</p>
+    <section className={fleet.panel} aria-label="Add a tester">
+      <div className={fleet.ph}><h2>Add a tester</h2><span className={fleet.aux}>fru-lab checks it answers before saving</span></div>
+      <form onSubmit={handleAdd}>
+        <div className={fleet.fgrid}>
+          <div className={fleet.fld}>
+            <label htmlFor="testerUrl">URL</label>
+            <input id="testerUrl" className={fleet.inp} type="text" placeholder="http://10.0.0.2:9100" autoFocus
+              value={url} onChange={(e) => setUrl(e.target.value)} />
+            <p className={fleet.hint}>Where fru-lab reaches it: its listen address in tester.yaml.</p>
+          </div>
+          <div className={fleet.fld}>
+            <label htmlFor="testerToken">API token</label>
+            <input id="testerToken" className={fleet.inp} type="password" autoComplete="off"
+              value={token} onChange={(e) => setToken(e.target.value)} />
+            <p className={fleet.hint}>The apiToken in its tester.yaml.</p>
+          </div>
         </div>
-        <div className={styles.field}>
-          <label htmlFor="testerToken">API token</label>
-          <input id="testerToken" className={styles.input} type="password" autoComplete="off"
-            value={token} onChange={(e) => setToken(e.target.value)} />
-          <p className={styles.fieldHint}>The apiToken in its tester.yaml.</p>
+        {error && <p className={fleet.formError}>{error}</p>}
+        <div className={fleet.pf}>
+          <button type="submit" className={`${fleet.btn} ${fleet.btnP}`} disabled={isAdding || url.trim() === '' || token.trim() === ''}>{isAdding ? 'Checking…' : 'Add'}</button>
+          <button type="button" className={fleet.btn} onClick={onCancel} disabled={isAdding}>Cancel</button>
+          <span className={fleet.hint}>fru-lab asks the tester for its status first and adds it only if it answers. Its name is the testerName in its tester.yaml.</span>
         </div>
-      </div>
-      {error && <p className={styles.runError}>{error}</p>}
-      <div className={styles.panelActions}>
-        <Button type="submit" disabled={isAdding || url.trim() === '' || token.trim() === ''}>{isAdding ? 'Checking…' : 'Add'}</Button>
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={isAdding}>Cancel</Button>
-      </div>
-      <p className={styles.panelText} style={{ fontSize: '0.75rem' }}>fru-lab asks the tester for its status first and adds it only if it answers. Its name is the testerName in its tester.yaml.</p>
-    </form>
+      </form>
+    </section>
   )
 }
 
 const PlusIcon = () => (
-  <svg className={styles.btnIcon} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M7 2v10M2 7h10" /></svg>
+  <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M7 2v10M2 7h10" /></svg>
 )
 
-// TesterStatusPage lists every tester; each card opens its own page.
+// TesterStatusPage lists every tester as one row of the fleet table; a
+// tester's name opens its own page.
 export default function TesterStatusPage() {
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [testers, setTesters] = useState<TesterEntry[] | null>(null)
   const [adding, setAdding] = useState(false)
-  const fleet = useFleet(testers)
+  const fleetState = useFleet(testers)
 
   const load = useCallback(() => {
     api.testersList()
@@ -613,39 +643,26 @@ export default function TesterStatusPage() {
     }
   }
 
-  // the fleet summary, from what the cards have loaded
-  const entries = (testers ?? []).map((t) => fleet[t.id]).filter((e): e is FleetEntry => e !== undefined)
+  // the fleet summary, from what the rows have loaded
+  const entries = (testers ?? []).map((t) => fleetState[t.id]).filter((e): e is FleetEntry => e !== undefined)
   const withSystem = entries.filter((e) => e.system)
-  const summary = [
-    { label: 'Testers', value: testers === null ? '—' : String(testers.length) },
-    { label: 'Running', value: String(entries.filter((e) => !e.down && e.run && !FINISHED.includes(e.run.state)).length) },
-    { label: 'Unreachable', value: String(entries.filter((e) => e.down).length) },
-    {
-      label: 'DP CPUs isolated',
-      value: withSystem.length === 0 ? '—' : String(withSystem.reduce((a, e) => a + (parseCpus(e.system!.cpus.dpCpus) ?? []).length, 0)),
-    },
-  ]
+  const summary = testers === null ? 'loading…' : [
+    `${testers.length} tester${testers.length === 1 ? '' : 's'}`,
+    `${entries.filter((e) => !e.down && e.status).length} reachable`,
+    `${entries.filter((e) => !e.down && e.run && !FINISHED.includes(e.run.state)).length} running`,
+    `${withSystem.length === 0 ? '—' : withSystem.reduce((a, e) => a + (parseCpus(e.system!.cpus.dpCpus) ?? []).length, 0)} DP CPUs isolated`,
+    `polled every ${STATUS_POLL_MS / 1000} s`,
+  ].join(' · ')
 
   return (
     <AppLayout crumbs={[{ label: 'Testers' }]}
       overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
-      <section className={styles.pageHead}>
-        <div className={styles.pageHeadText}>
-          <h1 className={styles.pageTitle}>Testers</h1>
-          <p className={styles.pageSub}>Every fru-tester this console drives. Open one for CPU isolation, interfaces and its current run.</p>
+      <section className={fleet.head}>
+        <h1 className={fleet.title}>Testers</h1>
+        <span className={fleet.sub}>Every fru-tester this console drives. Click a name for its CPU isolation, interfaces and current run.</span>
+        <div className={fleet.headActions}>
+          <button type="button" className={`${fleet.btn} ${fleet.btnP}`} onClick={() => setAdding(true)} disabled={adding}><PlusIcon />Add tester</button>
         </div>
-        <div className={styles.pageActions}>
-          <Button onClick={() => setAdding(true)} disabled={adding}><PlusIcon />Add tester</Button>
-        </div>
-      </section>
-
-      <section aria-label="Fleet summary" className={styles.kpis}>
-        {summary.map((s) => (
-          <div key={s.label} className={styles.kpi}>
-            <span className={styles.kpiLabel}>{s.label}</span>
-            <span className={`num ${styles.kpiValue}`}>{s.value}</span>
-          </div>
-        ))}
       </section>
 
       {adding && (
@@ -654,12 +671,30 @@ export default function TesterStatusPage() {
           onAdded={(name) => { setAdding(false); addSuccess(`Added ${name}`); load() }}
         />
       )}
-      {testers !== null && testers.length === 0 && !adding && (
-        <p className={styles.emptyState}>No testers yet: set backend.tester in config.yaml, or add one.</p>
-      )}
-      <section aria-label="Testers" className={styles.cardGrid}>
-        {(testers ?? []).map((t) => <TesterCard key={t.id} tester={t} entry={fleet[t.id] ?? EMPTY} onRemove={handleRemove} />)}
+
+      <section className={fleet.panel} aria-label="Testers">
+        <div className={fleet.ph}><h2>Fleet</h2><span className={`${fleet.aux} ${fleet.mono}`}>{summary}</span></div>
+        {testers !== null && testers.length === 0
+          ? <p className={fleet.empty}>No testers yet: set backend.tester in config.yaml, or add one.</p>
+          : (
+            <div className={fleet.scroll}>
+              <table className={fleet.tbl}>
+                <thead>
+                  <tr>
+                    <th>Name</th><th>URL</th><th>Status</th><th>Host</th><th>Kernel</th><th>Version</th>
+                    <th className={fleet.r}>CPUs usable</th><th>CPU busy</th><th>DP CPUs</th><th className={fleet.r}>Load 1 / 5 / 15</th>
+                    <th>Memory used / total</th><th className={fleet.r}>Uptime</th><th>Run</th><th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {testers === null && <tr><td colSpan={FLEET_COLS} className={fleet.dim}>Loading…</td></tr>}
+                  {(testers ?? []).map((t) => <FleetRow key={t.id} tester={t} entry={fleetState[t.id] ?? EMPTY} onRemove={handleRemove} />)}
+                </tbody>
+              </table>
+            </div>
+          )}
       </section>
+
     </AppLayout>
   )
 }

@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import AppLayout from '../../components/layout/AppLayout'
-import Button from '../../components/button/button'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterHistorySummary } from '../../api'
 import { formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
 import { useTesters } from './useTesters'
-import styles from './tester.module.css'
-import Pager from '../../components/pager/Pager'
+import styles from './history.module.css'
 import { pageOf } from '../../components/pager/paging'
 
 // HISTORY_PAGE is how many runs one page of the history shows.
@@ -45,17 +43,20 @@ function resultOf(r: TesterHistorySummary): Result {
 }
 
 const RESULTS: Record<Result, [string, string]> = {
-  max: ['Max run time', styles.tagOk],
-  failed: ['Failed', styles.tagBad],
+  max: ['Max run time', ''],
+  failed: ['Failed', styles.tBad],
   stopped: ['Stopped', ''],
 }
 
-// started is the short start time of the table, e.g. 11-03 05:54.
+// COMPARE_COLORS mark the two compared runs: accent, then violet.
+const COMPARE_COLORS = ['var(--accent)', 'var(--violet)']
+
+// started is the start time of the table, e.g. 2026-11-03 05:54:10.
 function started(r: TesterHistorySummary): string {
   if (!r.startedAt) return '—'
   const d = new Date(r.startedAt)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 // METRICS are the numbers compared side by side.
@@ -66,9 +67,9 @@ const METRICS: [string, (r: TesterHistorySummary) => string][] = [
   ['Registration p95', (r) => formatMs(r.registrationP95Ms)],
   ['PDU session', (r) => percent(r.established, r.ueCount)],
   ['Deregistration', (r) => percent(r.deregistered, r.registered)],
-  ['DL received', (r) => `${formatBits(r.dlRxBytes)} · ${avgRate(r.dlRxBytes, r)}`],
   ['UL received', (r) => `${formatBits(r.ulRxBytes)} · ${avgRate(r.ulRxBytes, r)}`],
-  ['Loss DL / UL', (r) => `${formatLoss(r.dlLossRate)} / ${formatLoss(r.ulLossRate)}`],
+  ['DL received', (r) => `${formatBits(r.dlRxBytes)} · ${avgRate(r.dlRxBytes, r)}`],
+  ['Loss UL / DL', (r) => `${formatLoss(r.ulLossRate)} / ${formatLoss(r.dlLossRate)}`],
 ]
 
 // save downloads blob as a file named name.
@@ -152,102 +153,74 @@ export default function TesterHistoryPage() {
   return (
     <AppLayout crumbs={[{ label: 'History' }]}
       overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
-      <section className={styles.pageHead}>
-        <div className={styles.pageHeadText}>
-          <h1 className={styles.pageTitle}>Run history</h1>
-          <p className={styles.pageSub}>The last 50 finished runs from every tester. Select two to compare. View opens a run&apos;s full report; Download saves it as one HTML file that opens offline.</p>
-        </div>
-        <div className={styles.pageActions}>
-          <Button onClick={() => setComparing((c) => !c)} disabled={selected.length !== 2}>
+      <section className={styles.head}>
+        <h1 className={styles.title}>History</h1>
+        <span className={styles.sub}>The last 50 finished runs from every tester. Tick two to compare them; View opens a run&apos;s report, Download saves it as one offline HTML file.</span>
+        <div className={styles.headActions}>
+          <button type="button" className={`${styles.btn} ${styles.btnP}`} onClick={() => setComparing((c) => !c)} disabled={selected.length !== 2}>
             {showCompare ? 'Hide comparison' : 'Compare 2 runs'}
-          </Button>
+          </button>
         </div>
       </section>
 
-      {showCompare && (
-        <section ref={compareRef} className={`${styles.panel} ${styles.panelFlush}`}>
-          <div className={styles.panelHead}><h2 className={styles.panelTitle}>Comparison</h2></div>
-          <div className={styles.tableScroll}>
-            <table className={styles.dataTable}>
-              <thead>
-                <tr>
-                  <th />
-                  {compared.map((r) => (
-                    <th key={r.id} className={styles.r}>
-                      <span className={styles.swatch}><i style={{ background: colorOf(r.testerId) }} />{r.runId} · {r.profileName} · {testerName(r)}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {METRICS.map(([label, f]) => (
-                  <tr key={label}>
-                    <td className={styles.dim}>{label}</td>
-                    {compared.map((r) => <td key={r.id} className={`num ${styles.r}`}>{f(r)}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      <section className={`${styles.panel} ${styles.panelFlush}`}>
-        <div className={styles.filterBar}>
-          <input className={`${styles.in} ${styles.search}`} aria-label="Search runs" placeholder="Search run ID or profile"
+      <section className={styles.panel}>
+        <div className={styles.ph}>
+          <h2>Runs</h2>
+          <span className={`${styles.aux} ${styles.mono}`}>{runs === null ? 'loading…' : `${runs.length} runs · ${selected.length} selected`}</span>
+        </div>
+        <div className={styles.toolbar}>
+          <input className={`${styles.inp} ${styles.search}`} aria-label="Search runs" placeholder="Search run ID or profile"
             value={query} onChange={(e) => setQuery(e.target.value)} />
-          <select className={styles.in} aria-label="Tester" value={testerFilter} onChange={(e) => setTesterFilter(e.target.value)}>
+          <select className={styles.inp} aria-label="Tester" value={testerFilter} onChange={(e) => setTesterFilter(e.target.value)}>
             <option value="">All testers</option>
             {testerIds.map((id) => {
               const r = runs!.find((x) => x.testerId === id)!
               return <option key={id} value={id}>{testerName(r)}</option>
             })}
           </select>
-          <select className={styles.in} aria-label="Result" value={resultFilter} onChange={(e) => setResultFilter(e.target.value as '' | Result)}>
+          <select className={styles.inp} aria-label="Result" value={resultFilter} onChange={(e) => setResultFilter(e.target.value as '' | Result)}>
             <option value="">All results</option>
             <option value="max">Max run time</option>
             <option value="failed">Failed</option>
             <option value="stopped">Stopped</option>
           </select>
-          <span className={`num ${styles.count}`}>{filtered.length} of {runs?.length ?? 0}</span>
+          <span className={`${styles.mono} ${styles.dim}`}>{filtered.length} of {runs?.length ?? 0} shown</span>
         </div>
-        {runs === null && <p className={styles.tableEmpty}>Loading…</p>}
-        {runs?.length === 0 && <p className={styles.tableEmpty}>No finished runs yet. Runs are saved here when they stop.</p>}
-        {runs && runs.length > 0 && filtered.length === 0 && <p className={styles.tableEmpty}>No run matches these filters.</p>}
+        {runs === null && <p className={styles.empty}>Loading…</p>}
+        {runs?.length === 0 && <p className={styles.empty}>No finished runs yet. Runs are saved here when they stop.</p>}
+        {runs && runs.length > 0 && filtered.length === 0 && <p className={styles.empty}>No run matches these filters.</p>}
         {filtered.length > 0 && (
-          <div className={styles.tableScroll}>
-            <table className={`${styles.dataTable} ${styles.historyTable}`}>
+          <div className={styles.scroll}>
+            <table className={`${styles.tbl} ${styles.runsTbl}`}>
               <thead>
                 <tr>
-                  <th className={styles.selCol} aria-label="Compare" />
-                  <th>Run</th><th>Started</th><th>Tester</th><th>Profile</th>
-                  <th className={styles.r}>UEs</th><th className={styles.r}>Registered</th><th className={styles.r}>Avg DL</th>
-                  <th className={styles.r}>Duration</th><th>Result</th><th className={styles.r}>Report</th>
+                  <th className={styles.c}><span className={styles.srOnly}>Compare</span></th>
+                  <th>Started</th><th>Run</th><th>Profile</th><th>Tester</th><th>Result</th><th>Report</th>
+                  {METRICS.map(([label]) => <th key={label} className={styles.r}>{label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {shown.items.map((r) => {
                   const [label, tone] = RESULTS[resultOf(r)]
+                  const sel = selected.includes(r.id)
                   return (
-                    <tr key={r.id}>
-                      <td>
-                        <input type="checkbox" aria-label={`Compare run ${r.runId}`}
-                          checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
+                    <tr key={r.id} className={sel ? styles.sel : undefined}>
+                      <td className={styles.c}>
+                        <input type="checkbox" className={styles.ck} aria-label={`Compare run ${r.runId}`}
+                          checked={sel} onChange={() => toggle(r.id)} />
                       </td>
-                      <td className="num">{r.runId}</td>
-                      <td className={`num ${styles.dim}`}>{started(r)}</td>
-                      <td><span className={styles.swatch}><i style={{ background: colorOf(r.testerId) }} />{testerName(r)}</span></td>
+                      <td className={`${styles.mono} ${styles.dim}`}>{started(r)}</td>
+                      <td className={styles.mono}>{r.runId}</td>
                       <td>{r.profileName}</td>
-                      <td className={`num ${styles.r}`}>{r.ueCount.toLocaleString()}</td>
-                      <td className={`num ${styles.r}`}>{r.registered.toLocaleString()}</td>
-                      <td className={`num ${styles.r}`}>{avgRate(r.dlRxBytes, r)}</td>
-                      <td className={`num ${styles.r}`}>{duration(r)}</td>
-                      <td><span className={`${styles.tag} ${tone}`} title={r.error || undefined}>{label}</span></td>
-                      <td className={styles.r}>
-                        <button type="button" className={styles.textLink} onClick={() => report(r, 'view')}>View</button>
-                        <span className={styles.linkSep} aria-hidden="true">|</span>
-                        <button type="button" className={styles.textLink} onClick={() => report(r, 'download')}>Download</button>
+                      <td><span className={styles.swatch}><i style={{ background: colorOf(r.testerId) }} />{testerName(r)}</span></td>
+                      <td><span className={`${styles.tag} ${tone}`} title={r.error || undefined}><i />{label}</span></td>
+                      <td>
+                        <span className={styles.lnks}>
+                          <button type="button" className={styles.lnk} onClick={() => report(r, 'view')}>View</button>
+                          <button type="button" className={styles.lnk} onClick={() => report(r, 'download')}>Download</button>
+                        </span>
                       </td>
+                      {METRICS.map(([m, f]) => <td key={m} className={styles.r}>{f(r)}</td>)}
                     </tr>
                   )
                 })}
@@ -255,8 +228,49 @@ export default function TesterHistoryPage() {
             </table>
           </div>
         )}
-        {filtered.length > HISTORY_PAGE && <div className={styles.pagerPad}><Pager page={shown} total={filtered.length} onChange={setPage} /></div>}
+        {filtered.length > 0 && (
+          <div className={styles.pager}>
+            <span className={styles.mono}>{shown.from}–{shown.to} of {filtered.length}</span>
+            {shown.pages > 1 && (
+              <span className={styles.pagerBtns}>
+                <span className={styles.mono}>Page {shown.page} / {shown.pages}</span>
+                <button type="button" className={styles.btn} onClick={() => setPage(shown.page - 1)} disabled={shown.page === 1}>Previous</button>
+                <button type="button" className={styles.btn} onClick={() => setPage(shown.page + 1)} disabled={shown.page === shown.pages}>Next</button>
+              </span>
+            )}
+          </div>
+        )}
       </section>
+
+      {showCompare && (
+        <section ref={compareRef} className={styles.panel}>
+          <div className={styles.ph}><h2>Comparison</h2><span className={styles.aux}>2 of 2 runs ticked</span></div>
+          <div className={styles.scroll}>
+            <table className={`${styles.tbl} ${styles.cmpTbl}`}>
+              <thead>
+                <tr>
+                  <th className={styles.metricCol}>Metric</th>
+                  {compared.map((r, i) => (
+                    <th key={r.id} className={styles.r}>
+                      <span className={styles.legend}><i style={{ background: COMPARE_COLORS[i] }} /><span className={styles.mono}>{started(r)}</span></span>
+                      <br />
+                      <span className={styles.colSub}><span className={styles.mono}>{r.runId}</span> · {r.profileName} · {testerName(r)}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {METRICS.map(([label, f]) => (
+                  <tr key={label}>
+                    <td>{label}</td>
+                    {compared.map((r) => <td key={r.id} className={styles.r}>{f(r)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </AppLayout>
   )
 }

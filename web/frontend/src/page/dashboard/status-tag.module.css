@@ -1,0 +1,42 @@
+/* v2 .tag (v1 colours, 4px corners, round swatch) */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 1.25rem;
+  padding: 0 0.375rem;
+  border: 1px solid;
+  border-radius: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.tag i {
+  display: block;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+}
+
+.swatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+}
+
+.ok { color: var(--ok-ink); border-color: color-mix(in srgb, var(--ok) 35%, var(--surface)); background: var(--ok-bg); }
+.ok i, .swatch.ok { background: var(--ok); }
+
+.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 35%, var(--surface)); background: var(--warn-bg); }
+.warn i, .swatch.warn { background: var(--warn); }
+
+.bad { color: var(--bad-ink); border-color: color-mix(in srgb, var(--bad) 35%, var(--surface)); background: var(--bad-bg); }
+.bad i, .swatch.bad { background: var(--bad); }
+
+.idle { color: var(--idle-ink); border-color: var(--border-strong); background: var(--idle-bg); }
+.idle i, .swatch.idle { background: var(--muted); }
