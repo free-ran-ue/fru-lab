@@ -35,6 +35,7 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerByIdProfileValidate**](#testerbyidprofilevalidate) | **POST** /api/testers/{id}/profile/validate | Validate a profile on one tester|
 |[**testerByIdRun**](#testerbyidrun) | **GET** /api/testers/{id}/run | One tester\&#39;s run|
 |[**testerByIdRunStart**](#testerbyidrunstart) | **POST** /api/testers/{id}/run | Start a run on one tester|
+|[**testerByIdRunStop**](#testerbyidrunstop) | **POST** /api/testers/{id}/run/stop | Stop the active run on one tester|
 |[**testerByIdStatus**](#testerbyidstatus) | **GET** /api/testers/{id}/status | One tester\&#39;s host and process|
 |[**testerByIdSystem**](#testerbyidsystem) | **GET** /api/testers/{id}/system | One tester\&#39;s CPU allocation and layout|
 |[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON)|
@@ -1660,6 +1661,60 @@ const { status, data } = await apiInstance.testerByIdRunStart(
 |**202** | Started |  -  |
 |**400** | Invalid profile |  -  |
 |**409** | A run or a bench is already running |  -  |
+|**404** | No tester with that id |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerByIdRunStop**
+> TesterRunSnapshot testerByIdRunStop()
+
+Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+
+const { status, data } = await apiInstance.testerByIdRunStop(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**TesterRunSnapshot**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**202** | Stop requested |  -  |
+|**409** | No active run |  -  |
 |**404** | No tester with that id |  -  |
 |**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
 

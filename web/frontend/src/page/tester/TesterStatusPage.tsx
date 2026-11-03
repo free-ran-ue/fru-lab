@@ -62,8 +62,8 @@ function Check({ ok, label, why }: { ok: boolean, label: string, why: string }) 
 
 // Overview is the row of tiles at the top: the tester, its run, memory,
 // CPUs and what a run needs.
-function Overview({ status, latencyMs, run, cpuLoad, saved }: {
-  status: TesterStatus, latencyMs: number, run: TesterRunSnapshot | null
+function Overview({ id, status, latencyMs, run, cpuLoad, saved }: {
+  id: string, status: TesterStatus, latencyMs: number, run: TesterRunSnapshot | null
   cpuLoad: TesterCpuLoad | null, saved: TesterCpuAllocation
 }) {
   const m = status.memory
@@ -109,7 +109,7 @@ function Overview({ status, latencyMs, run, cpuLoad, saved }: {
               <dt>UEs</dt><dd>{run.ues.established} established</dd>
             </dl>
           ) : <p className={styles.hint} style={{ margin: 0 }}>Nothing has run since fru-tester started.</p>}
-          <Link to="/tester/run" className={styles.linkButton}>Open the Run page →</Link>
+          <Link to={`/tester/run/${id}`} className={styles.linkButton}>Open this tester&apos;s run →</Link>
         </section>
 
         <section className={`${styles.card} ${styles.tile}`}>
@@ -297,7 +297,7 @@ function TesterPanel({ id }: { id: string }) {
       {!unreachable && !status && <p className={styles.emptyState}>Connecting to fru-tester…</p>}
 
       {status && !unreachable && (
-        <Overview status={status} latencyMs={latencyMs} run={run} cpuLoad={cpuLoad} saved={saved} />
+        <Overview id={id} status={status} latencyMs={latencyMs} run={run} cpuLoad={cpuLoad} saved={saved} />
       )}
 
       {info && !unreachable && (

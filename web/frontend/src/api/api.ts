@@ -2089,6 +2089,44 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+         * @summary Stop the active run on one tester
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdRunStop: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('testerByIdRunStop', 'id', id)
+            const localVarPath = `/api/testers/{id}/run/stop`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
          * @summary One tester\'s host and process
          * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
@@ -3346,6 +3384,19 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+         * @summary Stop the active run on one tester
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerByIdRunStop(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRunStop(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdRunStop']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
          * @summary One tester\'s host and process
          * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
@@ -3952,6 +4003,16 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerByIdRunStart(id, testerProfile, options).then((request) => request(axios, basePath));
         },
         /**
+         * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+         * @summary Stop the active run on one tester
+         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerByIdRunStop(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
+            return localVarFp.testerByIdRunStop(id, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
          * @summary One tester\'s host and process
          * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
@@ -4515,6 +4576,17 @@ export class DefaultApi extends BaseAPI {
      */
     public testerByIdRunStart(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).testerByIdRunStart(id, testerProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+     * @summary Stop the active run on one tester
+     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerByIdRunStop(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdRunStop(id, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

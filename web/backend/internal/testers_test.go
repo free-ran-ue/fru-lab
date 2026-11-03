@@ -13,6 +13,7 @@ import (
 	flctx "backend/internal/context"
 	"backend/logger"
 
+	"github.com/free-ran-ue/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -163,5 +164,46 @@ func TestTesterRoutesForwardToTheRightTester(t *testing.T) {
 	}
 	if _, body := do(http.MethodGet, "/api/testers"); !strings.Contains(body, `"builtIn":true`) || strings.Contains(body, "apiToken") {
 		t.Fatalf("list must not carry tokens: %s", body)
+	}
+}
+
+// A tester's run stream takes the user's JWT as ?token= and drops it on
+// the way to the tester.
+func TestTesterRunStreamChecksTheQueryToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	lab2 := fakeTester(t, "lab-2", "s")
+	r, _ := newTesterRegistry("", "", &memTesters{})
+	added, err := r.add(context.Background(), lab2.URL, "s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &backend{testers: r, jwt: jwt{secret: "k", expiresIn: time.Hour}, BackendLogger: logger.NewBackendLogger("error", "", true)}
+	router := gin.New()
+	addRoutes(router.Group("/api"), b.getTesterStreamRoutes())
+	front := httptest.NewServer(router)
+	t.Cleanup(front.Close)
+
+	path := front.URL + "/api/testers/" + added.ID + "/run/stream"
+	resp, err := http.Get(path + "?token=bad")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("bad token: %d", resp.StatusCode)
+	}
+	token, err := util.CreateJWT("k", "admin", time.Hour, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.Get(path + "?token=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var got map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&got)
+	if resp.StatusCode != http.StatusOK || got["tester"] != "lab-2" || got["path"] != "/api/run/stream" {
+		t.Fatalf("good token: %d %v", resp.StatusCode, got)
 	}
 }

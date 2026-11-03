@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// getTestersRoutes list, add and remove testers, and forward the Status
-// and Setup pages' requests to one of them: /testers/<id>/<rest> reaches
+// getTestersRoutes list, add and remove testers, and forward the Status,
+// Setup and Run pages' requests to one of them: /testers/<id>/<rest> reaches
 // <tester>/api/<rest>. The other tester pages still use /tester/, the
 // tester in config.yaml.
 func (b *backend) getTestersRoutes() util.Routes {
@@ -30,6 +30,8 @@ func (b *backend) getTestersRoutes() util.Routes {
 			HandlerFunc: b.handleTesterByID},
 		{Name: "TesterByIdRunStart", Method: http.MethodPost, Pattern: "/testers/:id/run",
 			HandlerFunc: withLogging("TesterByIdRunStart", b.TesterLog, b.handleTesterByID)},
+		{Name: "TesterByIdRunStop", Method: http.MethodPost, Pattern: "/testers/:id/run/stop",
+			HandlerFunc: withLogging("TesterByIdRunStop", b.TesterLog, b.handleTesterByID)},
 		{Name: "TesterByIdProfileValidate", Method: http.MethodPost, Pattern: "/testers/:id/profile/validate",
 			HandlerFunc: b.handleTesterByID}, // on every edit; not logged per request
 		{Name: "TesterByIdNetworkInterfaces", Method: http.MethodGet, Pattern: "/testers/:id/network/interfaces",
@@ -85,4 +87,14 @@ func (b *backend) handleTesterByID(c *gin.Context) {
 		return
 	}
 	t.proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+// handleTesterByIDStream is one tester's run stream: like the default
+// tester's, it checks the ?token= JWT itself.
+func (b *backend) handleTesterByIDStream(c *gin.Context) {
+	if _, err := util.ValidateJWT(c.Query("token"), b.jwt.secret); err != nil {
+		c.JSON(http.StatusUnauthorized, model.ResponseTesterAction{Message: "Invalid token: " + err.Error()})
+		return
+	}
+	b.handleTesterByID(c)
 }

@@ -1305,6 +1305,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/run/stop:
+    post:
+      summary: Stop the active run on one tester
+      description: Forwarded to that tester's /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run's live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
+      operationId: testerByIdRunStop
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '202':
+          description: Stop requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterRunSnapshot'
+        '409':
+          description: No active run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/testers/{id}/profile/validate:
     post:
       summary: Validate a profile on one tester

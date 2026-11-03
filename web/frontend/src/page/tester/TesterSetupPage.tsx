@@ -311,13 +311,12 @@ export default function TesterSetupPage() {
     void saveNew(rename.name, rename.then)
   }
 
-  // start runs p on its tester. The Run page follows the default tester;
-  // a run elsewhere is watched on that tester's Status page for now.
+  // start runs p on its tester, then follows it on that tester's run page.
   async function start(p: TesterProfile) {
     const id = p.testerId || DEFAULT_TESTER_ID
     try {
       await api.testerByIdRunStart(id, forTester(p))
-      navigate(id === DEFAULT_TESTER_ID ? '/tester/run' : `/tester/status/${id}`)
+      navigate(`/tester/run/${id}`)
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to start the run'))
       setIsBusy(false)

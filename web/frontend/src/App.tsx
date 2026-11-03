@@ -7,7 +7,8 @@ import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
 import LogsPage from './page/logs/LogsPage'
 import ImagesPage from './page/images/ImagesPage'
 import TesterSetupPage from './page/tester/TesterSetupPage'
-import TesterRunPage from './page/tester/TesterRunPage'
+import TesterRunDetailPage from './page/tester/TesterRunPage'
+import TesterRunsPage from './page/tester/TesterRunsPage'
 import TesterHistoryPage from './page/tester/TesterHistoryPage'
 import TesterProfilesPage from './page/tester/TesterProfilesPage'
 import TesterStatusPage, { TesterDetailPage } from './page/tester/TesterStatusPage'
@@ -102,7 +103,15 @@ export default function App() {
         path="/tester/run"
         element={(
           <RequireAuth>
-            <TesterRunPage />
+            <TesterRunsPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/tester/run/:testerId"
+        element={(
+          <RequireAuth>
+            <TesterRunDetailPage />
           </RequireAuth>
         )}
       />

@@ -57,6 +57,8 @@ func (b *backend) getTesterStreamRoutes() util.Routes {
 	return util.Routes{
 		{Name: "TesterRunStream", Method: http.MethodGet, Pattern: "/tester/run/stream",
 			HandlerFunc: b.handleTesterStream},
+		{Name: "TesterByIdRunStream", Method: http.MethodGet, Pattern: "/testers/:id/run/stream",
+			HandlerFunc: b.handleTesterByIDStream},
 	}
 }
 
