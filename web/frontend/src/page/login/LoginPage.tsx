@@ -4,6 +4,8 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import { useNavigate } from 'react-router-dom'
+import { LogoMark } from '../../components/sidebar/Sidebar'
+import logoBanner from '../../assets/frulab-logo.png'
 import styles from './login-page.module.css'
 
 export default function LoginPage() {
@@ -39,40 +41,54 @@ export default function LoginPage() {
         onClose={removeNotification}
       />
 
-      <div className={styles.heroGlow} aria-hidden="true" />
+      <section className={styles.brandPanel} aria-label="fru-lab">
+        <img
+          className={styles.banner}
+          src={logoBanner}
+          alt="fru-lab: free5GC and free-ran-ue in containers, connected over 5G"
+        />
+      </section>
 
-      <main className={styles.card}>
-        <div className={styles.headerBlock}>
-          <p className={styles.kicker}>FRU-LAB</p>
-          <h1 className={styles.title}>5G Lab Console</h1>
-          <p className={styles.subtitle}>Sign in to manage your free5GC core and free-ran-ue deployments.</p>
-        </div>
-
+      <main className={styles.formPanel}>
         <form className={styles.form} onSubmit={handleSubmit}>
-          <label className={styles.label} htmlFor="username">Username</label>
-          <input
-            id="username"
-            className={styles.input}
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            autoComplete="username"
-            required
-          />
+          <div className={styles.brand}>
+            <LogoMark size={36} />
+            <span className={styles.wordmark}>fru-<span className={styles.wordmarkLab}>lab</span></span>
+          </div>
 
-          <label className={styles.label} htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            className={styles.input}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-          />
+          <div className={styles.headerBlock}>
+            <h1 className={styles.title}>Sign in</h1>
+            <p className={styles.subtitle}>Sign in to manage your free5GC core and free-ran-ue deployments.</p>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="username">Username</label>
+            <input
+              id="username"
+              className={styles.input}
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+              required
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              className={styles.input}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
 
           <div className={styles.actionRow}>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </div>
         </form>

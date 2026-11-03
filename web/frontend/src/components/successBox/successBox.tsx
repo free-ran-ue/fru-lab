@@ -39,6 +39,10 @@ function SingleSuccess({
         animationDelay: `${index * 0.05}s`
       }}
     >
+      <svg className={styles.icon} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" fill="currentColor" />
+        <path d="M5 8.2l2 2 4-4.2" fill="none" stroke="var(--surface)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
       <span className={styles.message}>{success.message}</span>
       <button 
         type="button" 
@@ -46,7 +50,9 @@ function SingleSuccess({
         onClick={() => onClose(success.id)}
         aria-label="Close success message"
       >
-        x
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
       </button>
     </div>
   )

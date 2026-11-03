@@ -88,7 +88,7 @@ export default function TesterProfilesPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · Profiles</h2>
+            <h2 className={styles.title}>Profiles</h2>
             <p className={styles.subtitle}>Saved test setups. Edit opens one on the Setup page; names are unique.</p>
           </div>
           <div className={styles.headerActions}>
@@ -114,7 +114,7 @@ export default function TesterProfilesPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>
+                    <th className={styles.checkCol}>
                       <input type="checkbox" aria-label="Select all profiles" checked={allSelected}
                         ref={(el) => { if (el) el.indeterminate = chosen.length > 0 && !allSelected }}
                         onChange={() => setSelected(allSelected ? new Set() : new Set(list.map((p) => p.id)))}
@@ -122,12 +122,12 @@ export default function TesterProfilesPage() {
                     </th>
                     <th>Name</th>
                     <th>Tester</th>
-                    <th>gNBs / UEs</th>
-                    <th>UL / DL per UE</th>
-                    <th>Packet UL / DL</th>
+                    <th className={styles.numCol}>gNBs / UEs</th>
+                    <th className={styles.numCol}>UL / DL per UE</th>
+                    <th className={styles.numCol}>Packet UL / DL</th>
                     <th>Engine</th>
                     <th>Updated</th>
-                    <th />
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -138,21 +138,21 @@ export default function TesterProfilesPage() {
                           onChange={() => toggle(p.id)} disabled={isDeleting} />
                       </td>
                       <td>
-                        {p.profile.name}
-                        {p.id === openId && <span className={`${styles.pill} ${styles.pillActive}`} style={{ marginLeft: '0.5rem' }}>open in Setup</span>}
+                        <b>{p.profile.name}</b>
+                        {p.id === openId && <span className={`${styles.pill} ${styles.pillActive} ${styles.tagAfter}`}>open in Setup</span>}
                       </td>
                       <td>
                         {testerLabel(testers, p.profile.testerId)}
-                        {testers !== null && !testers.some((t) => t.id === (p.profile.testerId || 'default')) && <span className={`${styles.pill} ${styles.pillBad}`} style={{ marginLeft: '0.5rem' }}>choose another</span>}
+                        {testers !== null && !testers.some((t) => t.id === (p.profile.testerId || 'default')) && <span className={`${styles.pill} ${styles.pillBad} ${styles.tagAfter}`}>choose another</span>}
                       </td>
-                      <td className={styles.mono}>{p.profile.scale.gnbCount} / {p.profile.scale.ueCount}</td>
-                      <td className={styles.mono}>{p.profile.traffic.ulMbps} / {p.profile.traffic.dlMbps} Mbps</td>
-                      <td className={styles.mono}>{packetSizes(p.profile)}</td>
+                      <td className={styles.numCol}>{p.profile.scale.gnbCount} / {p.profile.scale.ueCount}</td>
+                      <td className={styles.numCol}>{p.profile.traffic.ulMbps} / {p.profile.traffic.dlMbps} Mbps</td>
+                      <td className={styles.numCol}>{packetSizes(p.profile)}</td>
                       <td className={styles.mono}>{engineLabel(p.profile.traffic.engine ?? '')}</td>
-                      <td>{new Date(p.updatedAt).toLocaleString()}</td>
+                      <td className={`${styles.mono} ${styles.dimCell}`}>{new Date(p.updatedAt).toLocaleString()}</td>
                       <td>
                         <button type="button" className={styles.linkButton} onClick={() => navigate(`/tester?profile=${encodeURIComponent(p.id)}`)}>Edit</button>
-                        <button type="button" className={styles.linkButton} onClick={() => setToDelete([p])} disabled={isDeleting}>Delete</button>
+                        <button type="button" className={`${styles.linkButton} ${styles.linkDanger}`} onClick={() => setToDelete([p])} disabled={isDeleting}>Delete</button>
                       </td>
                     </tr>
                   ))}

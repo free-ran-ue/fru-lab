@@ -8,11 +8,14 @@ export interface StatusMeta {
   dot: string
 }
 
+// values are CSS custom properties from index.css, so they work in inline
+// `style` objects (including SVG `fill`/`stroke` set via style), not in raw
+// SVG presentation attributes.
 const STATUS_META: Record<NodeStatus, StatusMeta> = {
-  running: { text: 'Running', color: '#15803d', bg: '#dcfce7', border: '#86efac', dot: '#16a34a' },
-  unhealthy: { text: 'Unhealthy', color: '#b91c1c', bg: '#fee2e2', border: '#fca5a5', dot: '#dc2626' },
-  deploying: { text: 'Deploying', color: '#b45309', bg: '#fef3c7', border: '#fcd34d', dot: '#d97706' },
-  stopped: { text: 'Stopped', color: '#475569', bg: '#f1f5f9', border: '#cbd5e1', dot: '#94a3b8' },
+  running: { text: 'Running', color: 'var(--ok-ink)', bg: 'var(--ok-bg)', border: 'var(--ok-bg)', dot: 'var(--ok)' },
+  unhealthy: { text: 'Unhealthy', color: 'var(--bad-ink)', bg: 'var(--bad-bg)', border: 'var(--bad-bg)', dot: 'var(--bad)' },
+  deploying: { text: 'Deploying', color: 'var(--warn-ink)', bg: 'var(--warn-bg)', border: 'var(--warn-bg)', dot: 'var(--warn)' },
+  stopped: { text: 'Stopped', color: 'var(--idle-ink)', bg: 'var(--idle-bg)', border: 'var(--idle-bg)', dot: 'var(--chrome-muted)' },
 }
 
 export function getStatusMeta(status: NodeStatus): StatusMeta {

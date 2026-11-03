@@ -112,7 +112,7 @@ export default function TesterHistoryPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · History</h2>
+            <h2 className={styles.title}>History</h2>
             <p className={styles.subtitle}>The last 50 finished runs. Tick two to compare them side by side; View opens a run&apos;s full report, Download saves it as one HTML file that opens offline.</p>
           </div>
         </header>
@@ -126,7 +126,7 @@ export default function TesterHistoryPage() {
                   <tr>
                     <th />
                     {compared.map((r) => (
-                      <th key={r.id}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : r.runId} · {r.profileName} · {testerName(r)}</th>
+                      <th key={r.id} className={styles.numCol}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : r.runId} · {r.profileName} · {testerName(r)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -134,7 +134,7 @@ export default function TesterHistoryPage() {
                   {METRICS.map(([label, f]) => (
                     <tr key={label}>
                       <td>{label}</td>
-                      {compared.map((r) => <td key={r.id} className={styles.mono}>{f(r)}</td>)}
+                      {compared.map((r) => <td key={r.id} className={styles.numCol}>{f(r)}</td>)}
                     </tr>
                   ))}
                 </tbody>
@@ -152,13 +152,13 @@ export default function TesterHistoryPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th />
+                    <th className={styles.checkCol} />
                     <th>Started</th>
                     <th>Profile</th>
                     <th>Tester</th>
                     <th>Result</th>
                     <th>Report</th>
-                    {METRICS.map(([label]) => <th key={label}>{label}</th>)}
+                    {METRICS.map(([label]) => <th key={label} className={styles.numCol}>{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -168,7 +168,7 @@ export default function TesterHistoryPage() {
                         <input type="checkbox" aria-label={`Compare run ${r.runId}`}
                           checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
                       </td>
-                      <td>{r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}</td>
+                      <td className={`${styles.mono} ${styles.dimCell}`}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}</td>
                       <td>{r.profileName}</td>
                       <td>{testerName(r)}</td>
                       <td>
@@ -180,7 +180,7 @@ export default function TesterHistoryPage() {
                         <button type="button" className={styles.linkButton} onClick={() => report(r, 'view')}>View</button>
                         <button type="button" className={styles.linkButton} onClick={() => report(r, 'download')}>Download</button>
                       </td>
-                      {METRICS.map(([label, f]) => <td key={label} className={styles.mono}>{f(r)}</td>)}
+                      {METRICS.map(([label, f]) => <td key={label} className={styles.numCol}>{f(r)}</td>)}
                     </tr>
                   ))}
                 </tbody>

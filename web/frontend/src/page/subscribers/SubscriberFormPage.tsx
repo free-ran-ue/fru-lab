@@ -158,7 +158,10 @@ export default function SubscriberFormPage() {
       <div className={styles.layout}>
         <Sidebar />
         <main className={styles.content}>
-          <div className={styles.body}><p>Loading subscriber…</p></div>
+          <header className={styles.pageHeader}>
+            <div className={styles.titleBlock}><h1 className={styles.title}>Edit subscriber</h1></div>
+          </header>
+          <p className={styles.bodyText}>Loading subscriber…</p>
         </main>
       </div>
     )
@@ -169,10 +172,11 @@ export default function SubscriberFormPage() {
       <div className={styles.layout}>
         <Sidebar />
         <main className={styles.content}>
-          <div className={styles.body}>
-            <p>{loadError}</p>
-            <Button variant="secondary" onClick={() => navigate('/subscribers')}>Back to subscribers</Button>
-          </div>
+          <header className={styles.pageHeader}>
+            <div className={styles.titleBlock}><h1 className={styles.title}>Edit subscriber</h1></div>
+          </header>
+          <p className={styles.bodyText}>{loadError}</p>
+          <div><Button variant="secondary" onClick={() => navigate('/subscribers')}>Back to subscribers</Button></div>
         </main>
       </div>
     )
@@ -184,20 +188,16 @@ export default function SubscriberFormPage() {
       <Sidebar />
 
       <main className={styles.content}>
-        <div className={styles.heroBand}>
-          <div className={styles.heroBlobPink} aria-hidden="true" />
-          <div className={styles.heroBlobBlue} aria-hidden="true" />
-          <div className={styles.heroInner}>
-            <div>
-              <p className={styles.kicker}>Fru-Lab Control Plane</p>
-              <h2 className={styles.title}>{isEditMode ? 'Edit Subscriber' : isBulk ? `Add ${count} Subscribers` : 'Add Subscriber'}</h2>
-            </div>
+        <header className={styles.pageHeader}>
+          <div className={styles.titleBlock}>
+            <h1 className={styles.title}>{isEditMode ? 'Edit subscriber' : isBulk ? `Add ${count} subscribers` : 'Add subscriber'}</h1>
           </div>
-        </div>
+        </header>
 
-        <div className={styles.body}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <section className={styles.card}>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <section className={styles.panel}>
+            <div className={styles.panelHead}><h2>Identity and authentication</h2></div>
+            <div className={styles.panelBody}>
               <div className={styles.fieldGrid}>
                 <Field label="SUPI (IMSI)" required>
                   <input
@@ -209,7 +209,7 @@ export default function SubscriberFormPage() {
                     required
                   />
                   {isBulk && (
-                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: typeof bulkIds === 'string' ? '#b91c1c' : '#64748b' }}>
+                    <p className={typeof bulkIds === 'string' ? styles.hintError : styles.hint}>
                       {typeof bulkIds === 'string'
                         ? bulkIds
                         : `Creates ${count} subscribers, ${bulkIds?.[0]} to ${bulkIds?.[bulkIds.length - 1]}; every other field is the same for all of them.`}
@@ -217,9 +217,10 @@ export default function SubscriberFormPage() {
                   )}
                 </Field>
                 <Field label="PLMN ID" required>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className={styles.inputPair}>
                     <input
                       className={styles.input}
+                      aria-label="MCC"
                       placeholder="MCC"
                       value={form.plmnMcc}
                       onChange={(event) => setForm((current) => ({ ...current, plmnMcc: event.target.value }))}
@@ -228,6 +229,7 @@ export default function SubscriberFormPage() {
                     />
                     <input
                       className={styles.input}
+                      aria-label="MNC"
                       placeholder="MNC"
                       value={form.plmnMnc}
                       onChange={(event) => setForm((current) => ({ ...current, plmnMnc: event.target.value }))}
@@ -277,79 +279,81 @@ export default function SubscriberFormPage() {
                   />
                 </Field>
               </div>
-            </section>
-
-            <div>
-              <div className={styles.sectionHeading}><h3>Subscribed UE AMBR</h3></div>
-              <section className={styles.card}>
-                <div className={styles.fieldGrid}>
-                  <Field label="Uplink" required>
-                    <input
-                      className={styles.input}
-                      placeholder="1 Gbps"
-                      value={form.ambrUplink}
-                      onChange={(event) => setForm((current) => ({ ...current, ambrUplink: event.target.value }))}
-                      required
-                    />
-                  </Field>
-                  <Field label="Downlink" required>
-                    <input
-                      className={styles.input}
-                      placeholder="2 Gbps"
-                      value={form.ambrDownlink}
-                      onChange={(event) => setForm((current) => ({ ...current, ambrDownlink: event.target.value }))}
-                      required
-                    />
-                  </Field>
-                </div>
-              </section>
             </div>
+          </section>
 
-            <div className={styles.sliceList}>
-              {form.sessions.map((session, sessionIndex) => (
-                <div key={session.id}>
-                  <div className={styles.sectionHeading}>
-                    <h3>S-NSSAI Configuration ({snssaiKey(session.sst, session.sd)})</h3>
-                    {form.sessions.length > 1 && (
-                      <Button
-                        variant="danger"
-                        onClick={() => setForm((current) => ({
-                          ...current,
-                          sessions: current.sessions.filter((item) => item.id !== session.id),
-                        }))}
-                      >
-                        Delete
-                      </Button>
-                    )}
+          <section className={styles.panel}>
+            <div className={styles.panelHead}><h2>Subscribed UE AMBR</h2></div>
+            <div className={styles.panelBody}>
+              <div className={styles.fieldGrid}>
+                <Field label="Uplink" required>
+                  <input
+                    className={styles.input}
+                    placeholder="1 Gbps"
+                    value={form.ambrUplink}
+                    onChange={(event) => setForm((current) => ({ ...current, ambrUplink: event.target.value }))}
+                    required
+                  />
+                </Field>
+                <Field label="Downlink" required>
+                  <input
+                    className={styles.input}
+                    placeholder="2 Gbps"
+                    value={form.ambrDownlink}
+                    onChange={(event) => setForm((current) => ({ ...current, ambrDownlink: event.target.value }))}
+                    required
+                  />
+                </Field>
+              </div>
+            </div>
+          </section>
+
+          {form.sessions.map((session, sessionIndex) => (
+            <div key={session.id} className={styles.sliceBlock}>
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <h2>S-NSSAI Configuration ({snssaiKey(session.sst, session.sd)})</h2>
+                  {form.sessions.length > 1 && (
+                    <button
+                      type="button"
+                      className={styles.btnLinkDanger}
+                      onClick={() => setForm((current) => ({
+                        ...current,
+                        sessions: current.sessions.filter((item) => item.id !== session.id),
+                      }))}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+                <div className={styles.panelBody}>
+                  <div className={styles.fieldGrid}>
+                    <Field label="SST" required>
+                      <input className={styles.input} value={session.sst} onChange={(event) => updateSession(session.id, { sst: event.target.value })} required />
+                    </Field>
+                    <Field label="SD">
+                      <input className={styles.input} value={session.sd} onChange={(event) => updateSession(session.id, { sd: event.target.value })} />
+                    </Field>
                   </div>
-                  <section className={styles.card}>
-                    <div className={styles.fieldGrid}>
-                      <Field label="SST" required>
-                        <input className={styles.input} value={session.sst} onChange={(event) => updateSession(session.id, { sst: event.target.value })} required />
-                      </Field>
-                      <Field label="SD">
-                        <input className={styles.input} value={session.sd} onChange={(event) => updateSession(session.id, { sd: event.target.value })} />
-                      </Field>
-                    </div>
 
-                    <div className={styles.checkboxRow} style={{ margin: '1.25rem 0' }}>
-                      <input
-                        type="checkbox"
-                        id={`default-slice-${session.id}`}
-                        checked={session.isDefaultSlice}
-                        onChange={(event) => updateSession(session.id, { isDefaultSlice: event.target.checked })}
-                      />
-                      <label htmlFor={`default-slice-${session.id}`}>Default S-NSSAI</label>
-                    </div>
+                  <div className={styles.checkboxRow}>
+                    <input
+                      type="checkbox"
+                      id={`default-slice-${session.id}`}
+                      checked={session.isDefaultSlice}
+                      onChange={(event) => updateSession(session.id, { isDefaultSlice: event.target.checked })}
+                    />
+                    <label htmlFor={`default-slice-${session.id}`}>Default S-NSSAI</label>
+                  </div>
 
-                    <div className={styles.nestedCard}>
-                      <div className={styles.sectionHeading}><h3 style={{ fontSize: '0.95rem' }}>DNN Configurations</h3></div>
-
+                  <div className={styles.subpanel}>
+                    <div className={styles.subpanelHead}><h3>DNN Configurations</h3></div>
+                    <div className={styles.subpanelBody}>
                       <Field label="DNN" required>
                         <input className={styles.input} value={session.dnn} onChange={(event) => updateSession(session.id, { dnn: event.target.value })} required />
                       </Field>
 
-                      <div className={styles.fieldGrid} style={{ marginTop: '1.25rem' }}>
+                      <div className={styles.fieldGrid}>
                         <Field label="Uplink AMBR" required>
                           <input className={styles.input} value={session.ambrUplink} onChange={(event) => updateSession(session.id, { ambrUplink: event.target.value })} required />
                         </Field>
@@ -375,17 +379,18 @@ export default function SubscriberFormPage() {
                       </div>
 
                       {session.showUpSecurity ? (
-                        <div style={{ marginTop: '1.25rem' }}>
-                          <div className={styles.sectionHeading}>
-                            <h3 style={{ fontSize: '0.95rem' }}>UP Security</h3>
-                            <Button
-                              variant="danger"
+                        <div className={styles.subpanel}>
+                          <div className={styles.subpanelHead}>
+                            <h3>UP Security</h3>
+                            <button
+                              type="button"
+                              className={styles.btnLinkDanger}
                               onClick={() => updateSession(session.id, { showUpSecurity: false, upIntegr: '', upConfid: '' })}
                             >
                               Delete
-                            </Button>
+                            </button>
                           </div>
-                          <div className={styles.nestedCard}>
+                          <div className={styles.subpanelBody}>
                             <div className={styles.fieldGrid}>
                               <Field label="UP Integrity">
                                 <select className={styles.select} value={session.upIntegr} onChange={(event) => updateSession(session.id, { upIntegr: event.target.value })}>
@@ -404,7 +409,6 @@ export default function SubscriberFormPage() {
                         <button
                           type="button"
                           className={styles.btnAdd}
-                          style={{ marginTop: '1.25rem' }}
                           onClick={() => updateSession(session.id, { showUpSecurity: true, ...makeDefaultUpSecurity() })}
                         >
                           + UP Security
@@ -412,17 +416,18 @@ export default function SubscriberFormPage() {
                       )}
 
                       {session.flowRules.map((rule, ruleIndex) => (
-                        <div key={rule.id} style={{ marginTop: '1.5rem' }}>
-                          <div className={styles.sectionHeading}>
-                            <h3 style={{ fontSize: '0.95rem' }}>Flow Rule {ruleIndex + 1}</h3>
-                            <Button
-                              variant="danger"
+                        <div key={rule.id} className={styles.subpanel}>
+                          <div className={styles.subpanelHead}>
+                            <h3>Flow Rule {ruleIndex + 1}</h3>
+                            <button
+                              type="button"
+                              className={styles.btnLinkDanger}
                               onClick={() => updateSession(session.id, { flowRules: session.flowRules.filter((item) => item.id !== rule.id) })}
                             >
                               Delete
-                            </Button>
+                            </button>
                           </div>
-                          <div className={styles.nestedCard}>
+                          <div className={styles.subpanelBody}>
                             <div className={styles.fieldGrid}>
                               <Field label="IP Filter" required>
                                 <input className={styles.input} placeholder="permit out ip from any to any" value={rule.filter} onChange={(event) => updateFlowRule(session.id, rule.id, { filter: event.target.value })} required />
@@ -463,51 +468,51 @@ export default function SubscriberFormPage() {
 
                       <button
                         type="button"
-                        className={styles.btnLink}
-                        style={{ marginTop: '1.25rem', display: 'block' }}
+                        className={styles.btnAdd}
                         onClick={() => updateSession(session.id, { flowRules: [...session.flowRules, makeFlowRuleBundle()] })}
                       >
                         + Flow Rule
                       </button>
                     </div>
-                  </section>
-                  {sessionIndex === form.sessions.length - 1 && (
-                    <button
-                      type="button"
-                      className={styles.btnAdd}
-                      style={{ marginTop: '1.25rem' }}
-                      onClick={() => setForm((current) => ({ ...current, sessions: [...current.sessions, makeSessionRow()] }))}
-                    >
-                      + S-NSSAI
-                    </button>
-                  )}
+                  </div>
                 </div>
-              ))}
+              </section>
+              {sessionIndex === form.sessions.length - 1 && (
+                <button
+                  type="button"
+                  className={styles.btnAdd}
+                  onClick={() => setForm((current) => ({ ...current, sessions: [...current.sessions, makeSessionRow()] }))}
+                >
+                  + S-NSSAI
+                </button>
+              )}
             </div>
+          ))}
 
-            {bulkFailures.length > 0 && (
-              <section className={styles.card}>
-                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>
-                  {bulkFailures.length} subscriber{bulkFailures.length === 1 ? '' : 's'} could not be created
-                </p>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85rem', maxHeight: '12rem', overflowY: 'auto' }}>
+          {bulkFailures.length > 0 && (
+            <section className={styles.panel}>
+              <div className={styles.panelHead}>
+                <h2>{bulkFailures.length} subscriber{bulkFailures.length === 1 ? '' : 's'} could not be created</h2>
+              </div>
+              <div className={styles.panelBody}>
+                <ul className={styles.failureList}>
                   {bulkFailures.map((f) => <li key={f.ueId}><code>{f.ueId}</code>: {f.message}</li>)}
                 </ul>
-              </section>
-            )}
+              </div>
+            </section>
+          )}
 
-            <div className={styles.actionsRow}>
-              <Button variant="secondary" type="button" onClick={() => navigate('/subscribers')} disabled={isSaving}>
-                {bulkFailures.length > 0 ? 'Back to subscribers' : 'Cancel'}
-              </Button>
-              <Button type="submit" disabled={isSaving || (isBulk && typeof bulkIds === 'string')}>
-                {isSaving
-                  ? (isBulk ? `Creating ${progress}/${count}…` : 'Saving…')
-                  : isEditMode ? 'Save' : isBulk ? `Create ${count}` : 'Create'}
-              </Button>
-            </div>
-          </form>
-        </div>
+          <div className={styles.actionsRow}>
+            <Button variant="secondary" type="button" onClick={() => navigate('/subscribers')} disabled={isSaving}>
+              {bulkFailures.length > 0 ? 'Back to subscribers' : 'Cancel'}
+            </Button>
+            <Button type="submit" disabled={isSaving || (isBulk && typeof bulkIds === 'string')}>
+              {isSaving
+                ? (isBulk ? `Creating ${progress}/${count}…` : 'Saving…')
+                : isEditMode ? 'Save' : isBulk ? `Create ${count}` : 'Create'}
+            </Button>
+          </div>
+        </form>
       </main>
     </div>
   )

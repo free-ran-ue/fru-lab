@@ -1,3 +1,13 @@
+/* fru-lab design tokens. Colours follow the logo (docs/images/frulab-logo.png):
+   indigo-to-violet on a near-black ink. Status colours stay green/amber/red
+   so they read at a glance. Use the variables, not hex values, in modules. */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
 *,
 *::before,
 *::after {
@@ -5,9 +15,58 @@
 }
 
 :root {
-  font-family: 'Segoe UI', 'Noto Sans', sans-serif;
+  /* type */
+  --font-sans: 'IBM Plex Sans', 'Segoe UI', 'Noto Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* surfaces */
+  --bg: #F5F5FA;            /* page */
+  --surface: #FFFFFF;       /* panels, cards */
+  --surface-sunken: #F9F8FD;/* table heads, footers */
+  --surface-muted: #F0EFF6; /* tracks, tags */
+  --border: #DEDCEB;        /* panel borders */
+  --border-soft: #EEEDF5;   /* row dividers */
+  --border-strong: #CFCDE0; /* inputs, secondary buttons */
+
+  /* text */
+  --ink: #13122B;
+  --ink-2: #2D2B48;         /* labels */
+  --muted: #5B5975;         /* secondary text, 4.5:1 on white */
+
+  /* brand */
+  --accent: #4F46E5;
+  --accent-hover: #4338CA;
+  --accent-ink: #3730A3;    /* accent text on tinted bg */
+  --accent-soft: #ECEBFD;   /* selected rows, chips */
+  --accent-ring: #E4E2FB;
+  --violet: #A855F7;        /* second series (uplink, 2nd tester) */
+  --brand-1: #8B7CF6;       /* cube faces */
+  --brand-2: #4F46E5;
+  --brand-3: #6D3FE8;
+
+  /* chrome (sidebar, log viewer) */
+  --chrome: #13122B;
+  --chrome-hover: #1E1D3D;
+  --chrome-active: #2B2858;
+  --chrome-text: #CBC9E6;
+  --chrome-muted: #908DB9;
+  --chrome-accent: #A99BFF;
+
+  /* status */
+  --ok: #12A150;  --ok-ink: #0B6B36;  --ok-bg: #E7F6EE;
+  --warn: #B45309; --warn-ink: #8A4B08; --warn-bg: #FDF1E3;
+  --bad: #B42318; --bad-ink: #9A1C13; --bad-bg: #FDECEA;
+  --idle-ink: #3E3C58; --idle-bg: #F0EFF6;
+
+  /* shape */
+  --radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --control-h: 2.25rem;
+
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
+  color: var(--ink);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,9 +74,41 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Everything is sized in rem, so the whole UI follows the window:
+   16px at 1440px wide, about 17.5px at 1920px, 19.5px at 2560px. */
+html {
+  font-size: clamp(14px, 0.3125vw + 11.5px, 20px);
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* numbers that line up: IDs, rates, sizes */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }

@@ -112,25 +112,41 @@ export default function LogsPage() {
 
       <main className={styles.content}>
         <header className={styles.header}>
-          <div>
-            <h2 className={styles.title}>Logs</h2>
+          <div className={styles.titleBlock}>
+            <h1 className={styles.title}>Logs</h1>
             <p className={styles.subtitle}>Container logs for the core, gNB, and each deployed UE instance.</p>
           </div>
-          <Button
-            variant="secondary"
-            onClick={() => selected && fetchLogs(selected, selected.kind === 'core' ? selectedNf : null)}
-            disabled={!selected || isLoading}
-          >
-            {isLoading ? 'Refreshing…' : 'Refresh'}
-          </Button>
+          <div className={styles.headerActions}>
+            <Button
+              onClick={() => selected && fetchLogs(selected, selected.kind === 'core' ? selectedNf : null)}
+              disabled={!selected || isLoading}
+            >
+              {isLoading ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
         </header>
 
         <div className={styles.body}>
-          <nav className={styles.targetList}>
-            {targets.map((target) => (
+          <nav className={styles.targetList} aria-label="Log sources">
+            <span className={styles.targetGroup}>Sources</span>
+            {targets.filter((target) => target.kind !== 'ue').map((target) => (
               <button
                 key={`${target.kind}-${target.id}`}
+                type="button"
                 className={`${styles.targetItem} ${sameTarget(selected, target) ? styles.targetItemActive : ''}`}
+                aria-current={sameTarget(selected, target) ? 'true' : undefined}
+                onClick={() => handleSelect(target)}
+              >
+                {target.label}
+              </button>
+            ))}
+            <span className={styles.targetGroup}>UE instances</span>
+            {targets.filter((target) => target.kind === 'ue').map((target) => (
+              <button
+                key={`${target.kind}-${target.id}`}
+                type="button"
+                className={`${styles.targetItem} ${styles.targetItemMono} ${sameTarget(selected, target) ? styles.targetItemActive : ''}`}
+                aria-current={sameTarget(selected, target) ? 'true' : undefined}
                 onClick={() => handleSelect(target)}
               >
                 {target.label}
@@ -143,9 +159,11 @@ export default function LogsPage() {
 
           <div className={styles.viewerColumn}>
             {selected?.kind === 'core' && nfOptions.length > 0 && (
-              <div className={styles.nfPicker}>
+              <div className={styles.nfPicker} role="group" aria-label="Network function">
                 <button
+                  type="button"
                   className={`${styles.nfChip} ${selectedNf === null ? styles.nfChipActive : ''}`}
+                  aria-pressed={selectedNf === null}
                   onClick={() => setSelectedNf(null)}
                 >
                   All NFs
@@ -153,7 +171,9 @@ export default function LogsPage() {
                 {nfOptions.map((nf) => (
                   <button
                     key={nf}
+                    type="button"
                     className={`${styles.nfChip} ${selectedNf === nf ? styles.nfChipActive : ''}`}
+                    aria-pressed={selectedNf === nf}
                     onClick={() => setSelectedNf(nf)}
                   >
                     {nf}
@@ -162,16 +182,24 @@ export default function LogsPage() {
               </div>
             )}
 
-            <div className={styles.viewer}>
-              {isLoading ? (
-                <div className={styles.line}>Loading…</div>
-              ) : error ? (
-                <div className={styles.line}>{error}</div>
-              ) : lines.length === 0 ? (
-                <div className={styles.line}>No log output yet.</div>
-              ) : (
-                lines.map((line, index) => <div key={index} className={styles.line}>{line}</div>)
+            <div className={styles.viewerFrame}>
+              {selected && (
+                <div className={styles.viewerHead}>
+                  <span className={styles.viewerSource}>{selected.label}</span>
+                  {selected.kind === 'core' && <span>{selectedNf ?? 'All NFs'}</span>}
+                </div>
               )}
+              <div className={styles.viewer}>
+                {isLoading ? (
+                  <div className={styles.line}>Loading…</div>
+                ) : error ? (
+                  <div className={styles.line}>{error}</div>
+                ) : lines.length === 0 ? (
+                  <div className={styles.line}>No log output yet.</div>
+                ) : (
+                  lines.map((line, index) => <div key={index} className={styles.line}>{line}</div>)
+                )}
+              </div>
             </div>
           </div>
         </div>

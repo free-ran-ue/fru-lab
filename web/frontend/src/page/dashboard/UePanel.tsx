@@ -35,7 +35,7 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
         <div className={ueStyles.sectionHeader}>
           <div className={styles.sectionTitle}>UE Instances</div>
           {runningRows.length > 0 && (
-            <button className={ueStyles.stopAllButton} onClick={onStopAll} disabled={isAnyPending}>
+            <button type="button" className={ueStyles.stopAllButton} onClick={onStopAll} disabled={isAnyPending}>
               {isAnyPending ? 'Stopping…' : 'Stop All'}
             </button>
           )}
@@ -59,22 +59,22 @@ export default function UePanel({ rows, isLoading, loadError, pendingInstances, 
                 <div key={row.ueId} className={ueStyles.instanceRow}>
                   <div className={ueStyles.instanceInfo}>
                     <span className={ueStyles.instanceId} title={row.ueId}>{row.ueId}</span>
-                    <span className={styles.statusPill} style={{ background: meta.bg, color: meta.color, borderColor: meta.border }}>
+                    <span className={styles.statusPill} style={{ background: meta.bg, color: meta.color }}>
                       <span className={styles.statusDot} style={{ background: meta.dot }} />
                       {meta.text}
                     </span>
                   </div>
                   <div className={ueStyles.instanceActions}>
                     {isRunning && (
-                      <button className={ueStyles.linkButton} onClick={() => onOpenTerminal(row.ueId)}>Terminal</button>
+                      <button type="button" className={ueStyles.linkButton} onClick={() => onOpenTerminal(row.ueId)}>Terminal</button>
                     )}
                     {row.status !== 'stopped' ? (
                       // a deploying (possibly stuck) or unhealthy UE can be stopped too
-                      <button className={ueStyles.linkButton} onClick={() => onStop(row.ueId)} disabled={isPending}>
+                      <button type="button" className={ueStyles.linkButton} onClick={() => onStop(row.ueId)} disabled={isPending}>
                         {isPending ? 'Stopping…' : 'Stop'}
                       </button>
                     ) : (
-                      <button className={ueStyles.linkButton} onClick={() => onDeploy(row.ueId)} disabled={isPending || isDeployBlocked}>
+                      <button type="button" className={ueStyles.linkButton} onClick={() => onDeploy(row.ueId)} disabled={isPending || isDeployBlocked}>
                         {isPending ? 'Deploying…' : 'Deploy'}
                       </button>
                     )}

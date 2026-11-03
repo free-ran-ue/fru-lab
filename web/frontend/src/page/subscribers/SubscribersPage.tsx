@@ -139,49 +139,49 @@ export default function SubscribersPage() {
       <Sidebar />
 
       <main className={styles.content}>
-        <div className={styles.heroBand}>
-          <div className={styles.heroBlobPink} aria-hidden="true" />
-          <div className={styles.heroBlobBlue} aria-hidden="true" />
-          <div className={styles.heroInner}>
-            <div>
-              <p className={styles.kicker}>Fru-Lab Control Plane</p>
-              <h2 className={styles.title}>5G Subscribers</h2>
-            </div>
+        <header className={styles.pageHeader}>
+          <div className={styles.titleBlock}>
+            <h1 className={styles.title}>Subscribers</h1>
+            <p className={styles.subtitle}>Subscriptions in free5GC&apos;s UDR, managed through its WebConsole.</p>
           </div>
-        </div>
+          <div className={styles.headerActions}>
+            {selectedSubscribers.length > 0 && (
+              <>
+                <Button variant="secondary" onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
+                  Clear selection
+                </Button>
+                <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
+                  {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
+                </Button>
+              </>
+            )}
+            <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add subscriber</Button>
+          </div>
+        </header>
 
-        <div className={styles.body}>
-          <section className={styles.card}>
+        <section className={styles.panel}>
+          <div className={styles.toolbar}>
             <input
-              className={styles.input}
-              style={{ marginBottom: '1.25rem' }}
+              className={`${styles.input} ${styles.search}`}
+              aria-label="Search subscribers"
               placeholder={`Search Subscriber (${filteredSubscribers.length} / ${subscribers.length})`}
               value={search}
               onChange={(event) => { setSearch(event.target.value); setPage(1) }}
             />
+          </div>
 
-            {selectedSubscribers.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
-                  {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
-                </Button>
-                <button type="button" className={styles.btnAdd} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
-                  Clear selection
-                </button>
-              </div>
-            )}
-
-            {isLoading ? (
-              <p className={styles.emptyState}>Loading subscribers…</p>
-            ) : loadError ? (
-              <p className={styles.emptyState}>{loadError}</p>
-            ) : filteredSubscribers.length === 0 ? (
-              <p className={styles.emptyState}>No Subscription</p>
-            ) : (
-              <table className={styles.table} style={{ marginBottom: '1.25rem' }}>
+          {isLoading ? (
+            <p className={styles.emptyState}>Loading subscribers…</p>
+          ) : loadError ? (
+            <p className={styles.emptyState}>{loadError}</p>
+          ) : filteredSubscribers.length === 0 ? (
+            <p className={styles.emptyState}>No Subscription</p>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>
+                    <th className={styles.checkCell}>
                       <input
                         type="checkbox"
                         aria-label={search.trim() ? 'Select all matching subscribers' : 'Select all subscribers'}
@@ -192,18 +192,16 @@ export default function SubscribersPage() {
                         disabled={isBulkDeleting}
                       />
                     </th>
-                    <th>PLMN</th>
                     <th>UE ID</th>
+                    <th>PLMN</th>
                     <th>GPSI</th>
-                    <th>Delete</th>
-                    <th>View</th>
-                    <th>Edit</th>
+                    <th className={styles.right}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shown.items.map((subscriber) => (
                     <tr key={`${subscriber.ueId}-${subscriber.plmnID}`}>
-                      <td>
+                      <td className={styles.checkCell}>
                         <input
                           type="checkbox"
                           aria-label={`Select ${subscriber.ueId}`}
@@ -212,47 +210,46 @@ export default function SubscribersPage() {
                           disabled={isBulkDeleting}
                         />
                       </td>
-                      <td>{subscriber.plmnID}</td>
-                      <td>{subscriber.ueId}</td>
-                      <td>{subscriber.gpsi || '—'}</td>
-                      <td>
-                        <Button
-                          variant="danger"
+                      <td className={styles.mono}>{subscriber.ueId}</td>
+                      <td className={styles.mono}>{subscriber.plmnID}</td>
+                      <td className={`${styles.mono} ${styles.mutedCell}`}>{subscriber.gpsi || '—'}</td>
+                      <td className={styles.right}>
+                        <button
+                          type="button"
+                          className={styles.btnLink}
+                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
+                        >
+                          View
+                        </button>
+                        <span className={styles.sep} aria-hidden="true">|</span>
+                        <button
+                          type="button"
+                          className={styles.btnLink}
+                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
+                        >
+                          Edit
+                        </button>
+                        <span className={styles.sep} aria-hidden="true">|</span>
+                        <button
+                          type="button"
+                          className={styles.btnLinkDanger}
                           onClick={() => setConfirmTarget(subscriber)}
                           disabled={deletingUeId === subscriber.ueId}
                         >
                           {deletingUeId === subscriber.ueId ? 'Deleting…' : 'Delete'}
-                        </Button>
-                      </td>
-                      <td>
-                        <Button
-                          variant="secondary"
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
-                        >
-                          View
-                        </Button>
-                      </td>
-                      <td>
-                        <Button
-                          variant="secondary"
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
-                        >
-                          Edit
-                        </Button>
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
+            </div>
+          )}
 
-            {!isLoading && !loadError && (
-              <Pager page={shown} total={filteredSubscribers.length} onChange={setPage} />
-            )}
-
-            <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add Subscriber</Button>
-          </section>
-        </div>
+          {!isLoading && !loadError && (
+            <div className={styles.footer}><Pager page={shown} total={filteredSubscribers.length} onChange={setPage} /></div>
+          )}
+        </section>
       </main>
 
       <Modal
@@ -283,7 +280,7 @@ export default function SubscribersPage() {
         title="Add subscribers"
         onSubmit={startAdd}
       >
-        <form onSubmit={(event) => { event.preventDefault(); startAdd() }}>
+        <form className={styles.countForm} onSubmit={(event) => { event.preventDefault(); startAdd() }}>
           <div className={styles.field}>
             <label htmlFor="ue-count">How many UEs?</label>
             <input
@@ -297,7 +294,7 @@ export default function SubscribersPage() {
               autoFocus
             />
           </div>
-          <p style={{ margin: '0.75rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+          <p className={styles.hint}>
             {isCountValid
               ? 'You fill in the first subscriber; the rest get the next IMSIs (+1 each) with every other field the same.'
               : `Enter a whole number from 1 to ${MAX_BULK_SUBSCRIBERS}.`}

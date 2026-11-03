@@ -81,19 +81,16 @@ function shiftToRow4(box: Box, shiftX: number): Box {
   return { x: box.x + shiftX, y: ROW4_Y, width: box.width, height: box.height }
 }
 
-function statusColors(status: NodeStatus) {
-  const meta = getStatusMeta(status)
-  return { fill: meta.bg, stroke: meta.border, text: meta.color, dot: meta.dot }
-}
-
+// white box, 1px border, status dot - status colours are CSS variables, so
+// they go through `style` (SVG presentation attributes can't resolve var()).
 function NodeBox({ x, y, width, height, label, status, title }: { x: number; y: number; width: number; height: number; label: string; status: NodeStatus; title?: string }) {
-  const colors = statusColors(status)
+  const meta = getStatusMeta(status)
   return (
     <g>
       {title && <title>{title}</title>}
-      <rect x={x} y={y} width={width} height={height} rx={7} fill={colors.fill} stroke={colors.stroke} strokeWidth={1.5} />
-      <circle cx={x + 10} cy={y + height / 2} r={3.5} fill={colors.dot} />
-      <text x={x + width / 2 + 4} y={y + height / 2} dominantBaseline="middle" textAnchor="middle" className={styles.nodeLabel} fill={colors.text}>
+      <rect x={x + 0.5} y={y + 0.5} width={width - 1} height={height - 1} rx={6} className={styles.nodeRect} />
+      <circle cx={x + 11} cy={y + height / 2} r={3.5} style={{ fill: meta.dot }} />
+      <text x={x + width / 2 + 5} y={y + height / 2} dominantBaseline="central" textAnchor="middle" className={styles.nodeLabel}>
         {label}
       </text>
     </g>
@@ -305,10 +302,10 @@ export default function DetailedTopology({ free5gcNfs, gnbStatus, gnbSlice1Statu
             <RowLink from={iUpf2Box} to={psaUpf2Box} label="N9" labelY={psaUpf2Box.y - 8} />
             <RowLink from={psaUpf2Box} to={dn2Box} label="N6" labelY={psaUpf2Box.y - 8} dashed />
 
-            <rect x={dn1Box.x} y={dn1Box.y} width={dn1Box.width} height={dn1Box.height} rx={7} className={styles.dnBox} />
-            <text x={dn1Box.x + dn1Box.width / 2} y={dn1Box.y + dn1Box.height / 2} dominantBaseline="middle" textAnchor="middle" className={styles.dnLabel}>DN</text>
-            <rect x={dn2Box.x} y={dn2Box.y} width={dn2Box.width} height={dn2Box.height} rx={7} className={styles.dnBox} />
-            <text x={dn2Box.x + dn2Box.width / 2} y={dn2Box.y + dn2Box.height / 2} dominantBaseline="middle" textAnchor="middle" className={styles.dnLabel}>DN</text>
+            <rect x={dn1Box.x} y={dn1Box.y} width={dn1Box.width} height={dn1Box.height} rx={6} className={styles.dnBox} />
+            <text x={dn1Box.x + dn1Box.width / 2} y={dn1Box.y + dn1Box.height / 2} dominantBaseline="central" textAnchor="middle" className={styles.dnLabel}>DN</text>
+            <rect x={dn2Box.x} y={dn2Box.y} width={dn2Box.width} height={dn2Box.height} rx={6} className={styles.dnBox} />
+            <text x={dn2Box.x + dn2Box.width / 2} y={dn2Box.y + dn2Box.height / 2} dominantBaseline="central" textAnchor="middle" className={styles.dnLabel}>DN</text>
 
             <NodeBox x={iUpf1Box.x} y={iUpf1Box.y} width={iUpf1Box.width} height={iUpf1Box.height} label="I-UPF-1" status={nfStatusByName.get('I-UPF-1') ?? 'stopped'} />
             <NodeBox x={psaUpf1Box.x} y={psaUpf1Box.y} width={psaUpf1Box.width} height={psaUpf1Box.height} label="PSA-UPF-1" status={nfStatusByName.get('PSA-UPF-1') ?? 'stopped'} />
@@ -337,8 +334,8 @@ export default function DetailedTopology({ free5gcNfs, gnbStatus, gnbSlice1Statu
             {/* N6: last UPF -> DN (external, always shown as a static endpoint) */}
             <RowLink from={lastUpfBox} to={dnBox} label="N6" labelY={lastUpfBox.y - 8} dashed />
             <g>
-              <rect x={dnBox.x} y={dnBox.y} width={dnBox.width} height={dnBox.height} rx={7} className={styles.dnBox} />
-              <text x={dnBox.x + dnBox.width / 2} y={dnBox.y + dnBox.height / 2} dominantBaseline="middle" textAnchor="middle" className={styles.dnLabel}>DN</text>
+              <rect x={dnBox.x} y={dnBox.y} width={dnBox.width} height={dnBox.height} rx={6} className={styles.dnBox} />
+              <text x={dnBox.x + dnBox.width / 2} y={dnBox.y + dnBox.height / 2} dominantBaseline="central" textAnchor="middle" className={styles.dnLabel}>DN</text>
             </g>
 
             {isUlcl ? (

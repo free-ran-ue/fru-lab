@@ -30,31 +30,35 @@ function RunCard({ tester, state }: { tester: TesterOption, state: RunState }) {
   const run = state.kind === 'ok' ? state.run : null
   const active = run !== null && ACTIVE.includes(run.state)
   return (
-    <Link to={`/tester/run/${tester.id}`} className={`${styles.card} ${styles.tile} ${styles.testerCard} ${styles.testerCardLink}`}>
-      <div className={styles.tileHead}>
-        <h3>{run?.profileName || tester.name}</h3>
+    <Link to={`/tester/run/${tester.id}`} className={`${styles.card} ${styles.testerCard} ${styles.testerCardLink}`}>
+      <div className={styles.testerCardHead}>
+        <div>
+          <h3>{run?.profileName || tester.name}</h3>
+          {run && <span className={styles.testerCardUrl}>{run.runId}</span>}
+        </div>
         {state.kind === 'down'
           ? <span className={`${styles.pill} ${styles.pillBad}`}>Unreachable</span>
           : run && <span className={`${styles.pill} ${active ? styles.pillActive : run.state === 'failed' ? styles.pillBad : styles.pillMuted}`}>{STATE_LABELS[run.state]}</span>}
       </div>
-      <dl className={styles.kv}>
-        <dt>Tester</dt><dd>{tester.name}</dd>
-        {run && (
-          <>
-            <dt>Run</dt><dd className={styles.mono}>{run.runId}</dd>
-            <dt>Started</dt><dd>{run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}</dd>
-            <dt>UEs</dt><dd>{run.ues.established} established{run.ues.failed > 0 ? ` · ${run.ues.failed} failed` : ''}</dd>
-            {active && (
-              <>
-                <dt>Uplink</dt><dd>{formatBps(run.dataplane.ul.rxBps)} received</dd>
-                <dt>Downlink</dt><dd>{formatBps(run.dataplane.dl.rxBps)} received</dd>
-              </>
-            )}
-          </>
-        )}
-      </dl>
-      {state.kind === 'down' && <p className={styles.runError}>{state.message}</p>}
-      {run?.error && <p className={styles.runError}>{run.error}</p>}
+      <div className={styles.testerCardBody}>
+        <dl className={styles.facts}>
+          <div><dt>Tester</dt><dd>{tester.name}</dd></div>
+          {run && (
+            <>
+              <div><dt>Started</dt><dd>{run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}</dd></div>
+              <div className={styles.factWide}><dt>UEs</dt><dd>{run.ues.established} established{run.ues.failed > 0 ? ` · ${run.ues.failed} failed` : ''}</dd></div>
+              {active && (
+                <>
+                  <div><dt>Uplink</dt><dd>{formatBps(run.dataplane.ul.rxBps)} received</dd></div>
+                  <div><dt>Downlink</dt><dd>{formatBps(run.dataplane.dl.rxBps)} received</dd></div>
+                </>
+              )}
+            </>
+          )}
+        </dl>
+        {state.kind === 'down' && <p className={styles.runError}>{state.message}</p>}
+        {run?.error && <p className={styles.runError}>{run.error}</p>}
+      </div>
     </Link>
   )
 }
@@ -95,9 +99,9 @@ export default function TesterRunsPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · Run</h2>
+            <h2 className={styles.title}>Runs</h2>
             <p className={styles.subtitle}>
-              The runs going on now, one per tester. Open a run to follow it live and stop it; stopped runs are in History. Start a run from the <Link to="/tester" className={styles.linkButton} style={{ padding: 0 }}>Setup</Link> page.
+              The runs going on now, one per tester. Open a run to follow it live and stop it; stopped runs are in History. Start a run from the <Link to="/tester" className={styles.linkButton}>Setup</Link> page.
             </p>
           </div>
         </header>

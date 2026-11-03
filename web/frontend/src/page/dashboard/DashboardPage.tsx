@@ -218,8 +218,8 @@ export default function DashboardPage() {
       <Sidebar />
 
       <main className={styles.content}>
-        <header>
-          <h2 className={styles.title}>Lab Dashboard</h2>
+        <header className={styles.pageHeader}>
+          <h2 className={styles.title}>Lab dashboard</h2>
           <p className={styles.subtitle}>
             Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator
           </p>
@@ -256,8 +256,8 @@ export default function DashboardPage() {
         <section className={styles.topologySection}>
           <div className={styles.topologyHeader}>
             <div>
-              <h3>Network Topology</h3>
-              <p>Click a node to see its status and actions. Drag nodes to rearrange the layout.</p>
+              <h3>Network topology</h3>
+              <p>Select a node to see its status and actions.</p>
             </div>
             <div className={styles.legend}>
               <span className={styles.legendItem}>
@@ -312,18 +312,20 @@ export default function DashboardPage() {
         <section className={styles.topologySection}>
           <div className={styles.topologyHeader}>
             <div>
-              <h3>Detailed Network Topology</h3>
+              <h3>Detailed network topology</h3>
               <p>The core's SBI service mesh, N2/N3 to the gNB, and Uu to each UE currently attached.</p>
             </div>
           </div>
 
-          <DetailedTopology
-            free5gcNfs={free5gc.networkFunctions}
-            gnbStatus={nodes.gnb.status}
-            gnbSlice1Status={gnbSlice1.node.status}
-            gnbSlice2Status={gnbSlice2.node.status}
-            ueRows={ue.rows}
-          />
+          <div className={styles.detailedWrap}>
+            <DetailedTopology
+              free5gcNfs={free5gc.networkFunctions}
+              gnbStatus={nodes.gnb.status}
+              gnbSlice1Status={gnbSlice1.node.status}
+              gnbSlice2Status={gnbSlice2.node.status}
+              ueRows={ue.rows}
+            />
+          </div>
         </section>
       </main>
 

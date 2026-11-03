@@ -84,7 +84,7 @@ export default function TesterBenchPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · Bench</h2>
+            <h2 className={styles.title}>Bench</h2>
             <p className={styles.subtitle}>
               How fast can this machine&apos;s fru-tester send? Uplink packets go over loopback to a socket that never reads them,
               with 1, 2, 4 … senders up to one per CPU. No core network or UPF is involved, so this is the tester&apos;s own ceiling.
@@ -110,7 +110,7 @@ export default function TesterBenchPage() {
             </div>
             <div className={styles.field}>
               <label htmlFor="bench-gso">UDP GSO</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'normal' }}>
+              <label className={styles.checkLabel}>
                 <input id="bench-gso" type="checkbox" checked={gso} onChange={(e) => setGso(e.target.checked)} disabled={isRunning} />
                 On, as runs send
               </label>
@@ -124,7 +124,7 @@ export default function TesterBenchPage() {
             {result ? <>This host: <b>{result.cpus} CPUs</b>{result.kernel && <>, kernel <span className={styles.mono}>{result.kernel}</span></>}. </> : null}
             A bench takes about {Math.ceil(estimateSec)} s and cannot run while a test run is active (they would compete for the CPUs).
           </p>
-          <div style={{ marginTop: '1rem' }}>
+          <div className={styles.formActions}>
             <Button onClick={handleStart} disabled={isRunning || isStarting}>
               {isRunning ? 'Measuring…' : isStarting ? 'Starting…' : 'Start bench'}
             </Button>
@@ -137,7 +137,7 @@ export default function TesterBenchPage() {
           <section className={styles.card}>
             <h3 className={styles.cardTitle}>Result</h3>
             {best && first && (
-              <p className={styles.subtitle} style={{ maxWidth: 'none', marginBottom: '1rem' }}>
+              <p className={styles.resultNote}>
                 One sender (about one CPU): <b>{formatBps(first.bps)}</b> ({kpps(first.pps)} packets/s).
                 {' '}Best: <b>{formatBps(best.bps)}</b> with {best.senders} senders, {efficiency(best, first)} of linear scaling.
                 {' '}UDP GSO was <b>{result?.settings.gso ? (steps.every((s) => s.gso) ? 'on' : 'asked for but refused by the kernel') : 'off'}</b>.
@@ -147,28 +147,28 @@ export default function TesterBenchPage() {
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
-                  <tr><th>Senders</th><th>Packets/s</th><th>Throughput</th><th style={{ width: '40%' }} /><th>Per sender</th><th>Scaling</th><th>Send errors</th></tr>
+                  <tr><th className={styles.numCol}>Senders</th><th className={styles.numCol}>Packets/s</th><th className={styles.numCol}>Throughput</th><th style={{ width: '40%' }} /><th className={styles.numCol}>Per sender</th><th className={styles.numCol}>Scaling</th><th className={styles.numCol}>Send errors</th></tr>
                 </thead>
                 <tbody>
                   {steps.map((s) => (
                     <tr key={s.senders}>
-                      <td>{s.senders}</td>
-                      <td className={styles.mono}>{kpps(s.pps)}</td>
-                      <td className={styles.mono}>{formatBps(s.bps)}</td>
+                      <td className={styles.numCol}>{s.senders}</td>
+                      <td className={styles.numCol}>{kpps(s.pps)}</td>
+                      <td className={styles.numCol}>{formatBps(s.bps)}</td>
                       <td>
-                        <div style={{ height: 10, borderRadius: 5, background: '#eef2ff' }}>
-                          <div style={{ width: `${(s.bps / maxBps) * 100}%`, height: '100%', borderRadius: 5, background: '#4f46e5' }} />
+                        <div className={styles.benchTrack}>
+                          <div className={styles.benchFill} style={{ width: `${(s.bps / maxBps) * 100}%` }} />
                         </div>
                       </td>
-                      <td className={styles.mono}>{formatBps(s.bps / s.senders)}</td>
-                      <td className={styles.mono}>{efficiency(s, first)}</td>
-                      <td className={styles.mono}>{s.sendErrors}</td>
+                      <td className={styles.numCol}>{formatBps(s.bps / s.senders)}</td>
+                      <td className={styles.numCol}>{efficiency(s, first)}</td>
+                      <td className={styles.numCol}>{s.sendErrors}</td>
                     </tr>
                   ))}
                   {isRunning && pending.map((n, i) => (
                     <tr key={`pending-${n}`}>
-                      <td>{n}</td>
-                      <td colSpan={6} className={styles.hint} style={{ margin: 0 }}>{i === 0 ? 'Measuring…' : 'Waiting'}</td>
+                      <td className={styles.numCol}>{n}</td>
+                      <td colSpan={6} className={styles.dimCell}>{i === 0 ? 'Measuring…' : 'Waiting'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -52,33 +52,30 @@ export default function SubscriberViewPage() {
       <Sidebar />
 
       <main className={styles.content}>
-        <div className={styles.heroBand}>
-          <div className={styles.heroBlobPink} aria-hidden="true" />
-          <div className={styles.heroBlobBlue} aria-hidden="true" />
-          <div className={styles.heroInner}>
-            <div>
-              <p className={styles.kicker}>Fru-Lab Control Plane</p>
-              <h2 className={styles.title}>View Subscriber</h2>
-            </div>
+        <header className={styles.pageHeader}>
+          <div className={styles.titleBlock}>
+            <h1 className={styles.title}>View subscriber</h1>
           </div>
-        </div>
+          {!isLoading && !loadError && form && (
+            <div className={styles.headerActions}>
+              <Button variant="secondary" onClick={() => navigate('/subscribers')}>Back</Button>
+              <Button onClick={() => navigate(`/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}>Edit</Button>
+            </div>
+          )}
+        </header>
 
-        <div className={styles.body}>
-          {isLoading ? (
-            <p>Loading subscriber…</p>
-          ) : loadError ? (
-            <>
-              <p>{loadError}</p>
-              <Button variant="secondary" onClick={() => navigate('/subscribers')}>Back to subscribers</Button>
-            </>
-          ) : form ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div className={styles.actionsRow}>
-                <Button variant="secondary" onClick={() => navigate('/subscribers')}>Back</Button>
-                <Button onClick={() => navigate(`/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}>Edit</Button>
-              </div>
-
-              <section className={styles.card}>
+        {isLoading ? (
+          <p className={styles.bodyText}>Loading subscriber…</p>
+        ) : loadError ? (
+          <>
+            <p className={styles.bodyText}>{loadError}</p>
+            <div><Button variant="secondary" onClick={() => navigate('/subscribers')}>Back to subscribers</Button></div>
+          </>
+        ) : form ? (
+          <>
+            <section className={styles.panel}>
+              <div className={styles.panelHead}><h2>Identity and authentication</h2></div>
+              <div className={styles.panelBody}>
                 <KeyValueTable rows={[
                   ['PLMN ID', `${form.plmnMcc}${form.plmnMnc}`],
                   ['SUPI (IMSI)', form.ueId],
@@ -90,32 +87,34 @@ export default function SubscriberViewPage() {
                   ['Operator Code Value (OPc)', form.opValue],
                   ['SQN', form.sequenceNumber],
                 ]} />
-              </section>
-
-              <div>
-                <div className={styles.sectionHeading}><h3>Subscribed UE AMBR</h3></div>
-                <section className={styles.card}>
-                  <KeyValueTable rows={[
-                    ['Uplink', form.ambrUplink],
-                    ['Downlink', form.ambrDownlink],
-                  ]} />
-                </section>
               </div>
+            </section>
 
-              {form.sessions.map((session) => (
-                <div key={session.id}>
-                  <div className={styles.sectionHeading}>
-                    <h3>S-NSSAI Configuration ({snssaiKey(session.sst, session.sd)})</h3>
-                  </div>
-                  <section className={styles.card}>
-                    <KeyValueTable rows={[
-                      ['SST', session.sst],
-                      ['SD', session.sd],
-                      ['Default S-NSSAI', session.isDefaultSlice ? 'Yes' : 'No'],
-                    ]} />
+            <section className={styles.panel}>
+              <div className={styles.panelHead}><h2>Subscribed UE AMBR</h2></div>
+              <div className={styles.panelBody}>
+                <KeyValueTable rows={[
+                  ['Uplink', form.ambrUplink],
+                  ['Downlink', form.ambrDownlink],
+                ]} />
+              </div>
+            </section>
 
-                    <div className={styles.nestedCard} style={{ marginTop: '1.25rem' }}>
-                      <div className={styles.sectionHeading}><h3 style={{ fontSize: '0.95rem' }}>DNN Configurations</h3></div>
+            {form.sessions.map((session) => (
+              <section key={session.id} className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <h2>S-NSSAI Configuration ({snssaiKey(session.sst, session.sd)})</h2>
+                </div>
+                <div className={styles.panelBody}>
+                  <KeyValueTable rows={[
+                    ['SST', session.sst],
+                    ['SD', session.sd],
+                    ['Default S-NSSAI', session.isDefaultSlice ? 'Yes' : 'No'],
+                  ]} />
+
+                  <div className={styles.subpanel}>
+                    <div className={styles.subpanelHead}><h3>DNN Configurations</h3></div>
+                    <div className={styles.subpanelBody}>
                       <KeyValueTable rows={[
                         ['Data Network Name', session.dnn],
                         ['Uplink AMBR', session.ambrUplink],
@@ -127,9 +126,9 @@ export default function SubscriberViewPage() {
                       ]} />
 
                       {session.showUpSecurity && (
-                        <div style={{ marginTop: '1.25rem' }}>
-                          <div className={styles.sectionHeading}><h3 style={{ fontSize: '0.95rem' }}>UP Security</h3></div>
-                          <div className={styles.nestedCard}>
+                        <div className={styles.subpanel}>
+                          <div className={styles.subpanelHead}><h3>UP Security</h3></div>
+                          <div className={styles.subpanelBody}>
                             <KeyValueTable rows={[
                               ['UP Integrity', session.upIntegr],
                               ['UP Confidentiality', session.upConfid],
@@ -139,9 +138,9 @@ export default function SubscriberViewPage() {
                       )}
 
                       {session.flowRules.map((rule, ruleIndex) => (
-                        <div key={rule.id} style={{ marginTop: '1.25rem' }}>
-                          <div className={styles.sectionHeading}><h3 style={{ fontSize: '0.95rem' }}>Flow Rule {ruleIndex + 1}</h3></div>
-                          <div className={styles.nestedCard}>
+                        <div key={rule.id} className={styles.subpanel}>
+                          <div className={styles.subpanelHead}><h3>Flow Rule {ruleIndex + 1}</h3></div>
+                          <div className={styles.subpanelBody}>
                             <KeyValueTable rows={[
                               ['IP Filter', rule.filter],
                               ['Precedence', rule.precedence],
@@ -158,12 +157,12 @@ export default function SubscriberViewPage() {
                         </div>
                       ))}
                     </div>
-                  </section>
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+              </section>
+            ))}
+          </>
+        ) : null}
       </main>
     </div>
   )

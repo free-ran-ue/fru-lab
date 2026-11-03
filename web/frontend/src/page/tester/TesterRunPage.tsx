@@ -84,6 +84,12 @@ function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
   return [setEl, width]
 }
 
+// remScale is the root font size over 16px: the UI's sizes are in rem and
+// follow the window, so the charts' height and margins follow it too.
+function remScale(): number {
+  return (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
+}
+
 type Dir = 'ul' | 'dl'
 
 // RateChart plots one direction's sent (Tx) and received (Rx) rate over
@@ -92,8 +98,9 @@ type Dir = 'ul' | 'dl'
 function RateChart({ series, dir }: { series: TesterTrafficPoint[], dir: Dir }) {
   const [ref, W] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
-  const H = 150
-  const pad = { l: 40, r: 8, t: 8, b: 20 }
+  const u = remScale()
+  const H = Math.round(150 * u)
+  const pad = { l: 40 * u, r: 8 * u, t: 8 * u, b: 20 * u }
   const tx = (p: TesterTrafficPoint) => (dir === 'ul' ? p.ulTxBps : p.dlTxBps)
   const rx = (p: TesterTrafficPoint) => (dir === 'ul' ? p.ulRxBps : p.dlRxBps)
   if (series.length < 2) {
@@ -198,7 +205,7 @@ function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
         <h3 className={styles.cardTitle}>Data plane</h3>
         <span className={`${styles.pill} ${dp.activeUes ? styles.pillActive : styles.pillMuted}`}>{dp.activeUes} UEs sending</span>
       </div>
-      {dp.engine && <p className={styles.hint} style={{ marginTop: 0 }}>Engine: <span className={styles.mono}>{dp.engine}</span></p>}
+      {dp.engine && <p className={styles.hint} style={{ margin: '0 0 12px' }}>Engine: <span className={styles.mono}>{dp.engine}</span></p>}
       <div className={styles.dirRow}>
         <DirectionPanel dir="ul" d={dp.ul} series={dp.series} />
         <DirectionPanel dir="dl" d={dp.dl} series={dp.series} />
@@ -212,8 +219,9 @@ function DataplaneCard({ dp }: { dp: TesterDataplaneSnapshot }) {
 function CpChart({ series }: { series: TesterCpPoint[] }) {
   const [ref, W] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
-  const H = 150
-  const pad = { l: 40, r: 8, t: 8, b: 20 }
+  const u = remScale()
+  const H = Math.round(150 * u)
+  const pad = { l: 40 * u, r: 8 * u, t: 8 * u, b: 20 * u }
   if (series.length < 2) {
     return <div ref={ref} className={styles.chartEmpty}>The chart starts after two seconds of the loop.</div>
   }
@@ -321,10 +329,10 @@ function CpLoopCard({ cp }: { cp: TesterCpLoopSnapshot }) {
         <h3 className={styles.cardTitle}>Control-plane loop</h3>
         <span className={`${styles.pill} ${styles[tone]}`}>{label}</span>
       </div>
-      <p className={styles.hint} style={{ marginTop: 0 }}>
+      <p className={styles.hint} style={{ margin: '0 0 12px' }}>
         {cp.ues.toLocaleString()} UEs register, stay registered, deregister and start over; they have no PDU session.
       </p>
-      <div className={styles.statGrid} style={{ margin: '0.75rem 0' }}>
+      <div className={styles.statGrid} style={{ margin: '0 0 12px' }}>
         <Stat label="Cycles completed" value={cp.cycles.toLocaleString()} />
         <Stat label="Registered now" value={cp.registered.toLocaleString()} />
         <Stat label="Running for" value={cp.startedAt ? clock(cp.durationSec) : '—'} />
@@ -338,7 +346,7 @@ function CpLoopCard({ cp }: { cp: TesterCpLoopSnapshot }) {
         <span><i className={styles.swatchFail} />Failed/s</span>
       </div>
       <CpChart series={cp.series} />
-      <div className={styles.dirRow} style={{ marginTop: '1rem' }}>
+      <div className={styles.dirRow} style={{ marginTop: 16 }}>
         <ProcedureStats title="Registration" s={cp.registration} />
         <ProcedureStats title="Deregistration" s={cp.deregistration} />
       </div>
@@ -457,19 +465,29 @@ export default function TesterRunDetailPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <Link to="/tester/run" className={styles.linkButton}>← All runs</Link>
-            <h2 className={styles.title}>Throughput Tester · Run{tester ? ` · ${tester.name}` : ''}</h2>
-            <p className={styles.subtitle}>
-              {snapshot && snapshot.state !== 'idle'
-                ? <>Run <span className={styles.mono}>{snapshot.runId}</span> · {snapshot.profileName}{snapshot.startedAt && ` · started ${new Date(snapshot.startedAt).toLocaleString()}`}
-                  {' · CPUs: '}{snapshot.cpus.cpCpus || snapshot.cpus.dpCpus
-                    ? <span className={styles.mono}>control plane {snapshot.cpus.cpCpus || 'any'}, data plane {snapshot.cpus.dpCpus || 'any'}</span>
-                    : 'not pinned'}</>
-                : <>No run has been started yet. <Link to="/tester">Set one up</Link>.</>}
-            </p>
+            <Link to="/tester/run" className={styles.backLink}>← All runs</Link>
+            <h2 className={styles.title}>
+              <span>Run{snapshot && snapshot.state !== 'idle' && <> <span className={styles.titleId}>{snapshot.runId}</span></>}</span>
+              {snapshot && <span className={`${styles.pill} ${isActive ? styles.pillActive : snapshot.state === 'failed' ? styles.pillBad : styles.pillMuted}`}>{STATE_LABELS[snapshot.state]}</span>}
+            </h2>
+            {snapshot && snapshot.state !== 'idle'
+              ? (
+                <p className={styles.meta}>
+                  {tester && <span>Tester <b>{tester.name}</b></span>}
+                  <span>Profile <b>{snapshot.profileName}</b></span>
+                  {snapshot.startedAt && <span>Started <b className={styles.mono}>{new Date(snapshot.startedAt).toLocaleString()}</b></span>}
+                  <span>CPUs {snapshot.cpus.cpCpus || snapshot.cpus.dpCpus
+                    ? <b className={styles.mono}>control plane {snapshot.cpus.cpCpus || 'any'}, data plane {snapshot.cpus.dpCpus || 'any'}</b>
+                    : <b>not pinned</b>}</span>
+                </p>
+              )
+              : (
+                <p className={styles.subtitle}>
+                  {tester && <>Tester <b>{tester.name}</b>. </>}No run has been started yet. <Link to="/tester" className={styles.linkButton}>Set one up</Link>.
+                </p>
+              )}
           </div>
           <div className={styles.headerActions}>
-            {snapshot && <span className={`${styles.pill} ${isActive ? styles.pillActive : snapshot.state === 'failed' ? styles.pillBad : styles.pillMuted}`}>{STATE_LABELS[snapshot.state]}</span>}
             {snapshot?.stopReason === 'maxDuration' && <span className={`${styles.pill} ${styles.pillMuted}`}>Stopped at max run time</span>}
             {!isConnected && <span className={`${styles.pill} ${styles.pillBad}`}>Live updates disconnected</span>}
             <Button variant="danger" onClick={handleStop} disabled={!(isActive || isCleaningUp) || isStopping}>
@@ -513,7 +531,7 @@ export default function TesterRunDetailPage() {
                   </h4>
                   <table className={styles.table}>
                     <thead>
-                      <tr><th>SUPI</th><th>gNB</th><th>Stage</th><th>Cause</th><th>Attempts</th></tr>
+                      <tr><th>SUPI</th><th>gNB</th><th>Stage</th><th>Cause</th><th className={styles.numCol}>Attempts</th></tr>
                     </thead>
                     <tbody>
                       {snapshot.failedUes.map((f) => (
@@ -522,7 +540,7 @@ export default function TesterRunDetailPage() {
                           <td>{f.gnb}</td>
                           <td>{f.stage === 'pdu' ? 'PDU session' : 'Registration'}</td>
                           <td className={styles.mono}>{f.cause}</td>
-                          <td>{f.attempts}</td>
+                          <td className={styles.numCol}>{f.attempts}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -536,21 +554,21 @@ export default function TesterRunDetailPage() {
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
-                    <tr><th>#</th><th>Name</th><th>N2 IP</th><th>State</th><th>Attempts</th><th>Setup time</th><th>Registered</th><th>PDU sessions</th><th>UL received</th><th>DL received</th><th>Last error</th></tr>
+                    <tr><th className={styles.numCol}>#</th><th>Name</th><th>N2 IP</th><th>State</th><th className={styles.numCol}>Attempts</th><th className={styles.numCol}>Setup time</th><th className={styles.numCol}>Registered</th><th className={styles.numCol}>PDU sessions</th><th className={styles.numCol}>UL received</th><th className={styles.numCol}>DL received</th><th>Last error</th></tr>
                   </thead>
                   <tbody>
                     {snapshot.gnbs.map((g) => (
                       <tr key={g.index}>
-                        <td>{g.index}</td>
+                        <td className={styles.numCol}>{g.index}</td>
                         <td>{g.name}</td>
                         <td className={styles.mono}>{g.n2Ip}</td>
                         <td><span className={`${styles.pill} ${g.state === 'up' ? styles.pillOk : g.state === 'failed' || g.state === 'lost' ? styles.pillBad : g.state === 'connecting' ? styles.pillActive : styles.pillMuted}`}>{g.state}</span></td>
-                        <td>{g.attempts}</td>
-                        <td>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
-                        <td>{g.registered} / {g.ueCount}</td>
-                        <td>{g.established} / {g.ueCount}</td>
-                        <td>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'ul')}</td>
-                        <td>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'dl')}</td>
+                        <td className={styles.numCol}>{g.attempts}</td>
+                        <td className={styles.numCol}>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
+                        <td className={styles.numCol}>{g.registered} / {g.ueCount}</td>
+                        <td className={styles.numCol}>{g.established} / {g.ueCount}</td>
+                        <td className={styles.numCol}>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'ul')}</td>
+                        <td className={styles.numCol}>{gnbTraffic(snapshot.dataplane.gnbs[g.index - 1], 'dl')}</td>
                         <td className={styles.causeCell}>{g.cause || '—'}</td>
                       </tr>
                     ))}

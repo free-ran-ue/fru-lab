@@ -39,7 +39,7 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrim
         <div className={styles.eyebrow}>Selected node</div>
         <h4 className={styles.nodeLabel}>{node.label}</h4>
         <p className={styles.nodeSublabel}>{node.sublabel}</p>
-        <span className={styles.statusPill} style={{ background: meta.bg, color: meta.color, borderColor: meta.border }}>
+        <span className={styles.statusPill} style={{ background: meta.bg, color: meta.color }}>
           <span className={styles.statusDot} style={{ background: meta.dot }} />
           {meta.text}
         </span>
@@ -53,7 +53,7 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrim
           {networkFunctions.map((nf) => {
             const nfMeta = getStatusMeta(nf.status)
             return (
-              <div key={nf.name} className={styles.nfChip} style={{ background: nfMeta.bg, color: nfMeta.color, borderColor: nfMeta.border }}>
+              <div key={nf.name} className={styles.nfChip} title={nfMeta.text}>
                 <span className={styles.nfDot} style={{ background: nfMeta.dot }} />
                 {nf.name}
               </div>
@@ -67,7 +67,7 @@ export default function DetailPanel({ node, networkFunctions, onViewLogs, onPrim
       <div className={styles.metaList}>
         <div className={styles.metaRow}>
           <span>Last deployed</span>
-          <span className={styles.metaValue}>{node.lastDeployed}</span>
+          <span className={`${styles.metaValue} num`}>{node.lastDeployed}</span>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 # fru-tester runs on the host network, so this port is reachable from the
 # host's interfaces; apiToken must match docker/config.yaml backend.tester.
-# how fru-lab lists this tester (Status page); the host name when empty
+# how fru-lab lists this tester (Testers page); the host name when empty
 testerName: "default-tester"
 listen: "0.0.0.0:9100"
 apiToken: "frulab-tester"
@@ -8,6 +8,6 @@ apiToken: "frulab-tester"
 logger:
   level: "info"
 
-# where the System page's CPU allocation is kept (relative to this file);
+# where the Testers page's CPU allocation is kept (relative to this file);
 # docker-compose mounts ./frutester-data here so it survives a restart
 systemFile: "data/tester-system.json"

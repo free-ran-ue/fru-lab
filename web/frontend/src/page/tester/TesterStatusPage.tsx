@@ -35,9 +35,9 @@ function fieldErrorsOf(error: unknown): TesterFieldError[] {
   return data?.errors ?? []
 }
 
-// meterColor runs from green (empty) to red (full), like the CPU usage.
-function meterColor(ratio: number): string {
-  return `hsl(${120 - 120 * Math.min(1, Math.max(0, ratio))} 65% 45%)`
+// meterTone is the fill: accent, then warn and bad as it nears full.
+function meterTone(ratio: number): string {
+  return ratio >= 0.95 ? styles.meterBad : ratio >= 0.8 ? styles.meterWarn : ''
 }
 
 function Meter({ label, used, total, detail }: { label: string, used: number, total: number, detail?: string }) {
@@ -45,7 +45,7 @@ function Meter({ label, used, total, detail }: { label: string, used: number, to
   return (
     <div className={styles.meter}>
       <div><span>{label}</span><b>{(ratio * 100).toFixed(0)}%</b></div>
-      <div className={styles.meterBar}><i style={{ width: `${Math.min(100, ratio * 100)}%`, background: meterColor(ratio) }} /></div>
+      <div className={styles.meterBar}><i className={meterTone(ratio)} style={{ width: `${Math.min(100, ratio * 100)}%` }} /></div>
       <span>{detail ?? `${formatBytes(used)} of ${formatBytes(total)}`}</span>
     </div>
   )
@@ -420,34 +420,37 @@ function TesterCard({ tester, onRemove }: { tester: TesterEntry, onRemove: (t: T
   const runActive = run !== null && !FINISHED.includes(run.state)
   const name = status?.name || tester.url
   return (
-    <div className={`${styles.card} ${styles.tile} ${styles.testerCard}`}>
+    <div className={`${styles.card} ${styles.testerCard}`}>
       <Link to={`/tester/status/${tester.id}`} className={styles.testerCardLink}>
-        <div className={styles.tileHead}>
-          <h3>{name}</h3>
+        <div className={styles.testerCardHead}>
+          <div>
+            <h3>{name}</h3>
+            <span className={styles.testerCardUrl}>{tester.url}</span>
+          </div>
           {unreachable
             ? <span className={`${styles.pill} ${styles.pillBad}`}>Unreachable</span>
             : status
               ? <span className={`${styles.pill} ${styles.pillOk}`}>Connected · {latencyMs.toFixed(0)} ms</span>
               : <span className={`${styles.pill} ${styles.pillMuted}`}>Connecting…</span>}
         </div>
-        <dl className={styles.kv}>
-          <dt>URL</dt><dd className={styles.mono}>{tester.url}</dd>
-          {status && !unreachable && m && (
-            <>
-              <dt>Host</dt><dd className={styles.mono}>{status.hostname}</dd>
-              <dt>Run</dt><dd>{run ? RUN_LABELS[run.state] : '—'}{runActive && run?.profileName ? ` · ${run.profileName}` : ''}</dd>
-              <dt>Memory</dt><dd>{formatBytes(m.hostTotal - m.hostAvailable)} of {formatBytes(m.hostTotal)} used</dd>
-              <dt>CPUs</dt><dd>{status.cpu.allowed} of {status.cpu.online} usable · load {status.cpu.load1.toFixed(2)}</dd>
-              <dt>Uptime</dt><dd>{formatDuration(status.uptimeSec)}</dd>
-            </>
-          )}
-        </dl>
-        {unreachable && <p className={styles.runError}>{unreachable}</p>}
+        {status && !unreachable && m && (
+          <div className={styles.testerCardBody}>
+            <Meter label="Memory" used={m.hostTotal - m.hostAvailable} total={m.hostTotal}
+              detail={`${formatBytes(m.hostTotal - m.hostAvailable)} of ${formatBytes(m.hostTotal)} used`} />
+            <dl className={styles.facts}>
+              <div><dt>Host</dt><dd>{status.hostname}</dd></div>
+              <div><dt>Uptime</dt><dd>{formatDuration(status.uptimeSec)}</dd></div>
+              <div className={styles.factWide}><dt>CPUs</dt><dd>{status.cpu.allowed} of {status.cpu.online} usable · load {status.cpu.load1.toFixed(2)}</dd></div>
+              <div className={styles.factWide}><dt>Run</dt><dd>{run ? RUN_LABELS[run.state] : '—'}{runActive && run?.profileName ? ` · ${run.profileName}` : ''}</dd></div>
+            </dl>
+          </div>
+        )}
+        {unreachable && <div className={styles.testerCardBody}><p className={styles.runError}>{unreachable}</p></div>}
       </Link>
       <div className={styles.testerCardFoot}>
         {tester.builtIn
           ? <span className={styles.fieldHint}>From config.yaml · runs next to fru-lab</span>
-          : <button type="button" className={styles.linkButton} onClick={() => onRemove(tester, name)}>Remove</button>}
+          : <button type="button" className={`${styles.linkButton} ${styles.linkDanger}`} onClick={() => onRemove(tester, name)}>Remove</button>}
       </div>
     </div>
   )
@@ -533,7 +536,7 @@ export default function TesterStatusPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <h2 className={styles.title}>Throughput Tester · Status</h2>
+            <h2 className={styles.title}>Testers</h2>
             <p className={styles.subtitle}>
               The testers fru-lab drives. Open one to see its memory and CPUs, what a run needs, and which CPUs the control plane and the data plane use.
             </p>
@@ -579,8 +582,8 @@ export function TesterDetailPage() {
       <main className={styles.content}>
         <header className={styles.header}>
           <div>
-            <Link to="/tester/status" className={styles.linkButton}>← All testers</Link>
-            <h2 className={styles.title}>Throughput Tester · {name || 'Tester'}</h2>
+            <Link to="/tester/status" className={styles.backLink}>← All testers</Link>
+            <h2 className={styles.title}>{name || 'Tester'}</h2>
             <p className={styles.subtitle}>
               Whether it answers, its memory and CPUs, what a run needs, and which CPUs the control plane and the data plane use.
             </p>

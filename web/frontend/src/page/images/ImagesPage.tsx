@@ -136,14 +136,14 @@ export default function ImagesPage() {
 
       <main className={styles.content}>
         <header className={styles.header}>
-          <div>
-            <h2 className={styles.title}>Images</h2>
-            <p className={styles.subtitle}>Docker images this app deploys, all pinned to their template's tag. Clear one to force a fresh pull on the next deploy.</p>
+          <div className={styles.titleBlock}>
+            <h1 className={styles.title}>Images</h1>
+            <p className={styles.subtitle}>Docker images this app deploys, all pinned to their template&apos;s tag. Clear one to force a fresh pull on the next deploy.</p>
           </div>
           <div className={styles.headerActions}>
             {presentCount > 0 && (
-              <button className={styles.clearAllButton} onClick={() => setConfirmClearAll(true)} disabled={isAnyPending}>
-                {isAnyPending ? 'Clearing…' : 'Clear All'}
+              <button type="button" className={styles.clearAllButton} onClick={() => setConfirmClearAll(true)} disabled={isAnyPending}>
+                {isAnyPending ? 'Clearing…' : 'Clear all'}
               </button>
             )}
             <Button variant="secondary" onClick={refresh} disabled={isLoading}>
@@ -152,58 +152,81 @@ export default function ImagesPage() {
           </div>
         </header>
 
-        <div className={styles.body}>
-          {isLoading ? (
-            <p className={styles.emptyState}>Loading images…</p>
-          ) : (
-            groups.map((group) => (
+        {isLoading ? (
+          <p className={styles.emptyState}>Loading images…</p>
+        ) : (
+          groups.map((group) => {
+            const groupImages = images.filter((image) => image.group === group)
+            return (
               <section key={group} className={styles.group}>
-                <h3 className={styles.groupTitle}>{groupLabel(group)}</h3>
-                <div className={styles.imageList}>
-                  {images.filter((image) => image.group === group).map((image) => {
-                    const action = pending[image.key]
-                    return (
-                      <div key={image.key} className={styles.imageRow}>
-                        <div className={styles.imageInfo}>
-                          <span className={styles.imageName}>{image.name}</span>
-                          <span className={styles.imageRef}>{image.image}</span>
-                        </div>
-
-                        <div className={styles.imageMeta}>
-                          <span className={`${styles.statusPill} ${image.present ? styles.statusPillPresent : styles.statusPillAbsent}`}>
-                            <span className={styles.statusDot} />
-                            {image.present ? 'Pulled' : 'Not pulled'}
-                          </span>
-                          {image.present && <span className={styles.metaText}>{formatSize(image.size)}</span>}
-                          {image.present && image.createdAt && (
-                            <span className={styles.metaText}>{new Date(image.createdAt).toLocaleString()}</span>
-                          )}
-                        </div>
-
-                        <div className={styles.imageActions}>
-                          <button
-                            className={styles.linkButton}
-                            onClick={() => handlePull(image)}
-                            disabled={Boolean(action)}
-                          >
-                            {action === 'pull' ? 'Pulling…' : 'Pull'}
-                          </button>
-                          <button
-                            className={styles.dangerLinkButton}
-                            onClick={() => setConfirmClearTarget(image)}
-                            disabled={!image.present || Boolean(action)}
-                          >
-                            {action === 'clear' ? 'Clearing…' : 'Clear'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
+                <div className={styles.groupHead}>
+                  <h2 className={styles.groupTitle}>{groupLabel(group)}</h2>
+                  <span className={styles.groupCount}>
+                    {groupImages.filter((image) => image.present).length} of {groupImages.length} pulled
+                  </span>
+                </div>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Image</th>
+                        <th>Status</th>
+                        <th className={styles.right}>Size</th>
+                        <th>Created</th>
+                        <th className={styles.right}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupImages.map((image) => {
+                        const action = pending[image.key]
+                        return (
+                          <tr key={image.key}>
+                            <td>
+                              <div className={styles.imageInfo}>
+                                <span className={styles.imageName}>{image.name}</span>
+                                <span className={styles.imageRef}>{image.image}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`${styles.statusPill} ${image.present ? styles.statusPillPresent : styles.statusPillAbsent}`}>
+                                <span className={styles.statusDot} />
+                                {image.present ? 'Pulled' : 'Not pulled'}
+                              </span>
+                            </td>
+                            <td className={`${styles.metaText} ${styles.right}`}>{image.present ? formatSize(image.size) : '—'}</td>
+                            <td className={styles.metaText}>
+                              {image.present && image.createdAt ? new Date(image.createdAt).toLocaleString() : '—'}
+                            </td>
+                            <td className={styles.right}>
+                              <div className={styles.imageActions}>
+                                <button
+                                  type="button"
+                                  className={styles.rowButton}
+                                  onClick={() => handlePull(image)}
+                                  disabled={Boolean(action)}
+                                >
+                                  {action === 'pull' ? 'Pulling…' : 'Pull'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`${styles.rowButton} ${styles.rowButtonDanger}`}
+                                  onClick={() => setConfirmClearTarget(image)}
+                                  disabled={!image.present || Boolean(action)}
+                                >
+                                  {action === 'clear' ? 'Clearing…' : 'Clear'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </section>
-            ))
-          )}
-        </div>
+            )
+          })
+        )}
       </main>
 
       <Modal

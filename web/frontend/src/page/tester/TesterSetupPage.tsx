@@ -354,7 +354,7 @@ export default function TesterSetupPage() {
         <header className={styles.header}>
           <div>
             <h2 className={styles.title}>
-              Throughput Tester · Setup
+              Setup
               {!isLoading && (currentId === null
                 ? <span className={styles.dirtyTag}>New profile, not saved</span>
                 : isDirty && <span className={styles.dirtyTag}>Unsaved changes</span>)}
@@ -366,16 +366,19 @@ export default function TesterSetupPage() {
               <Button variant="secondary" onClick={handleCancel} disabled={isBusy}>Cancel</Button>
             )}
             <Button variant="secondary" onClick={handleSave} disabled={isLoading || isBusy}>Save</Button>
-            <select aria-label="Tester to run on" className={`${styles.headerSelect} ${testerKnown === false ? styles.inputError : ''}`}
-              value={testerId} disabled={isLoading || testers === null}
-              title={tester ? `Run on ${tester.name} (${tester.url}); saved with the profile` : "This profile's tester was removed from fru-lab: choose another"}
-              onChange={(e) => handleChange('testerId', e.target.value)}>
-              {testerKnown === false && <option value={testerId}>Removed tester</option>}
-              {testers === null && <option value={testerId}>Loading testers…</option>}
-              {(testers ?? []).map((t) => (
-                <option key={t.id} value={t.id}>{t.name}{t.reachable === false ? ' (unreachable)' : ''}</option>
-              ))}
-            </select>
+            <label className={`${styles.joined} ${testerKnown === false ? styles.joinedError : ''}`}>
+              <span>Tester</span>
+              <select aria-label="Tester to run on" className={styles.headerSelect}
+                value={testerId} disabled={isLoading || testers === null}
+                title={tester ? `Run on ${tester.name} (${tester.url}); saved with the profile` : "This profile's tester was removed from fru-lab: choose another"}
+                onChange={(e) => handleChange('testerId', e.target.value)}>
+                {testerKnown === false && <option value={testerId}>Removed tester</option>}
+                {testers === null && <option value={testerId}>Loading testers…</option>}
+                {(testers ?? []).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}{t.reachable === false ? ' (unreachable)' : ''}</option>
+                ))}
+              </select>
+            </label>
             <Button onClick={handleStart} disabled={isLoading || isBusy || testerKnown === false || !validation?.valid || (currentId !== null && nameError !== undefined)}>
               {isBusy ? 'Starting…' : 'Start run'}
             </Button>
@@ -555,7 +558,7 @@ export default function TesterSetupPage() {
             </section>
 
             <section className={styles.card}>
-              <h3 className={styles.cardTitle}>Control-plane loop{cpUes === 0 && <span className={styles.dirtyTag} style={{ background: '#f1f5f9', color: '#64748b' }}>off: no control-plane UEs</span>}</h3>
+              <h3 className={styles.cardTitle}>Control-plane loop{cpUes === 0 && <span className={styles.offTag}>off: no control-plane UEs</span>}</h3>
               <div className={styles.fieldGrid}>
                 <Field label="Registrations per second" path="rates.cpLoop.ratePerSec" numeric {...fieldProps} />
                 <Field label="Max UEs in a cycle" path="rates.cpLoop.maxInFlight" numeric {...fieldProps} />
