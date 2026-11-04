@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
 import Button from '../../components/button/button'
@@ -12,6 +12,24 @@ import type {
 import { buildTesterStreamUrl, formatBps, formatBits, formatClock, formatLoss, formatMs } from './testerFormat'
 import { useTesters } from './useTesters'
 import styles from './tester.module.css'
+import Pager from '../../components/pager/Pager'
+import type { Page } from '../../components/pager/paging'
+
+// The gNB table is paged on the tester: with 10 000 gNBs the whole list
+// is about 3 MB, too much to send every second.
+const GNB_PAGE = 50
+
+// GNB_FILTERS are the gNB table's state filters, as gnbState values.
+const GNB_FILTERS: { label: string, states: string }[] = [
+  { label: 'All', states: '' },
+  { label: 'Not up', states: 'pending,connecting,failed,lost' },
+  { label: 'Failed or lost', states: 'failed,lost' },
+]
+
+// gnbQuery is the page request the tester takes (GnbPageRequest).
+function gnbQuery(page: number, states: string) {
+  return { gnbOffset: (page - 1) * GNB_PAGE, gnbLimit: GNB_PAGE, gnbState: states }
+}
 
 const RECONNECT_MS = 2000
 
@@ -402,13 +420,30 @@ export default function TesterRunDetailPage() {
   const [snapshot, setSnapshot] = useState<TesterRunSnapshot | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
+  const [gnbPage, setGnbPage] = useState(1)
+  const [gnbStates, setGnbStates] = useState('')
+  // the page the stream should carry: read when it (re)connects, and sent
+  // to it when the page or filter changes
+  const query = useRef(gnbQuery(1, ''))
+  const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     setSnapshot(null)
-    api.testerByIdRun(testerId)
+    setGnbPage(1)
+    setGnbStates('')
+    query.current = gnbQuery(1, '')
+    api.testerByIdRun(testerId, 0, GNB_PAGE)
       .then((response) => setSnapshot(response.data))
       .catch((error) => addError(extractErrorMessage(error, 'Failed to load the run')))
   }, [addError, testerId])
+
+  const showGnbs = useCallback((page: number, states: string) => {
+    setGnbPage(page)
+    setGnbStates(states)
+    query.current = gnbQuery(page, states)
+    const socket = socketRef.current
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(query.current))
+  }, [])
 
   // Keep one stream open while the page is mounted; reconnect after drops
   // (fru-tester restart, network blip) so the numbers never silently freeze.
@@ -418,7 +453,8 @@ export default function TesterRunDetailPage() {
     let closedByPage = false
 
     const connect = () => {
-      socket = new WebSocket(buildTesterStreamUrl(testerId))
+      socket = new WebSocket(buildTesterStreamUrl(testerId, query.current))
+      socketRef.current = socket
       socket.onopen = () => setIsConnected(true)
       socket.onmessage = (event) => setSnapshot(JSON.parse(event.data) as TesterRunSnapshot)
       socket.onclose = () => {
@@ -431,6 +467,7 @@ export default function TesterRunDetailPage() {
       closedByPage = true
       window.clearTimeout(retryTimer)
       socket?.close()
+      socketRef.current = null
     }
   }, [testerId])
 
@@ -504,15 +541,45 @@ export default function TesterRunDetailPage() {
 
       {s?.error && <p className={styles.runError}>{s.error}</p>}
 
-      {hasRun && <RunBody s={s} />}
+      {hasRun && <RunBody s={s} gnbPage={gnbPage} gnbStates={gnbStates} onGnbs={showGnbs} />}
     </AppLayout>
   )
 }
 
 // RunBody is everything under the run's header.
-function RunBody({ s }: { s: TesterRunSnapshot }) {
+interface RunBodyProps {
+  s: TesterRunSnapshot
+  gnbPage: number // 1-based
+  gnbStates: string // gnbState filter, '' for all
+  onGnbs: (page: number, states: string) => void
+}
+
+function RunBody({ s, gnbPage, gnbStates, onGnbs: showGnbs }: RunBodyProps) {
   const cleaning = s.state === 'stopping' || s.state === 'stopped'
   const dp = s.dataplane
+
+  // the gNB table: the page the tester sent, with its traffic in the same
+  // order. A tester older than paging sends every gNB (no gnbTotal) and
+  // the page is cut here.
+  const paged = typeof s.gnbTotal === 'number'
+  const wanted = gnbStates ? gnbStates.split(',') : null
+  const matching = paged ? s.gnbs : s.gnbs.filter((g) => !wanted || wanted.includes(g.state))
+  const gnbTotal = paged ? s.gnbTotal : matching.length
+  const pages = Math.max(1, Math.ceil(gnbTotal / GNB_PAGE))
+  const current = Math.min(gnbPage, pages)
+  const start = paged ? s.gnbOffset : (current - 1) * GNB_PAGE
+  const gnbRows = (paged ? matching : matching.slice(start, start + GNB_PAGE))
+    .map((g, i) => ({ g, traffic: paged ? dp.gnbs[i] : dp.gnbs[g.index - 1] }))
+  const pager: Page<unknown> = { items: gnbRows, page: current, pages, from: gnbRows.length ? start + 1 : 0, to: start + gnbRows.length }
+  const counts: Record<string, number> = paged ? s.gnbCounts : s.gnbs.reduce<Record<string, number>>((m, g) => ({ ...m, [g.state]: (m[g.state] ?? 0) + 1 }), {})
+  const allGnbs = Object.values(counts).reduce((a, b) => a + b, 0)
+  const gnbCountText = [`${allGnbs.toLocaleString()} gNB${allGnbs === 1 ? '' : 's'}`,
+    ...['up', 'connecting', 'pending', 'failed', 'lost', 'closed'].filter((st) => counts[st]).map((st) => `${counts[st].toLocaleString()} ${st}`)].join(' · ')
+
+  // a filter can leave fewer pages than the one shown: go to the last
+  useEffect(() => {
+    if (paged && gnbPage > pages) showGnbs(pages, gnbStates)
+  }, [paged, gnbPage, pages, gnbStates, showGnbs])
   const cpOn = ['waiting', 'running', 'stopped'].includes(s.cpLoop.state)
 
   // stage progress strip
@@ -679,7 +746,16 @@ function RunBody({ s }: { s: TesterRunSnapshot }) {
       </section>
 
       <section className={`${styles.panel} ${styles.panelFlush}`}>
-        <div className={styles.panelHead}><h2 className={styles.panelTitle}>gNBs</h2></div>
+        <div className={styles.panelHead}>
+          <h2 className={styles.panelTitle}>gNBs</h2>
+          <span className={styles.gnbCounts}>{gnbCountText}</span>
+          <label className={styles.gnbFilter}>
+            Show
+            <select value={gnbStates} onChange={(e) => showGnbs(1, e.target.value)}>
+              {GNB_FILTERS.map((f) => <option key={f.label} value={f.states}>{f.label}</option>)}
+            </select>
+          </label>
+        </div>
         <div className={styles.tableScroll}>
           <table className={styles.dataTable}>
             <thead>
@@ -690,7 +766,10 @@ function RunBody({ s }: { s: TesterRunSnapshot }) {
               </tr>
             </thead>
             <tbody>
-              {s.gnbs.map((g) => {
+              {gnbRows.length === 0 && (
+                <tr><td colSpan={11} className={styles.emptyCell}>{gnbStates ? 'No gNBs in these states.' : 'No gNBs.'}</td></tr>
+              )}
+              {gnbRows.map(({ g, traffic }) => {
                 const tone = g.state === 'up' ? 'ok' : g.state === 'failed' || g.state === 'lost' ? 'bad' : g.state === 'connecting' ? 'accent' : 'idle'
                 return (
                   <tr key={g.index}>
@@ -702,14 +781,17 @@ function RunBody({ s }: { s: TesterRunSnapshot }) {
                     <td className={`num ${styles.r}`}>{g.state === 'up' || g.state === 'closed' ? formatMs(g.latencyMs) : '—'}</td>
                     <td className={`num ${styles.r}`}>{g.registered.toLocaleString()} / {g.ueCount.toLocaleString()}</td>
                     <td className={`num ${styles.r}`}>{g.established.toLocaleString()} / {g.ueCount.toLocaleString()}</td>
-                    <td className={`num ${styles.r}`}>{gnbTraffic(dp.gnbs[g.index - 1], 'ul')}</td>
-                    <td className={`num ${styles.r}`}>{gnbTraffic(dp.gnbs[g.index - 1], 'dl')}</td>
+                    <td className={`num ${styles.r}`}>{gnbTraffic(traffic, 'ul')}</td>
+                    <td className={`num ${styles.r}`}>{gnbTraffic(traffic, 'dl')}</td>
                     <td className={styles.tdWrap}>{g.cause || '—'}</td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
+        </div>
+        <div className={styles.gnbPager}>
+          <Pager page={pager} total={gnbTotal} onChange={(p) => showGnbs(p, gnbStates)} />
         </div>
       </section>
     </>

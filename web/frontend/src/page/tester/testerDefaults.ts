@@ -43,7 +43,7 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     n6: { interface: 'docker-cn-ran', sinkIp: '10.0.1.1/24', upfIp: '10.0.1.5', uePool: '10.60.0.0/16' },
   },
   rates: {
-    // 0: no limit, every gNB sets up at once (the behaviour before the knobs)
+    // 0: no rate limit, and up to 1000 gNBs setting up at once
     n2: { ratePerSec: 0, maxInFlight: 0, timeoutMs: 5000, retries: 1 },
     registration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
     pdu: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },

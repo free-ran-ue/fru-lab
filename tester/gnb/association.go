@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/free5gc/ngap/ie"
 	"github.com/free5gc/ngap/message"
@@ -70,6 +71,11 @@ type Association struct {
 }
 
 func NewAssociation(conn Conn, id Identity, n3IP netip.Addr, teids *TeidAllocator) *Association {
+	// the Dialer's read timeout covered the NG Setup answer; from now on
+	// the AMF may stay quiet for as long as it likes
+	if d, ok := conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = d.SetReadDeadline(time.Time{})
+	}
 	return &Association{conn: conn, id: id, n3IP: n3IP, teids: teids, ues: map[int64]*UeLink{}, lostCh: make(chan struct{})}
 }
 
@@ -137,8 +143,8 @@ func (a *Association) SendUplinkNas(l *UeLink, nas []byte) error {
 }
 
 // Run reads NGAP until the association fails and returns that error.
-// Every UE still attached then gets DownlinkLost. EAGAIN (SO_RCVTIMEO on
-// an idle association) and EINTR are not failures.
+// Every UE still attached then gets DownlinkLost. EAGAIN and EINTR (from
+// a conn without the poller) are not failures.
 func (a *Association) Run() error {
 	buf := make([]byte, 65536)
 	for {

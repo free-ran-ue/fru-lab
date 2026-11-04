@@ -402,3 +402,26 @@ func TestReportsKeepOnlyTheLastFinishedRuns(t *testing.T) {
 	require.Len(t, reps, keptReports)
 	require.Equal(t, "r03", reps[0].Snapshot.RunID)
 }
+
+// A page of gNBs carries the same gNBs' traffic, in the same order.
+func TestSnapshotPageAlignsDataplaneGnbs(t *testing.T) {
+	amf := newFakeAMF(nil)
+	c, _, dp := newE2EControllerWithDataplane(amfDialer{amf: amf}, nil)
+	dp.gnbTraffic = []dataplane.GnbTraffic{{UlTxBytes: 1}, {UlTxBytes: 2}, {UlTxBytes: 3}}
+	_, err := c.Start(e2eProfile())
+	require.NoError(t, err)
+	waitFor(t, c, "10 UEs established", func(s Snapshot) bool { return s.Ues.Established == 10 })
+
+	s := c.SnapshotPage(GnbPage{Offset: 1, Limit: 1})
+	require.Len(t, s.Gnbs, 1)
+	require.Equal(t, 2, s.Gnbs[0].Index)
+	require.Equal(t, 3, s.GnbTotal)
+	require.Equal(t, 1, s.GnbOffset)
+	require.Equal(t, map[GnbState]int{GnbUp: 3}, s.GnbCounts)
+	require.Equal(t, []dataplane.GnbTraffic{{UlTxBytes: 2}}, s.Dataplane.Gnbs)
+
+	full := c.Snapshot()
+	require.Len(t, full.Gnbs, 3)
+	require.Len(t, full.Dataplane.Gnbs, 3)
+	stopAndWait(t, c)
+}

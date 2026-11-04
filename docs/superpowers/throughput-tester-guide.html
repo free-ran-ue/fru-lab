@@ -540,7 +540,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
           <tr><th>欄位</th><th>範圍／預設</th><th>意思</th><th class="up">調高</th><th class="down">調低</th></tr>
           <tr class="grp"><td colspan="5">N2 setup pacing</td></tr>
           <tr><td class="f">gNBs per second<span class="path">rates.n2.ratePerSec</span></td><td class="r">0–100000／0</td><td>每秒最多讓幾個 gNB 開始建 SCTP 與 NG Setup。0 是不限，全部 gNB 同時連。重試也照這個速率排。</td><td class="up">gNB 更快全部上線，UE 更早開始註冊；但 AMF 同時收到的 NG Setup 更多。</td><td class="down">AMF 壓力平均；gNB 很多時（例如 10000 個）全部上線要更久，Plan preview 的「All gNBs up after」會算出時間。</td></tr>
-          <tr><td class="f">Max in flight<span class="path">rates.n2.maxInFlight</span></td><td class="r">0–100000／0</td><td>同時最多幾個 gNB 在建連線。0 是不限。</td><td class="up">AMF 慢時也能維持速率。</td><td class="down">AMF 慢時實際速率會低於 gNBs per second。</td></tr>
+          <tr><td class="f">Max in flight<span class="path">rates.n2.maxInFlight</span></td><td class="r">0–1000／0</td><td>同時最多幾個 gNB 在建連線，上限 1000；0 就是 1000。上限是因為建 SCTP 連線時每個 gNB 會佔一條系統執行緒，太多會讓 fru-tester 崩潰；連上之後就不再佔用，所以 10000 個 gNB 可以同時保持連線。</td><td class="up">AMF 慢時也能維持速率。</td><td class="down">AMF 慢時實際速率會低於 gNBs per second。</td></tr>
           <tr><td class="f">Timeout per attempt<span class="path">rates.n2.timeoutMs</span></td><td class="r">1–60000 ms／5000</td><td>一個 gNB 的 SCTP 連線加 NG Setup 最多等多久。</td><td class="up">慢的 AMF 也能成功；但連不上時要等更久才失敗，Stop 也可能等更久。</td><td class="down">更快判定失敗、進入重試。</td></tr>
           <tr><td class="f">Retries<span class="path">rates.n2.retries</span></td><td class="r">≥ 0／1</td><td>失敗後再試幾次。</td><td class="up">暫時性問題可以補回來；失敗的 gNB 要更久才確定。</td><td class="down">失敗就放棄，它的 UE 記為未開始。</td></tr>
           <tr class="grp"><td colspan="5">Registration / PDU session / Deregistration pacing（預設：50／s、200、10000 ms（Dereg 5000）、1）</td></tr>
@@ -634,7 +634,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
       <h3>UEs 卡片與 gNB 表</h3>
       <ul>
         <li>依狀態計數：established、establishing、registered、registering、pending、failed、gNB down、cancelled；Stop 後加上 deregistering、deregistered。列出前 200 個失敗的 UE（SUPI、gNB、階段、原因、嘗試次數）。</li>
-        <li>gNB 表：每個 gNB 的 UE 註冊與 PDU 成功數、UL/DL 收到的量與掉包。</li>
+        <li>gNB 表：每個 gNB 的 UE 註冊與 PDU 成功數、UL/DL 收到的量與掉包。每頁 50 個，下方翻頁；表頭列出總數和各狀態的數量（例如「10,000 gNBs · 9,935 up · 10 failed」）。右上角 <b>Show</b> 可以只看 Not up（pending、connecting、failed、lost）或 Failed or lost，在上萬個 gNB 裡直接找出有問題的。只有目前這一頁會從 tester 傳過來，所以 1 萬個 gNB 時頁面也不會卡。</li>
         <li>gNB 狀態：<code>pending</code> → <code>connecting</code> → <code>up</code> 或 <code>failed</code>。<code>lost</code> 表示原本 up、被 AMF 那邊斷掉，例如 AMF 重啟。</li>
       </ul>
     </section>

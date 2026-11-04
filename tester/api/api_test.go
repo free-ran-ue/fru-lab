@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 )
 
 type fakeCtrl struct {
+	pageMu      sync.Mutex
+	page        run.GnbPage // the last SnapshotPage asked for
 	validateErr error
 	startErr    error
 	stopErr     error
@@ -43,9 +46,21 @@ func (f *fakeCtrl) Validate(profile.Profile) (*profile.Plan, error) {
 func (f *fakeCtrl) Start(profile.Profile) (run.Snapshot, error) { return f.snap, f.startErr }
 func (f *fakeCtrl) Stop() (run.Snapshot, error)                 { return f.snap, f.stopErr }
 func (f *fakeCtrl) Snapshot() run.Snapshot                      { return f.snap }
-func (f *fakeCtrl) Changed() <-chan struct{}                    { return f.changed }
-func (f *fakeCtrl) Reports() []run.Report                       { return f.reports }
-func (f *fakeCtrl) System() (run.SystemInfo, error)             { return run.SystemInfo{Cpus: f.cpus}, nil }
+func (f *fakeCtrl) SnapshotPage(q run.GnbPage) run.Snapshot {
+	f.pageMu.Lock()
+	f.page = q
+	f.pageMu.Unlock()
+	return f.snap
+}
+
+func (f *fakeCtrl) lastPage() run.GnbPage {
+	f.pageMu.Lock()
+	defer f.pageMu.Unlock()
+	return f.page
+}
+func (f *fakeCtrl) Changed() <-chan struct{}        { return f.changed }
+func (f *fakeCtrl) Reports() []run.Report           { return f.reports }
+func (f *fakeCtrl) System() (run.SystemInfo, error) { return run.SystemInfo{Cpus: f.cpus}, nil }
 func (f *fakeCtrl) SetCpus(a cpuset.Allocation) (cpuset.Allocation, error) {
 	if f.cpusErr != nil {
 		return a, f.cpusErr
@@ -306,4 +321,45 @@ func TestStatus(t *testing.T) {
 	require.NotEmpty(t, s.Hostname)
 	require.NotZero(t, s.Memory.HostTotal)
 	require.Equal(t, http.StatusUnauthorized, do(t, h, http.MethodGet, "/api/status", "", "x").Code)
+}
+
+func TestRunGetPagesGnbs(t *testing.T) {
+	ctrl := &fakeCtrl{snap: run.Snapshot{State: run.StateRunning}}
+	r := newTestRouter(ctrl, "t")
+	get := func(q string) int {
+		req := httptest.NewRequest(http.MethodGet, "/api/run"+q, nil)
+		req.Header.Set("Authorization", "Bearer t")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	require.Equal(t, http.StatusOK, get(""))
+	require.Equal(t, run.AllGnbs, ctrl.lastPage(), "no gnbLimit lists every gNB")
+	require.Equal(t, http.StatusOK, get("?gnbOffset=50&gnbLimit=25&gnbState=failed,lost"))
+	require.Equal(t, run.GnbPage{Offset: 50, Limit: 25, States: []run.GnbState{run.GnbFailed, run.GnbLost}}, ctrl.lastPage())
+	require.Equal(t, http.StatusOK, get("?gnbLimit=0"))
+	require.Equal(t, run.GnbPage{}, ctrl.lastPage(), "gnbLimit=0: counts only")
+	for _, bad := range []string{"?gnbLimit=1001", "?gnbLimit=-1", "?gnbOffset=-1", "?gnbLimit=x", "?gnbState=bogus"} {
+		require.Equal(t, http.StatusBadRequest, get(bad), bad)
+	}
+}
+
+func TestStreamChangesPageOnClientMessage(t *testing.T) {
+	ctrl := &fakeCtrl{snap: run.Snapshot{State: run.StateRunning}, changed: make(chan struct{})}
+	srv := httptest.NewServer(newTestRouter(ctrl, "t"))
+	defer srv.Close()
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/run/stream?gnbLimit=50"
+	conn, _, err := websocket.DefaultDialer.Dial(url, http.Header{"Authorization": {"Bearer t"}})
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	var got run.Snapshot
+	require.NoError(t, conn.ReadJSON(&got))
+	require.Equal(t, run.GnbPage{Limit: 50}, ctrl.lastPage())
+
+	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(`{"gnbOffset":100,"gnbLimit":50,"gnbState":"failed"}`)))
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second))) // well before the 1 s tick
+	start := time.Now()
+	require.NoError(t, conn.ReadJSON(&got))
+	require.Less(t, time.Since(start), 500*time.Millisecond, "a new page goes out at once")
+	require.Equal(t, run.GnbPage{Offset: 100, Limit: 50, States: []run.GnbState{run.GnbFailed}}, ctrl.lastPage())
 }

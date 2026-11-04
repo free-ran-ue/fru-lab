@@ -867,6 +867,10 @@ paths:
       operationId: testerRunGet
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GnbOffset'
+        - $ref: '#/components/parameters/GnbLimit'
+        - $ref: '#/components/parameters/GnbState'
       responses:
         '200':
           description: OK
@@ -1241,6 +1245,9 @@ paths:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TesterId'
+        - $ref: '#/components/parameters/GnbOffset'
+        - $ref: '#/components/parameters/GnbLimit'
+        - $ref: '#/components/parameters/GnbState'
       responses:
         '200':
           description: OK
@@ -1688,6 +1695,30 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    GnbOffset:
+      name: gnbOffset
+      in: query
+      required: false
+      description: Where the page of gNBs starts, counted within those gnbState keeps.
+      schema:
+        type: integer
+        minimum: 0
+    GnbLimit:
+      name: gnbLimit
+      in: query
+      required: false
+      description: How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {"gnbOffset", "gnbLimit", "gnbState"} as a text message.
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 1000
+    GnbState:
+      name: gnbState
+      in: query
+      required: false
+      description: Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
+      schema:
+        type: string
     TesterId:
       name: id
       in: path
@@ -2199,7 +2230,7 @@ components:
           example: 100
         maxInFlight:
           type: integer
-          description: At most this many gNBs are setting up at once. 0 or absent is no limit.
+          description: At most this many gNBs are setting up at once, up to 1000. 0 or absent is 1000.
           example: 100
         timeoutMs:
           type: integer
@@ -2632,7 +2663,7 @@ components:
           description: Procedures that did not succeed.
     TesterRunSnapshot:
       type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, ues, failedUes, dataplane, cpLoop, cpus]
+      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, gnbTotal, gnbOffset, gnbCounts, ues, failedUes, dataplane, cpLoop, cpus]
       properties:
         runId:
           type: string
@@ -2667,8 +2698,20 @@ components:
           enum: ['', user, maxDuration]
         gnbs:
           type: array
+          description: The gNBs asked for (gnbOffset, gnbLimit, gnbState); every gNB when no gnbLimit was given.
           items:
             $ref: '#/components/schemas/TesterGnbStatus'
+        gnbTotal:
+          type: integer
+          description: How many gNBs match gnbState (every gNB without it).
+        gnbOffset:
+          type: integer
+          description: Where gnbs starts within them.
+        gnbCounts:
+          type: object
+          description: Every gNB of the run counted by state.
+          additionalProperties:
+            type: integer
         ues:
           $ref: '#/components/schemas/TesterUeSummary'
         failedUes:

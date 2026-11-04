@@ -7,7 +7,7 @@ Paces the gNBs\' N2 setup (SCTP association and NG Setup). A failed attempt with
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **ratePerSec** | **number** | At most this many gNBs start their N2 setup per second. 0 or absent is no limit. | [optional] [default to undefined]
-**maxInFlight** | **number** | At most this many gNBs are setting up at once. 0 or absent is no limit. | [optional] [default to undefined]
+**maxInFlight** | **number** | At most this many gNBs are setting up at once, up to 1000. 0 or absent is 1000. | [optional] [default to undefined]
 **timeoutMs** | **number** |  | [default to undefined]
 **retries** | **number** |  | [default to undefined]
 

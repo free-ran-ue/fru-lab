@@ -7,7 +7,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +31,7 @@ type Controller interface {
 	Start(p profile.Profile) (run.Snapshot, error)
 	Stop() (run.Snapshot, error)
 	Snapshot() run.Snapshot
+	SnapshotPage(q run.GnbPage) run.Snapshot
 	Changed() <-chan struct{}
 	Reports() []run.Report
 	Ping(p profile.Profile, plane string) (run.PingResult, error)
@@ -89,7 +94,14 @@ func NewRouter(ctrl Controller, b Bench, apiToken, name string) *gin.Engine {
 	r.Use(gin.Recovery())
 	g := r.Group("/api", requireToken(apiToken))
 	g.POST("/profile/validate", handleValidate(ctrl))
-	g.GET("/run", func(c *gin.Context) { c.JSON(http.StatusOK, ctrl.Snapshot()) })
+	g.GET("/run", func(c *gin.Context) {
+		q, err := gnbPageQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, ctrl.SnapshotPage(q))
+	})
 	g.POST("/run", handleStart(ctrl, b))
 	g.POST("/run/stop", handleStop(ctrl))
 	g.GET("/run/stream", handleStream(ctrl))
@@ -298,23 +310,101 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(*http.Request) bool { return true },
 }
 
+// GnbPageRequest picks the gNBs a snapshot lists: query parameters on
+// GET /run and /run/stream, or a JSON text message the stream's client
+// sends to change page. No gnbLimit lists every gNB.
+type GnbPageRequest struct {
+	GnbOffset int    `json:"gnbOffset"`
+	GnbLimit  *int   `json:"gnbLimit"`
+	GnbState  string `json:"gnbState"` // comma-separated states; empty is all
+}
+
+func (r GnbPageRequest) page() (run.GnbPage, error) {
+	q := run.AllGnbs
+	if r.GnbLimit != nil {
+		if *r.GnbLimit < 0 || *r.GnbLimit > run.MaxGnbPage {
+			return q, fmt.Errorf("gnbLimit must be between 0 and %d", run.MaxGnbPage)
+		}
+		q.Limit = *r.GnbLimit
+	}
+	if r.GnbOffset < 0 {
+		return q, errors.New("gnbOffset must not be negative")
+	}
+	q.Offset = r.GnbOffset
+	for _, s := range strings.Split(r.GnbState, ",") {
+		switch st := run.GnbState(strings.TrimSpace(s)); st {
+		case "":
+		case run.GnbPending, run.GnbConnecting, run.GnbUp, run.GnbFailed, run.GnbLost, run.GnbClosed:
+			q.States = append(q.States, st)
+		default:
+			return q, fmt.Errorf("gnbState: unknown state %q", st)
+		}
+	}
+	return q, nil
+}
+
+func gnbPageQuery(c *gin.Context) (run.GnbPage, error) {
+	var r GnbPageRequest
+	var err error
+	if v := c.Query("gnbOffset"); v != "" {
+		if r.GnbOffset, err = strconv.Atoi(v); err != nil {
+			return run.AllGnbs, errors.New("gnbOffset must be a number")
+		}
+	}
+	if v := c.Query("gnbLimit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return run.AllGnbs, errors.New("gnbLimit must be a number")
+		}
+		r.GnbLimit = &n
+	}
+	r.GnbState = c.Query("gnbState")
+	return r.page()
+}
+
 // handleStream pushes a run.Snapshot JSON text frame immediately, on every
 // state change, and at least once per streamInterval, until the client
-// goes away.
+// goes away. The query picks the gNBs listed (GnbPageRequest); the client
+// changes page by sending a GnbPageRequest, answered with a frame at once.
+// A message that is not a valid request is ignored.
 func handleStream(ctrl Controller) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		first, err := gnbPageQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
+			return
+		}
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			return
 		}
 		defer func() { _ = conn.Close() }()
 
+		var mu sync.Mutex
+		page := first
+		paged := make(chan struct{}, 1)
 		gone := make(chan struct{})
-		go func() { // the client never sends; reading detects its close
+		go func() { // reading also detects the client's close
 			defer close(gone)
 			for {
-				if _, _, err := conn.ReadMessage(); err != nil {
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
 					return
+				}
+				var r GnbPageRequest
+				if json.Unmarshal(msg, &r) != nil {
+					continue
+				}
+				q, err := r.page()
+				if err != nil {
+					continue
+				}
+				mu.Lock()
+				page = q
+				mu.Unlock()
+				select {
+				case paged <- struct{}{}:
+				default:
 				}
 			}
 		}()
@@ -324,12 +414,17 @@ func handleStream(ctrl Controller) gin.HandlerFunc {
 		for {
 			changed := ctrl.Changed()
 			sent := time.Now()
-			if err := conn.WriteJSON(ctrl.Snapshot()); err != nil {
+			mu.Lock()
+			q := page
+			mu.Unlock()
+			if err := conn.WriteJSON(ctrl.SnapshotPage(q)); err != nil {
 				return
 			}
 			select {
 			case <-gone:
 				return
+			case <-paged:
+				continue // a new page goes out at once
 			case <-changed:
 			case <-ticker.C:
 			}

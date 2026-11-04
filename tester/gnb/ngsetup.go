@@ -18,8 +18,8 @@ type RejectedError struct {
 func (e *RejectedError) Error() string { return "ng setup rejected: " + e.Cause }
 
 // ExchangeNGSetup sends request and waits for the AMF's answer. The read
-// timeout comes from the connection itself (SO_RCVTIMEO on SCTP, see
-// SCTPDialer), because free5gc/sctp does not support read deadlines.
+// timeout comes from the connection itself (the read deadline
+// SCTPDialer sets, lifted again by NewAssociation).
 func ExchangeNGSetup(conn io.ReadWriter, request []byte) error {
 	if _, err := conn.Write(request); err != nil {
 		return fmt.Errorf("send ng setup request: %w", err)

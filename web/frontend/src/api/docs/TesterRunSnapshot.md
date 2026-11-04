@@ -17,7 +17,10 @@ Name | Type | Description | Notes
 **deregistration** | [**TesterStageSnapshot**](TesterStageSnapshot.md) |  | [default to undefined]
 **n2Release** | [**TesterStageSnapshot**](TesterStageSnapshot.md) |  | [default to undefined]
 **stopReason** | **string** | Why the run stopped; empty while running. | [default to undefined]
-**gnbs** | [**Array&lt;TesterGnbStatus&gt;**](TesterGnbStatus.md) |  | [default to undefined]
+**gnbs** | [**Array&lt;TesterGnbStatus&gt;**](TesterGnbStatus.md) | The gNBs asked for (gnbOffset, gnbLimit, gnbState); every gNB when no gnbLimit was given. | [default to undefined]
+**gnbTotal** | **number** | How many gNBs match gnbState (every gNB without it). | [default to undefined]
+**gnbOffset** | **number** | Where gnbs starts within them. | [default to undefined]
+**gnbCounts** | **{ [key: string]: number; }** | Every gNB of the run counted by state. | [default to undefined]
 **ues** | [**TesterUeSummary**](TesterUeSummary.md) |  | [default to undefined]
 **failedUes** | [**Array&lt;TesterUeFailure&gt;**](TesterUeFailure.md) | The first 200 UEs that failed; ues.failed has the total. | [default to undefined]
 **dataplane** | [**TesterDataplaneSnapshot**](TesterDataplaneSnapshot.md) |  | [default to undefined]
@@ -43,6 +46,9 @@ const instance: TesterRunSnapshot = {
     n2Release,
     stopReason,
     gnbs,
+    gnbTotal,
+    gnbOffset,
+    gnbCounts,
     ues,
     failedUes,
     dataplane,

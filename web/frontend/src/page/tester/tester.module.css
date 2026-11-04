@@ -379,3 +379,14 @@
 
 /* UE state chips */
 .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* gNB table: counts by state, the state filter, and the pager below */
+.gnbCounts { font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.gnbFilter { margin-left: auto; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); }
+.gnbFilter select {
+  height: 1.875rem; padding: 0 0.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); font: 400 0.8125rem var(--font-sans);
+}
+.gnbFilter select:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.gnbPager:not(:empty) { padding: 0.5rem 1.25rem; border-top: 1px solid var(--border-soft); }
+.emptyCell { color: var(--muted); text-align: center; padding: 1rem; }

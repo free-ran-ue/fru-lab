@@ -221,7 +221,7 @@ function TesterPanel({ id, addError, addSuccess, onReach }: {
           setUnreachable(extractErrorMessage(error, 'fru-tester did not answer'))
           wasDown = true
         })
-      api.testerByIdRun(id)
+      api.testerByIdRun(id, 0, 0)
         .then((r) => { if (!cancelled) setRun(r.data) })
         .catch(() => {})
     }
@@ -456,7 +456,7 @@ function useFleet(testers: TesterEntry[] | null): Record<string, FleetEntry> {
             reached.delete(t.id)
             set(t.id, (e) => ({ ...e, down: extractErrorMessage(error, 'fru-tester did not answer') }))
           })
-        api.testerByIdRun(t.id)
+        api.testerByIdRun(t.id, 0, 0)
           .then((r) => { if (!cancelled) set(t.id, (e) => ({ ...e, run: r.data })) })
           .catch(() => {})
         api.testerByIdCpuLoad(t.id)
