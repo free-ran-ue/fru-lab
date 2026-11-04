@@ -1,228 +1,175 @@
-/* Layout modeled after free5GC webconsole's own Subscriber pages (hero band,
-   floating-label outlined fields, nested slice/DNN/flow-rule cards), recolored
-   to fru-lab's own palette (indigo/purple accent, rounded cards, existing
-   danger/neutral tones) so it fits the rest of the app. */
+/* Shared by the Subscribers list, form and view pages, in the v1
+   prototype's language: Subscribers.dc.html for the list and the view
+   (bordered panels, uppercase table heads), Setup.dc.html for the form
+   (sections with a heading + hint, an auto-fit field grid, labels above
+   36px inputs). */
 
-.layout {
-  min-height: 100vh;
+/* page title row */
+.pageHeader {
   display: flex;
-  background: #f8fafc;
-}
-
-.content {
-  flex-grow: 1;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.heroBand {
-  position: relative;
-  overflow: hidden;
-  padding: 2.5rem 2.5rem 2rem;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.heroBlobPink {
-  position: absolute;
-  top: -60px;
-  left: -80px;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(147, 51, 234, 0.14), transparent 70%);
-  pointer-events: none;
-}
-
-.heroBlobBlue {
-  position: absolute;
-  top: -120px;
-  right: -100px;
-  width: 320px;
-  height: 320px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(79, 70, 229, 0.16), transparent 70%);
-  pointer-events: none;
-}
-
-.heroInner {
-  position: relative;
-  display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  justify-content: space-between;
   gap: 1rem;
 }
 
-.kicker {
-  margin: 0 0 0.35rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #4338ca;
-  text-transform: uppercase;
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
 }
 
 .title {
   margin: 0;
-  font-size: 2rem;
-  font-weight: 800;
-  color: #0f172a;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
 
-.body {
-  padding: 2rem 2.5rem 3rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.card {
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-  padding: 1.75rem;
-}
-
-.sectionHeading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 0 0 1rem;
-}
-
-.sectionHeading h3 {
+.subtitle {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: 0.875rem;
+  color: var(--muted);
 }
 
-.fieldGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem 1.25rem;
+.headerActions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-/* Floating-label outlined field, matching webconsole's layout but in fru-lab's tones */
-.field {
-  position: relative;
-  margin-top: 0.6rem;
+/* prototype .btn (36px) and its 32px pager size */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #FFFFFF;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.btnDangerText {
+  color: var(--bad);
+}
+
+.btnSm {
+  min-height: 2rem;
+}
+
+.btnMuted {
+  color: var(--muted);
+}
+
+.btnCurrent,
+.btnCurrent:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+/* list panel (Subscribers.dc.html) */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
   min-width: 0;
 }
 
-.field label {
-  position: absolute;
-  top: -0.55rem;
-  left: 0.7rem;
-  background: #ffffff;
-  padding: 0 0.35rem;
-  font-size: 0.72rem;
-  color: #64748b;
-  white-space: nowrap;
-}
-
-.field .required {
-  color: #dc2626;
-}
-
-.input,
-.select {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 0.75rem 0.85rem;
-  font-size: 0.92rem;
-  color: #0f172a;
-  background: #ffffff;
-}
-
-.input:focus,
-.select:focus {
-  outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
-}
-
-.input:disabled {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.checkboxRow {
+.panelHead {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.88rem;
-  color: #1e293b;
-}
-
-.checkboxRow input[type='checkbox'] {
-  accent-color: #4f46e5;
-  width: 1rem;
-  height: 1rem;
-}
-
-.nestedCard {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 1.5rem;
-  background: #f8fafc;
-}
-
-.nestedCard + .nestedCard {
-  margin-top: 1.25rem;
-}
-
-.sliceList {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-/* Buttons, recolored to fru-lab's palette (indigo/purple primary, existing
-   danger red, ghost indigo for "add", plain Button component reused where
-   a full button component makes sense). */
-.btnAdd {
-  border: 1px dashed #a5b4fc;
-  border-radius: 10px;
-  background: transparent;
-  color: #4338ca;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.55rem 1.1rem;
-  cursor: pointer;
-}
-
-.btnAdd:hover {
-  background: #eef2ff;
-  border-color: #818cf8;
-}
-
-.btnLink {
-  border: none;
-  background: transparent;
-  color: #4338ca;
-  font-size: 0.82rem;
-  font-weight: 600;
-  padding: 0.4rem 0;
-  cursor: pointer;
-}
-
-.btnLink:hover {
-  text-decoration: underline;
-}
-
-.actionsRow {
-  display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-soft);
 }
 
-.actionsGroup {
-  display: inline-flex;
-  gap: 0.5rem;
+.panelHead h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.panelMeta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* prototype .in on the list: 13px sans */
+.in {
+  height: 2.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.375rem;
+  padding: 0 0.625rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.in:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
+.search {
+  flex: 1 1 15rem;
+  max-width: 20rem;
+}
+
+.range {
+  margin-left: auto;
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.tableWrap {
+  overflow-x: auto;
 }
 
 .table {
@@ -230,65 +177,331 @@
   border-collapse: collapse;
 }
 
-.table th {
-  text-align: left;
-  font-size: 0.75rem;
+.th {
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: #94a3b8;
+  line-height: 1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.9rem 1rem;
-  border-bottom: 1px solid #e2e8f0;
+  color: var(--muted);
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-sunken);
+  white-space: nowrap;
 }
 
-.table td {
-  padding: 0.9rem 1rem;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 0.9rem;
-  color: #1e293b;
+.td {
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 0.8125rem;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
-.table tr:last-child td {
-  border-bottom: none;
+.row:hover {
+  background: var(--surface-sunken);
+}
+
+.checkCell {
+  width: 2.25rem;
+}
+
+.table input[type='checkbox'],
+.checkboxRow input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.right {
+  text-align: right;
+}
+
+.mutedCell {
+  color: var(--muted);
+}
+
+.tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  background: var(--surface-muted);
+  color: var(--idle-ink);
+}
+
+.link,
+.linkDanger {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.linkDanger {
+  color: var(--bad);
+}
+
+.link:hover:not(:disabled) {
+  color: var(--accent-ink);
+}
+
+.linkDanger:hover:not(:disabled) {
+  color: var(--bad-ink);
+}
+
+.link:disabled,
+.linkDanger:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.sep {
+  color: var(--border-strong);
+  padding: 0 0.5rem;
 }
 
 .emptyState {
-  margin: 0 0 1.25rem;
-  font-size: 0.9rem;
-  color: #64748b;
+  margin: 0;
+  padding: 1.25rem 1rem;
+  font-size: 0.875rem;
+  color: var(--muted);
 }
 
-.kvTable {
-  width: 100%;
-  border-collapse: collapse;
+/* list footer: rows per page + pager */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
 }
 
-.kvTable tr {
-  border-bottom: 1px solid #f1f5f9;
+.footerSelect {
+  height: 2rem;
 }
 
-.kvTable tr:last-child {
-  border-bottom: none;
+.pages {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
-.kvTable th {
+.ellipsis {
+  align-self: center;
+  padding: 0 0.25rem;
+}
+
+/* view page key/value rows */
+.kvLabel {
   width: 40%;
-  text-align: left;
-  padding: 0.7rem 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
+  color: var(--muted);
 }
 
-.kvTable td {
-  padding: 0.7rem 0;
-  font-size: 0.9rem;
-  color: #0f172a;
+.kvValue {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
   word-break: break-all;
 }
 
-@media (max-width: 900px) {
-  .layout {
-    flex-direction: column;
-  }
+/* form sections (Setup.dc.html .sec) */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.sec {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  min-width: 0;
+}
+
+.secH {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.secH h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* a sub-heading inside a section (DNN, UP security, flow rule) */
+.subH {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-sunken);
+}
+
+.subH h3 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.headAction {
+  margin-left: auto;
+}
+
+.secB {
+  padding: 1.125rem 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+  gap: 1rem 1.25rem;
+}
+
+.fld {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  min-width: 0;
+}
+
+.fld > label {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.required {
+  color: var(--bad);
+}
+
+.inputPair {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* prototype .in on the form: 14px mono, full width */
+.input {
+  width: 100%;
+  height: 2.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.375rem;
+  padding: 0 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
+.input:disabled {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.hintError {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--bad);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+
+/* "+ Flow rule" style add buttons */
+.btnAdd {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 0.375rem;
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnAdd:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 1.125rem 1.25rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.actionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.bodyText {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+.countForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* bulk-create failures */
+.failureList {
+  margin: 0;
+  padding: 1.125rem 1.25rem 1.125rem 2.5rem;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.failureList code {
+  font-family: var(--font-mono);
 }

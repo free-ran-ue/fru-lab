@@ -74,7 +74,7 @@ tester:
     tag: latest
     pullPolicy: Always
 
-  # how fru-lab lists this tester on the Status page
+  # how fru-lab lists this tester on the Testers page
   name: default-tester
   # shared with fru-lab; change it for anything but a lab
   apiToken: frulab-tester
@@ -109,7 +109,7 @@ tester:
           mtu: 0
           name: ""
 
-  # the System page's CPU allocation
+  # the Testers page's CPU allocation
   persistence:
     type: hostPath # hostPath, pvc or emptyDir (see frulab.persistence)
     hostPath: /var/lib/frulab/tester-data

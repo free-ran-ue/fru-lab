@@ -1,0 +1,118 @@
+/* The v2 page frame in the v1 colours: sidebar, a 72px white header bar (as tall as the sidebar's brand row),
+   the content column (20px 24px 24px, 16px gaps) and a 26px status bar. */
+.shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.5rem;
+  padding: 0.375rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.crumbLink {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.crumbLink:hover {
+  color: var(--ink);
+}
+
+.crumbCurrent {
+  color: var(--ink);
+}
+
+.barRight {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.liveDot,
+.offDot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.offDot {
+  background: var(--bad);
+}
+
+.content {
+  flex: 1 1 auto;
+  width: 100%;
+  padding: 1.25rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  min-height: 1.625rem;
+  padding: 0 1.5rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  color: var(--muted);
+}
+
+.statusRight {
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .bar,
+  .content,
+  .status {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}

@@ -1,15 +1,23 @@
 import { useState } from 'react'
-import Button from '../../components/button/button'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { TesterFieldError, TesterPingResult, TesterPingRequestPlaneEnum, TesterProfile } from '../../api'
 import { forTester } from './testerDefaults'
-import styles from './tester.module.css'
+import styles from './setup.module.css'
 
 interface PingTestProps {
   plane: TesterPingRequestPlaneEnum
   label: string
   profile: TesterProfile
   testerId: string
+  // told every outcome, for Setup's pre-flight checks
+  onOutcome?: (plane: TesterPingRequestPlaneEnum, outcome: PingOutcomeSummary) => void
+}
+
+// PingOutcomeSummary is a ping test's verdict in one line.
+export interface PingOutcomeSummary {
+  ok: boolean
+  title: string
+  detail: string
 }
 
 type PingState =
@@ -24,6 +32,16 @@ function fieldErrorsOf(error: unknown): TesterFieldError[] {
   return Array.isArray(data?.errors) ? data.errors : []
 }
 
+// summarize is a finished ping as one pre-flight line.
+function summarize(r: TesterPingResult): PingOutcomeSummary {
+  const ok = r.sent > 0 && r.received === r.sent
+  const verdict = r.sent === 0 ? 'not tested' : ok ? 'reachable' : r.received > 0 ? 'some replies lost' : 'no reply'
+  const detail = r.sent > 0
+    ? `ping ${r.target} · ${r.received}/${r.sent}${r.received > 0 ? ` · ${avgMs(r.rttMs)} ms` : ''}`
+    : r.error || `ping ${r.target}`
+  return { ok, title: verdict, detail }
+}
+
 function avgMs(rtts: number[]): string {
   if (rtts.length === 0) return ''
   const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length
@@ -33,7 +51,7 @@ function avgMs(rtts: number[]): string {
 // PingTest checks one network the way a run would use it: fru-tester puts
 // the run's address on the interface, pings the core's address and removes
 // it again.
-export default function PingTest({ plane, label, profile, testerId }: PingTestProps) {
+export default function PingTest({ plane, label, profile, testerId, onOutcome }: PingTestProps) {
   const [state, setState] = useState<PingState>({ kind: 'idle' })
 
   async function handlePing() {
@@ -41,16 +59,19 @@ export default function PingTest({ plane, label, profile, testerId }: PingTestPr
     try {
       const response = await api.testerByIdNetworkPing(testerId, { plane, profile: forTester(profile) })
       setState({ kind: 'done', result: response.data })
+      onOutcome?.(plane, summarize(response.data))
     } catch (error) {
-      setState({ kind: 'failed', message: extractErrorMessage(error, 'Ping test failed'), fields: fieldErrorsOf(error) })
+      const message = extractErrorMessage(error, 'Ping test failed')
+      setState({ kind: 'failed', message, fields: fieldErrorsOf(error) })
+      onOutcome?.(plane, { ok: false, title: 'Not tested', detail: message })
     }
   }
 
   return (
     <div className={styles.pingTest}>
-      <Button variant="secondary" onClick={handlePing} disabled={state.kind === 'busy'}>
+      <button type="button" className={styles.btn} onClick={handlePing} disabled={state.kind === 'busy'}>
         {state.kind === 'busy' ? 'Pinging…' : label}
-      </Button>
+      </button>
       <div className={styles.pingResult} aria-live="polite">
         {state.kind === 'idle' && (
           <span className={styles.pingNote}>Adds the address a run would use, pings, and removes it again.</span>
@@ -71,7 +92,7 @@ export default function PingTest({ plane, label, profile, testerId }: PingTestPr
 
 function PingOutcome({ result }: { result: TesterPingResult }) {
   const { sent, received, rttMs, target, source } = result
-  const tone = sent > 0 && received === sent ? styles.pillOk : received > 0 ? styles.pillActive : styles.pillBad
+  const tone = sent > 0 && received === sent ? styles.pillOk : received > 0 ? styles.pillWarn : styles.pillBad
   const verdict = sent === 0 ? 'Not tested' : received === sent ? 'Reachable' : received > 0 ? 'Some replies lost' : 'No reply'
   return (
     <>

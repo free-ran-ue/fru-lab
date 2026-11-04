@@ -2,50 +2,66 @@
   position: fixed;
   right: 1rem;
   z-index: 9999;
-  width: 320px;
+  width: 20rem;
 }
 
 .errorBox {
   position: fixed;
   right: 1rem;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  color: #ef4444;
-  font-size: 0.875rem;
+  align-items: flex-start;
+  gap: 0.625rem;
+  min-width: 17.5rem;
+  max-width: 25rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  line-height: 1.4;
   text-align: left;
-  padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.98);
-  border-radius: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  min-width: 280px;
-  max-width: 400px;
-  backdrop-filter: blur(8px);
   transform: translateX(120%);
-  animation: slideIn 0.3s ease-out forwards;
-  transition: transform 0.3s ease-out, top 0.3s ease-out;
+  animation: slideIn 0.25s ease-out forwards;
+  transition: transform 0.25s ease-out, top 0.25s ease-out;
+}
+
+.icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--bad);
 }
 
 .message {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .closeButton {
-  background: none;
-  border: none;
-  color: #ef4444;
-  font-size: 1.25rem;
-  line-height: 1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: -1px -0.25rem 0 0;
   padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: none;
+  color: var(--muted);
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s;
 }
 
 .closeButton:hover {
-  opacity: 1;
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
 }
 
 @keyframes slideIn {
@@ -56,16 +72,5 @@
   100% {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-@keyframes slideOut {
-  0% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(120%);
-    opacity: 0;
   }
 }

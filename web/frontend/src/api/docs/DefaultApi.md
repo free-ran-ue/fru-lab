@@ -28,6 +28,8 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**logout**](#logout) | **POST** /api/logout | Logout|
 |[**testerBenchGet**](#testerbenchget) | **GET** /api/tester/bench | Latest data plane bench|
 |[**testerBenchStart**](#testerbenchstart) | **POST** /api/tester/bench | Start a data plane bench|
+|[**testerByIdBenchGet**](#testerbyidbenchget) | **GET** /api/testers/{id}/bench | One tester\&#39;s latest data plane bench|
+|[**testerByIdBenchStart**](#testerbyidbenchstart) | **POST** /api/testers/{id}/bench | Start a data plane bench on one tester|
 |[**testerByIdCpuLoad**](#testerbyidcpuload) | **GET** /api/testers/{id}/system/cpuload | How busy each CPU of one tester\&#39;s host is|
 |[**testerByIdCpusPut**](#testerbyidcpusput) | **PUT** /api/testers/{id}/system/cpus | Set one tester\&#39;s CPU allocation|
 |[**testerByIdNetworkInterfaces**](#testerbyidnetworkinterfaces) | **GET** /api/testers/{id}/network/interfaces | One tester\&#39;s network interfaces|
@@ -1272,6 +1274,118 @@ const { status, data } = await apiInstance.testerBenchStart(
 |**202** | Bench started |  -  |
 |**400** | Invalid settings |  -  |
 |**409** | A bench or a run is already running |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerByIdBenchGet**
+> TesterBenchResult testerByIdBenchGet()
+
+Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+
+const { status, data } = await apiInstance.testerByIdBenchGet(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**TesterBenchResult**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No tester with that id |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerByIdBenchStart**
+> TesterBenchResult testerByIdBenchStart(testerBenchSettings)
+
+Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterBenchSettings
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+let testerBenchSettings: TesterBenchSettings; //
+
+const { status, data } = await apiInstance.testerByIdBenchStart(
+    id,
+    testerBenchSettings
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerBenchSettings** | **TesterBenchSettings**|  | |
+| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+
+
+### Return type
+
+**TesterBenchResult**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**202** | Bench started |  -  |
+|**400** | Invalid settings |  -  |
+|**404** | No tester with that id |  -  |
+|**409** | A bench or a run is already running on that tester |  -  |
+|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

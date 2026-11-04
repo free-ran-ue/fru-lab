@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TesterStoredProfile } from '../../api'
-import styles from './tester.module.css'
+import styles from './setup.module.css'
 
 interface ProfileNameFieldProps {
   value: string
@@ -39,39 +39,41 @@ export default function ProfileNameField({ value, profiles, currentId, message, 
   }
 
   return (
-    <div className={`${styles.field} ${styles.combo}`} ref={box}
+    <div className={`${styles.fld} ${styles.combo}`} ref={box}
       onKeyDown={(e) => {
         if (e.key === 'Escape') setOpen(false)
         if (e.key === 'ArrowDown' && !open) setOpen(true)
       }}>
       <label htmlFor="name">Profile name</label>
-      <input id="name" className={`${styles.input} ${message ? styles.inputError : ''}`} type="text" value={value}
-        autoComplete="off" role="combobox" aria-expanded={open} aria-controls="profile-menu"
-        onChange={(e) => onChange(e.target.value)} />
-      <button type="button" className={styles.comboToggle} aria-label="Saved profiles" title="Saved profiles"
-        onClick={() => setOpen((o) => !o)}>▾</button>
-      {open && (
-        <ul id="profile-menu" className={styles.comboMenu} role="listbox">
-          <li>
-            <button type="button" className={`${styles.comboItem} ${styles.comboNew}`} onClick={() => choose(onNew)}>
-              + New profile
-            </button>
-          </li>
-          {profiles === null && <li className={styles.comboItem}>Loading…</li>}
-          {profiles?.length === 0 && <li className={`${styles.comboItem} ${styles.comboMeta}`}>No saved profiles yet</li>}
-          {profiles?.map((p) => (
-            <li key={p.id} role="option" aria-selected={p.id === currentId}>
-              <button type="button" className={`${styles.comboItem} ${p.id === currentId ? styles.comboItemCurrent : ''}`}
-                onClick={() => choose(() => onPick(p))}>
-                <span>{p.profile.name}</span>
-                <span className={styles.comboMeta}>
-                  {p.profile.scale.gnbCount} gNB · {p.profile.scale.ueCount} UE
-                </span>
+      <div className={styles.comboBox}>
+        <input id="name" className={`${styles.in} ${message ? styles.inError : ''}`} type="text" value={value}
+          autoComplete="off" role="combobox" aria-expanded={open} aria-controls="profile-menu"
+          onChange={(e) => onChange(e.target.value)} />
+        <button type="button" className={styles.comboToggle} aria-label="Saved profiles" title="Saved profiles"
+          onClick={() => setOpen((o) => !o)}>▾</button>
+        {open && (
+          <ul id="profile-menu" className={styles.comboMenu} role="listbox">
+            <li>
+              <button type="button" className={`${styles.comboItem} ${styles.comboNew}`} onClick={() => choose(onNew)}>
+                + New profile
               </button>
             </li>
-          ))}
-        </ul>
-      )}
+            {profiles === null && <li className={styles.comboItem}>Loading…</li>}
+            {profiles?.length === 0 && <li className={`${styles.comboItem} ${styles.comboMeta}`}>No saved profiles yet</li>}
+            {profiles?.map((p) => (
+              <li key={p.id} role="option" aria-selected={p.id === currentId}>
+                <button type="button" className={`${styles.comboItem} ${p.id === currentId ? styles.comboItemCurrent : ''}`}
+                  onClick={() => choose(() => onPick(p))}>
+                  <span>{p.profile.name}</span>
+                  <span className={styles.comboMeta}>
+                    {p.profile.scale.gnbCount} gNB · {p.profile.scale.ueCount} UE
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {message && <p className={styles.fieldError}>{message}</p>}
     </div>
   )

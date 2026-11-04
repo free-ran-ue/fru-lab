@@ -1,0 +1,81 @@
+/* Profiles, after the v1 prototype (Profiles.dc.html): title row with
+   Import / New profile, then one panel holding the toolbar and the table. */
+
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; }
+.headText { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; }
+.title { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; color: var(--ink); }
+.subtitle { margin: 0; font-size: 0.875rem; color: var(--muted); }
+.headActions { margin-left: auto; display: flex; gap: 0.5rem; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.25rem; padding: 0 0.875rem;
+  border-radius: 0.375rem; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink);
+  font: 500 0.875rem/1 var(--font-sans); cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btnPrimary { border-color: var(--accent); background: var(--accent); color: var(--surface); }
+.btnPrimary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--surface); }
+.btnDanger { border-color: var(--bad); background: var(--bad); color: var(--surface); }
+.btnDanger:hover:not(:disabled) { background: var(--bad-ink); border-color: var(--bad-ink); color: var(--surface); }
+.btn svg { width: 0.875rem; height: 0.875rem; flex: none; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden; }
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem;
+  padding: 0.875rem 1rem; border-bottom: 1px solid var(--border-soft);
+}
+.in {
+  height: 2.25rem; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: 0.375rem;
+  padding: 0 0.625rem; font: 400 0.8125rem var(--font-sans); color: var(--ink); background: var(--surface);
+}
+.in:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.search { flex: 1 1 15rem; max-width: 20rem; }
+.count { margin-left: auto; align-self: center; font-size: 0.75rem; color: var(--muted); }
+.selection { display: inline-flex; align-items: center; gap: 0.75rem; }
+
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; min-width: 61.25rem; }
+.th {
+  font: 600 0.6875rem/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  text-align: left; padding: 0.625rem 0.875rem; border-bottom: 1px solid var(--border); background: var(--surface-sunken);
+  white-space: nowrap;
+}
+.td { padding: 0.75rem 0.875rem; border-bottom: 1px solid var(--border-soft); font-size: 0.8125rem; color: var(--ink); white-space: nowrap; }
+.r { text-align: right; }
+.checkCol { width: 2.25rem; }
+.checkCol input, .td input[type='checkbox'] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--accent); }
+.row:hover { background: var(--surface-sunken); }
+.row:last-child .td { border-bottom: 0; }
+.dim { color: var(--muted); }
+
+.nameLink {
+  border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--ink);
+  text-decoration: none; cursor: pointer;
+}
+.nameLink:hover { color: var(--accent); }
+
+.tester { display: inline-flex; align-items: center; gap: 0.375rem; }
+.testerSquare { width: 0.375rem; height: 0.375rem; border-radius: 1px; flex: none; }
+
+.tag {
+  display: inline-block; font: 500 0.75rem var(--font-mono); padding: 2px 0.375rem; border-radius: 0.25rem;
+  background: var(--surface-muted); color: var(--idle-ink);
+}
+.tagAfter { margin-left: 0.5rem; }
+.tagActive { background: var(--accent-soft); color: var(--accent-ink); font-family: var(--font-sans); font-size: 0.6875rem; font-weight: 600; }
+.tagBad { background: var(--bad-bg); color: var(--bad-ink); font-family: var(--font-sans); font-size: 0.6875rem; font-weight: 600; }
+
+.link {
+  border: 0; background: none; padding: 0; font: inherit; font-weight: 500; color: var(--accent);
+  text-decoration: none; cursor: pointer;
+}
+.link:hover { color: var(--accent-ink); }
+.link:disabled { color: var(--muted); cursor: not-allowed; }
+.linkDanger { color: var(--bad); }
+.linkDanger:hover { color: var(--bad-ink); }
+.sep { color: var(--border-strong); padding: 0 0.5rem; }
+
+.empty { margin: 0; padding: 1.25rem; font-size: 0.875rem; color: var(--muted); }
+.pager { padding: 0 1rem; border-top: 1px solid var(--border-soft); }
+.modalText { margin: 0 0 0.75rem; font-size: 0.875rem; color: var(--ink-2); }

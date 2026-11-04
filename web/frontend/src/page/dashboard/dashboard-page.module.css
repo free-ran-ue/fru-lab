@@ -1,116 +1,409 @@
-.layout {
-  min-height: 100vh;
-  display: flex;
-  background: #f8fafc;
-}
+/* Lab dashboard, v2 prototype (LabDashboard.dc.html) in v1 colours and
+   v1 rounded corners. The frame (sidebar, header bar, content padding and
+   16px gap) comes from AppLayout. Shared by DashboardPage,
+   UeInstancesPanel and SelectedNodePanel. */
 
-.content {
-  flex-grow: 1;
-  min-width: 0;
-  padding: 2.5rem;
+/* title row: h1 + subtitle inline; deploy controls right */
+.pageHead {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  box-sizing: border-box;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .title {
-  margin: 0 0 0.35rem;
-  font-size: 1.625rem;
-  font-weight: 700;
-  color: #0f172a;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
 }
 
 .subtitle {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.topologySection {
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-  overflow: hidden;
+.headActions {
+  margin-left: auto;
   display: flex;
-  flex-direction: column;
-  flex-grow: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.topologyHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 1.375rem 1.75rem 0;
+.templatePicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
-.topologyHeader h3 {
-  margin: 0 0 0.25rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.topologyHeader p {
-  margin: 0;
-  color: #64748b;
+.select {
+  height: 1.875rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
   font-size: 0.8125rem;
 }
 
-.legend {
-  display: flex;
-  gap: 1rem;
-  padding-top: 0.25rem;
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
-.legendItem {
+.select:disabled {
+  color: var(--muted);
+  background: var(--surface-sunken);
+  cursor: not-allowed;
+}
+
+/* buttons (v2 .btn: 30px, 13px / 500) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 1.875rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--surface-sunken);
+}
+
+.btnPrimary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #FFFFFF;
+}
+
+.btnPrimary:hover {
+  background: var(--accent-hover);
+}
+
+.btnDanger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.btnDanger:hover {
+  background: var(--bad-bg);
+}
+
+.btn:disabled,
+.btn:disabled:hover {
+  color: var(--muted);
+  border-color: var(--border);
+  background: var(--surface-sunken);
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* deployment status strip (v2 .meta) */
+.meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.meta > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: 0.5625rem 0.875rem;
+  border-right: 1px solid var(--border-soft);
+}
+
+.meta > div:last-child {
+  border-right: 0;
+}
+
+.meta > div > span {
+  font-size: 0.71875rem;
+  color: var(--muted);
+}
+
+.meta b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.meta em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* main column + selected-node aside */
+.dash {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.dashMain {
+  flex: 999 1 35rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.aside {
+  flex: 1 1 18.75rem;
+}
+
+/* panels (v2 .panel / .ph) */
+.panel {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ph {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.375rem;
+  padding: 0 0.875rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.ph h2 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.phFlat {
+  border-bottom: 0;
+}
+
+.aux {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.asideName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tagRight {
+  margin-left: auto;
+  display: inline-flex;
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* tables (v2 .tbl) */
+.tableWrap {
+  overflow-x: auto;
+}
+
+/* the UE table scrolls inside its panel: a lab can have hundreds of
+   subscribers */
+.ueScroll {
+  max-height: 26rem;
+  overflow: auto;
+}
+
+.ueScroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78125rem;
+}
+
+.ueTable {
+  min-width: 38.75rem;
+}
+
+.tbl th {
+  padding: 0.4375rem 0.875rem;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+  font-weight: 500;
+  color: var(--muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tbl td {
+  padding: 0.4375rem 0.875rem;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.tbl tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tbl tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.tbl tbody tr.rowOn,
+.tbl tbody tr.rowOn:hover {
+  background: var(--accent-soft);
+}
+
+.ueTable tbody tr {
+  cursor: pointer;
+}
+
+.tbl .r {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tbl .actionsCol {
+  text-align: right;
+}
+
+.emptyCell {
+  color: var(--muted);
+  white-space: normal;
+}
+
+.ueTable tbody tr:has(.emptyCell) {
+  cursor: default;
+}
+
+/* the id cell's button: selects the row, looks like plain text */
+.cellButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.cellButton:hover {
+  color: var(--accent-ink);
+}
+
+/* link buttons in the actions column */
+.lnk {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.78125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lnk:hover {
+  text-decoration: underline;
+}
+
+.lnkDanger {
+  color: var(--bad);
+}
+
+.lnk:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: not-allowed;
+}
+
+.sep {
+  margin: 0 0.5rem;
+  color: var(--border-strong);
+}
+
+/* selected-node key / value list (v2 .kv) */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.375rem 1rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 0.78125rem;
+}
+
+.kvRow {
+  display: contents;
+}
+
+.kv dt {
+  color: var(--muted);
+}
+
+.kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* blocked reason + actions (v2 .acts) */
+.acts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--border);
+}
+
+.acts p {
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--ink-2);
 }
 
-.legendDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  display: inline-block;
-}
-
-.legendDotRunning {
-  background: #16a34a;
-}
-
-.legendDotStopped {
-  background: #94a3b8;
-}
-
-.legendDotUnhealthy {
-  background: #dc2626;
-}
-
-.topologyBody {
+.acts > div {
   display: flex;
-  height: 460px;
-  min-height: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.canvasWrap {
-  flex-grow: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 1.5rem 1.75rem 1.75rem;
-}
-
-@media (max-width: 900px) {
-  .layout {
-    flex-direction: column;
-  }
+/* no Services table: the actions' top border already separates them */
+.kv:has(+ .acts) {
+  border-bottom: 0;
 }

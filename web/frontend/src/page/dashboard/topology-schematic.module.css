@@ -1,0 +1,110 @@
+/* The v2 engineered topology schematic (LabDashboard.dc.html). SVG text
+   sizes are viewBox units set as attributes; colours come from tokens. */
+.wrap {
+  padding: 0.875rem 0.875rem 0.75rem;
+  overflow-x: auto;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  min-width: 40rem;
+  height: auto;
+}
+
+.links {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+/* N6 out to the external data network */
+.ext {
+  stroke-dasharray: 3 3;
+}
+
+.iface {
+  font-family: var(--font-mono);
+  fill: var(--ink-2);
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.sub {
+  font-family: var(--font-sans);
+  fill: var(--muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  fill: var(--ink);
+}
+
+.monoMuted {
+  font-family: var(--font-mono);
+  fill: var(--muted);
+}
+
+/* UE / gNB nodes */
+.node {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.nodeOn {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+/* free5GC core frame */
+.frame {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+
+.frameOn {
+  stroke: var(--accent);
+}
+
+/* network functions inside the core */
+.nf {
+  fill: var(--surface-sunken);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.nfOn {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+}
+
+.dn {
+  fill: none;
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+}
+
+.swRunning { fill: var(--ok); }
+.swDeploying { fill: var(--warn); }
+.swUnhealthy { fill: var(--bad); }
+.swStopped { fill: var(--muted); }
+
+.press {
+  cursor: pointer;
+  outline: none;
+}
+
+.press:hover > rect:first-child {
+  stroke: var(--accent);
+}
+
+.press:focus-visible > rect:first-child {
+  stroke: var(--accent);
+  stroke-width: 2;
+}

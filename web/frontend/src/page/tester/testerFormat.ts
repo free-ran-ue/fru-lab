@@ -69,3 +69,24 @@ export function formatDuration(sec: number): string {
   if (m > 0) return `${m}m ${sec % 60}s`
   return `${sec}s`
 }
+
+// formatBytesPair renders used of total in the total's binary unit,
+// e.g. 11.2 / 64 GiB.
+export function formatBytesPair(used: number, total: number): string {
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
+  let div = 1
+  let i = 0
+  while (total / div >= 1024 && i < units.length - 1) {
+    div *= 1024
+    i += 1
+  }
+  const t = total / div
+  return `${(used / div).toFixed(1)} / ${Number.isInteger(t) ? t : t.toFixed(1)} ${units[i]}`
+}
+
+// formatClock renders seconds as hh:mm:ss, e.g. 00:04:52.
+export function formatClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec))
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`
+}

@@ -16,11 +16,15 @@ export default function UeTerminalModal({ instance, onClose }: UeTerminalModalPr
   useEffect(() => {
     if (!instance || !containerRef.current) return
 
+    // xterm paints to a canvas, so it needs concrete colours rather than
+    // CSS variables - read the chrome token, falling back to its value.
+    const rootStyle = getComputedStyle(document.documentElement)
+    const chrome = rootStyle.getPropertyValue('--chrome').trim() || '#13122B'
     const term = new Terminal({
       convertEol: true,
-      fontSize: 13,
-      fontFamily: "'SFMono-Regular', Consolas, monospace",
-      theme: { background: '#0f172a' },
+      fontSize: Math.round(13 * ((parseFloat(rootStyle.fontSize) || 16) / 16)),
+      fontFamily: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+      theme: { background: chrome, foreground: '#D9D7F0', cursor: '#D9D7F0' },
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -77,10 +81,10 @@ export default function UeTerminalModal({ instance, onClose }: UeTerminalModalPr
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.modal}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-label={`Terminal — ${instance}`}>
         <div className={styles.header}>
-          <span className={styles.title}>{`Terminal — ${instance}`}</span>
-          <button className={styles.closeButton} onClick={onClose} aria-label="Close terminal">✕</button>
+          <span className={styles.title}>Terminal <span className={styles.instance}>{instance}</span></span>
+          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close terminal">✕</button>
         </div>
         <div className={styles.body}>
           <div ref={containerRef} className={styles.terminal} />

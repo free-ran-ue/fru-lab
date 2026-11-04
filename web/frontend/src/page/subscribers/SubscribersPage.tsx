@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '../../components/sidebar/Sidebar'
-import Button from '../../components/button/button'
+import AppLayout from '../../components/layout/AppLayout'
 import Modal from '../../components/modal/modal'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -9,11 +8,10 @@ import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleAp
 import type { Subscriber } from '../../webconsoleApi'
 import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
 import { BULK_CONCURRENCY, runLimited } from './bulk'
-import Pager from '../../components/pager/Pager'
 import { pageOf } from '../../components/pager/paging'
+import styles from './subscribers.module.css'
 
-const PAGE_SIZE = 10
-import styles from './webconsole-style.module.css'
+const PAGE_SIZES = [10, 50, 100]
 
 export default function SubscribersPage() {
   const navigate = useNavigate()
@@ -24,6 +22,8 @@ export default function SubscribersPage() {
   const [deletingUeId, setDeletingUeId] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Subscriber | null>(null)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0])
+  const [plmn, setPlmn] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [isConfirmingBulk, setIsConfirmingBulk] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<number | null>(null) // deletions done, while running
@@ -66,14 +66,18 @@ export default function SubscribersPage() {
   // would shuffle the pages
   const filteredSubscribers = useMemo(() => {
     const query = search.trim().toLowerCase()
-    const matching = !query ? subscribers : subscribers.filter((subscriber) =>
-      subscriber.ueId.toLowerCase().includes(query) ||
-      subscriber.plmnID.toLowerCase().includes(query) ||
-      (subscriber.gpsi || '').toLowerCase().includes(query))
+    const matching = subscribers.filter((subscriber) =>
+      (!plmn || subscriber.plmnID === plmn) &&
+      (!query ||
+        subscriber.ueId.toLowerCase().includes(query) ||
+        subscriber.plmnID.toLowerCase().includes(query) ||
+        (subscriber.gpsi || '').toLowerCase().includes(query)))
     return [...matching].sort((a, b) => a.ueId.localeCompare(b.ueId) || a.plmnID.localeCompare(b.plmnID))
-  }, [subscribers, search])
+  }, [subscribers, search, plmn])
+  const plmns = useMemo(() => Array.from(new Set(subscribers.map((s) => s.plmnID))).sort(), [subscribers])
+  const isFiltered = Boolean(search.trim() || plmn)
 
-  const shown = pageOf(filteredSubscribers, page, PAGE_SIZE)
+  const shown = pageOf(filteredSubscribers, page, pageSize)
   const keyOf = (s: Subscriber) => `${s.ueId}|${s.plmnID}`
   const selectedSubscribers = subscribers.filter((s) => selected.has(keyOf(s)))
   // the header checkbox selects every subscriber matching the search, on
@@ -134,126 +138,166 @@ export default function SubscribersPage() {
   }
 
   return (
-    <div className={styles.layout}>
-      <NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />
-      <Sidebar />
+    <AppLayout
+      crumbs={[{ label: 'Subscribers' }]}
+      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+    >
+      <section className={styles.header}>
+        <h1 className={styles.title}>Subscribers</h1>
+        <span className={styles.subtitle}>free5GC UDR via WebConsole</span>
+        <div className={styles.headerActions}>
+          {selectedSubscribers.length > 0 && (
+            <>
+              <button type="button" className={styles.btn} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
+                Clear selection
+              </button>
+              <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
+                {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
+              </button>
+            </>
+          )}
+          <button type="button" className={styles.btn} onClick={() => { setUeCount('2'); setIsAskingCount(true) }}>Add in bulk</button>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/subscribers/new')}>
+            Add subscriber
+          </button>
+        </div>
+      </section>
 
-      <main className={styles.content}>
-        <div className={styles.heroBand}>
-          <div className={styles.heroBlobPink} aria-hidden="true" />
-          <div className={styles.heroBlobBlue} aria-hidden="true" />
-          <div className={styles.heroInner}>
-            <div>
-              <p className={styles.kicker}>Fru-Lab Control Plane</p>
-              <h2 className={styles.title}>5G Subscribers</h2>
-            </div>
-          </div>
+      <section className={styles.panel}>
+        <div className={styles.ph}>
+          <label htmlFor="sub-search" className={styles.phLabel}>Search</label>
+          <input
+            id="sub-search"
+            type="search"
+            className={`${styles.inp} ${styles.search}`}
+            placeholder="UE ID, PLMN or GPSI"
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); setPage(1) }}
+          />
+          <select
+            className={styles.inp}
+            aria-label="PLMN"
+            value={plmn}
+            onChange={(event) => { setPlmn(event.target.value); setPage(1) }}
+          >
+            <option value="">All PLMNs</option>
+            {plmns.map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+          {!isLoading && !loadError && (
+            <span className={`num ${styles.aux}`}>
+              {isFiltered
+                ? `${filteredSubscribers.length.toLocaleString()} of ${subscribers.length.toLocaleString()} subscribers`
+                : `${subscribers.length.toLocaleString()} subscriber${subscribers.length === 1 ? '' : 's'}`}
+              {selectedSubscribers.length > 0 && ` · ${selectedSubscribers.length.toLocaleString()} selected`}
+            </span>
+          )}
         </div>
 
-        <div className={styles.body}>
-          <section className={styles.card}>
-            <input
-              className={styles.input}
-              style={{ marginBottom: '1.25rem' }}
-              placeholder={`Search Subscriber (${filteredSubscribers.length} / ${subscribers.length})`}
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1) }}
-            />
-
-            {selectedSubscribers.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                <Button variant="danger" onClick={() => setIsConfirmingBulk(true)} disabled={isBulkDeleting}>
-                  {isBulkDeleting ? `Deleting ${bulkProgress}/${selectedSubscribers.length}…` : `Delete selected (${selectedSubscribers.length})`}
-                </Button>
-                <button type="button" className={styles.btnAdd} onClick={() => setSelected(new Set())} disabled={isBulkDeleting}>
-                  Clear selection
-                </button>
-              </div>
-            )}
-
-            {isLoading ? (
-              <p className={styles.emptyState}>Loading subscribers…</p>
-            ) : loadError ? (
-              <p className={styles.emptyState}>{loadError}</p>
-            ) : filteredSubscribers.length === 0 ? (
-              <p className={styles.emptyState}>No Subscription</p>
-            ) : (
-              <table className={styles.table} style={{ marginBottom: '1.25rem' }}>
-                <thead>
-                  <tr>
-                    <th>
-                      <input
-                        type="checkbox"
-                        aria-label={search.trim() ? 'Select all matching subscribers' : 'Select all subscribers'}
-                        title={`Select all ${filteredSubscribers.length}${search.trim() ? ' matching' : ''}, on every page`}
-                        checked={allMatchingSelected}
-                        ref={(el) => { if (el) el.indeterminate = someMatchingSelected && !allMatchingSelected }}
-                        onChange={() => setMany(filteredSubscribers, !allMatchingSelected)}
-                        disabled={isBulkDeleting}
-                      />
-                    </th>
-                    <th>PLMN</th>
-                    <th>UE ID</th>
-                    <th>GPSI</th>
-                    <th>Delete</th>
-                    <th>View</th>
-                    <th>Edit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.items.map((subscriber) => (
-                    <tr key={`${subscriber.ueId}-${subscriber.plmnID}`}>
-                      <td>
+        {isLoading ? (
+          <p className={styles.emptyState}>Loading subscribers…</p>
+        ) : loadError ? (
+          <p className={styles.emptyState}>{loadError}</p>
+        ) : filteredSubscribers.length === 0 ? (
+          <p className={styles.emptyState}>No Subscription</p>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.tbl}>
+              <thead>
+                <tr>
+                  <th className={styles.c}>
+                    <input
+                      type="checkbox"
+                      className={styles.chk}
+                      aria-label={isFiltered ? 'Select all matching subscribers' : 'Select all subscribers'}
+                      title={`Select all ${filteredSubscribers.length}${isFiltered ? ' matching' : ''}, on every page`}
+                      checked={allMatchingSelected}
+                      ref={(el) => { if (el) el.indeterminate = someMatchingSelected && !allMatchingSelected }}
+                      onChange={() => setMany(filteredSubscribers, !allMatchingSelected)}
+                      disabled={isBulkDeleting}
+                    />
+                  </th>
+                  <th>UE ID</th>
+                  <th>PLMN</th>
+                  <th>GPSI</th>
+                  <th className={styles.right}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.items.map((subscriber) => {
+                  const isSelected = selected.has(keyOf(subscriber))
+                  return (
+                    <tr key={`${subscriber.ueId}-${subscriber.plmnID}`} className={isSelected ? styles.sel : undefined}>
+                      <td className={styles.c}>
                         <input
                           type="checkbox"
+                          className={styles.chk}
                           aria-label={`Select ${subscriber.ueId}`}
-                          checked={selected.has(keyOf(subscriber))}
+                          checked={isSelected}
                           onChange={() => toggle(subscriber)}
                           disabled={isBulkDeleting}
                         />
                       </td>
-                      <td>{subscriber.plmnID}</td>
-                      <td>{subscriber.ueId}</td>
-                      <td>{subscriber.gpsi || '—'}</td>
-                      <td>
-                        <Button
-                          variant="danger"
+                      <td className="num">{subscriber.ueId}</td>
+                      <td className="num">{subscriber.plmnID}</td>
+                      <td className={`num ${styles.mutedCell}`}>{subscriber.gpsi || '—'}</td>
+                      <td className={styles.right}>
+                        <button
+                          type="button"
+                          className={styles.lnk}
+                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
+                        >
+                          View
+                        </button>
+                        <span className={styles.sep} aria-hidden="true">|</span>
+                        <button
+                          type="button"
+                          className={styles.lnk}
+                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
+                        >
+                          Edit
+                        </button>
+                        <span className={styles.sep} aria-hidden="true">|</span>
+                        <button
+                          type="button"
+                          className={`${styles.lnk} ${styles.lnkDanger}`}
                           onClick={() => setConfirmTarget(subscriber)}
                           disabled={deletingUeId === subscriber.ueId}
                         >
                           {deletingUeId === subscriber.ueId ? 'Deleting…' : 'Delete'}
-                        </Button>
-                      </td>
-                      <td>
-                        <Button
-                          variant="secondary"
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
-                        >
-                          View
-                        </Button>
-                      </td>
-                      <td>
-                        <Button
-                          variant="secondary"
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
-                        >
-                          Edit
-                        </Button>
+                        </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-            {!isLoading && !loadError && (
-              <Pager page={shown} total={filteredSubscribers.length} onChange={setPage} />
-            )}
-
-            <Button onClick={() => { setUeCount('1'); setIsAskingCount(true) }}>+ Add Subscriber</Button>
-          </section>
-        </div>
-      </main>
+        {!isLoading && !loadError && filteredSubscribers.length > 0 && (
+          <div className={styles.pager}>
+            <span className="num">{shown.from}–{shown.to} of {filteredSubscribers.length.toLocaleString()}</span>
+            <div className={styles.pagerRight}>
+              <label htmlFor="rows-per-page">Rows per page</label>
+              <select
+                id="rows-per-page"
+                className={`${styles.inp} ${styles.pageSize}`}
+                value={pageSize}
+                onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1) }}
+              >
+                {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+              <nav className={styles.pagerRight} aria-label="Pages">
+                <button type="button" className={styles.btn} aria-label="First page" onClick={() => setPage(1)} disabled={shown.page === 1}>«</button>
+                <button type="button" className={styles.btn} onClick={() => setPage(shown.page - 1)} disabled={shown.page === 1}>‹ Prev</button>
+                <span className={`num ${styles.pageOf}`}>Page {shown.page} / {shown.pages}</span>
+                <button type="button" className={styles.btn} onClick={() => setPage(shown.page + 1)} disabled={shown.page === shown.pages}>Next ›</button>
+                <button type="button" className={styles.btn} aria-label="Last page" onClick={() => setPage(shown.pages)} disabled={shown.page === shown.pages}>»</button>
+              </nav>
+            </div>
+          </div>
+        )}
+      </section>
 
       <Modal
         isOpen={confirmTarget !== null}
@@ -282,28 +326,32 @@ export default function SubscribersPage() {
         onClose={() => setIsAskingCount(false)}
         title="Add subscribers"
         onSubmit={startAdd}
+        submitLabel="Continue"
       >
-        <form onSubmit={(event) => { event.preventDefault(); startAdd() }}>
-          <div className={styles.field}>
+        <form className={styles.countForm} onSubmit={(event) => { event.preventDefault(); startAdd() }}>
+          <div className={styles.fld}>
             <label htmlFor="ue-count">How many UEs?</label>
-            <input
-              id="ue-count"
-              className={styles.input}
-              type="number"
-              min={1}
-              max={MAX_BULK_SUBSCRIBERS}
-              value={ueCount}
-              onChange={(event) => setUeCount(event.target.value)}
-              autoFocus
-            />
+            <div className={styles.unit}>
+              <input
+                id="ue-count"
+                className={`${styles.inp} ${styles.countInput}`}
+                type="number"
+                min={1}
+                max={MAX_BULK_SUBSCRIBERS}
+                value={ueCount}
+                onChange={(event) => setUeCount(event.target.value)}
+                autoFocus
+              />
+              <span>UEs, max {MAX_BULK_SUBSCRIBERS.toLocaleString()}</span>
+            </div>
           </div>
-          <p style={{ margin: '0.75rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+          <p className={`${styles.hint} ${isCountValid ? '' : styles.hintBad}`}>
             {isCountValid
               ? 'You fill in the first subscriber; the rest get the next IMSIs (+1 each) with every other field the same.'
-              : `Enter a whole number from 1 to ${MAX_BULK_SUBSCRIBERS}.`}
+              : `Enter a whole number from 1 to ${MAX_BULK_SUBSCRIBERS.toLocaleString()}.`}
           </p>
         </form>
       </Modal>
-    </div>
+    </AppLayout>
   )
 }

@@ -1,15 +1,14 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '../../components/sidebar/Sidebar'
-import StatsCard from '../../components/stats/stats-card'
+import AppLayout from '../../components/layout/AppLayout'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
-import TopologyCanvas from './TopologyCanvas'
-import DetailedTopology from './DetailedTopology'
-import DetailPanel from './DetailPanel'
-import UePanel from './UePanel'
+import TopologySchematic, { type GnbSlice, type TopologySelection } from './TopologySchematic'
+import SelectedNodePanel, { type DetailRow } from './SelectedNodePanel'
+import UeInstancesPanel from './UeInstancesPanel'
 import UeTerminalModal from './UeTerminalModal'
+import { StatusSwatch, StatusTag } from './StatusTag'
 import { useFree5gcStatus } from './useFree5gcStatus'
 import { useGnbStatus } from './useGnbStatus'
 import { useGnbSliceStatus } from './useGnbSliceStatus'
@@ -75,10 +74,19 @@ function computeGnbAggregateNode(slice1: DeploymentNode, slice2: DeploymentNode)
   }
 }
 
+// mirrors backend's constant.SLICE1_SD / SLICE2_SD - which gNB slice a
+// UE attaches to under ulcl-2slice, from its subscriber's first session.
+const SLICE1_SD = '010203'
+const SLICE2_SD = '112233'
+
+const LEGEND: NodeStatus[] = ['running', 'deploying', 'stopped', 'unhealthy']
+
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const [selected, setSelected] = useState<NodeId>('core')
+  const [selection, setSelection] = useState<TopologySelection>({ node: 'core', nf: null, ue: null })
+  const selected: NodeId = selection.node
   const [ueTerminalInstance, setUeTerminalInstance] = useState<string | null>(null)
+  const [isTearingDown, setIsTearingDown] = useState(false)
   // which free5gc template to deploy next time - only relevant while core
   // is stopped; once running, the actual template is read back from its
   // live services instead (see detectFree5gcTemplate).
@@ -165,8 +173,44 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleDeployCore() {
+    try {
+      await free5gc.deploy(selectedTemplate)
+      addSuccess(`${free5gc.node.label} deploy started`)
+    } catch (error) {
+      addError(extractErrorMessage(error, `${free5gc.node.label} action failed`))
+    }
+  }
+
+  // Tear down the whole lab in dependency order: UEs, then gNB (both
+  // slices under ulcl-2slice), then the core - the same order the backend
+  // enforces for single stops.
+  async function handleTearDown() {
+    if (!window.confirm('Stop every UE instance, the gNB and the core network?')) return
+    setIsTearingDown(true)
+    try {
+      if (ue.rows.some((row) => row.status !== 'stopped')) await ue.stopAll()
+      const gnbStops: Promise<void>[] = []
+      if (gnb.node.status !== 'stopped') gnbStops.push(gnb.stop())
+      if (gnbSlice1.node.status !== 'stopped') gnbStops.push(gnbSlice1.stop())
+      if (gnbSlice2.node.status !== 'stopped') gnbStops.push(gnbSlice2.stop())
+      await Promise.all(gnbStops)
+      if (free5gc.node.status !== 'stopped') await free5gc.stop()
+      addSuccess('Lab torn down')
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Tear down failed'))
+    } finally {
+      setIsTearingDown(false)
+    }
+  }
+
   function handleViewLogs() {
-    navigate(`/logs?target=${selected}`)
+    if (selected === 'ue') {
+      const row = ue.rows.find((r) => r.ueId === selection.ue)
+      navigate(row && row.hasBeenDeployed ? `/logs?target=ue&instance=${encodeURIComponent(row.ueId)}` : '/logs?target=ue')
+      return
+    }
+    navigate(`/logs?target=${selected === 'gnb' && isTwoSliceCore ? 'gnb-slice1' : selected}`)
   }
 
   const gnbDisplayNode = isTwoSliceCore ? computeGnbAggregateNode(gnbSlice1.node, gnbSlice2.node) : gnb.node
@@ -176,7 +220,6 @@ export default function DashboardPage() {
     gnb: gnbDisplayNode,
     ue: computeUeNode(ue.rows),
   }
-  const selectedNode = nodes[selected]
 
   // when the gNB card represents both slices, show both slices' own
   // services in the panel instead of a single ambiguous "GNB" entry.
@@ -207,134 +250,279 @@ export default function DashboardPage() {
   const totalNfs = free5gc.networkFunctions.length
   const unhealthyCount = totalNfs - healthyCount
 
-  return (
-    <div className={styles.layout}>
-      <NotificationContainer
-        errors={errors}
-        successes={successes}
-        onClose={removeNotification}
-      />
+  const coreStopped = nodes.core.status === 'stopped'
+  const anythingUp = !coreStopped || anyGnbRunning || anyUeRunning
+    || gnb.node.status !== 'stopped' || gnbSlice1.node.status !== 'stopped' || gnbSlice2.node.status !== 'stopped'
 
-      <Sidebar />
+  const ueRunning = ue.rows.filter((row) => row.status === 'running').length
+  const ueStarting = ue.rows.filter((row) => row.status === 'deploying').length
+  const ueUnhealthy = ue.rows.filter((row) => row.status === 'unhealthy').length
 
-      <main className={styles.content}>
-        <header>
-          <h2 className={styles.title}>Lab Dashboard</h2>
-          <p className={styles.subtitle}>
-            Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator
-          </p>
-        </header>
+  const coreNote = !coreStopped && nodes.core.lastDeployed !== '—'
+    ? `${coreTemplateLabel} template · deployed ${nodes.core.lastDeployed}`
+    : `free5GC · ${coreTemplateLabel} template`
+  const gnbNote = anyGnbRunning && nodes.gnb.lastDeployed !== '—'
+    ? `${isTwoSliceCore ? 'slice1 + slice2 · ' : ''}deployed ${nodes.gnb.lastDeployed}`
+    : isTwoSliceCore ? 'free-ran-ue · slice1 + slice2' : 'free-ran-ue · basic template'
+  const ueNote = ue.rows.length === 0
+    ? 'no subscribers yet'
+    : ueUnhealthy > 0
+      ? `${ueUnhealthy} instance${ueUnhealthy === 1 ? '' : 's'} unhealthy`
+      : ueStarting > 0
+        ? `${ueStarting} instance${ueStarting === 1 ? '' : 's'} starting`
+        : ueRunning === ue.rows.length
+          ? 'all instances up'
+          : 'running / subscribers'
+  const nfNote = totalNfs === 0
+    ? 'core not deployed'
+    : unhealthyCount > 0
+      ? `${unhealthyCount} NF${unhealthyCount === 1 ? '' : 's'} not running`
+      : 'all network functions healthy'
 
-        <section className={styles.statsGrid}>
-          <StatsCard
-            title="Core Network"
-            value={getStatusLabel(nodes.core.status)}
-            description={`free5GC · ${coreTemplateLabel} template`}
-            valueColor={getStatusMeta(nodes.core.status).color}
-          />
-          <StatsCard
-            title="gNB"
-            value={getStatusLabel(nodes.gnb.status)}
-            description={isTwoSliceCore ? 'free-ran-ue · slice1 + slice2' : 'free-ran-ue · basic template'}
-            valueColor={getStatusMeta(nodes.gnb.status).color}
-          />
-          <StatsCard
-            title="UE"
-            value={nodes.ue.statusLabel ?? getStatusLabel(nodes.ue.status)}
-            description={ue.rows.length > 0 ? 'instances running / subscribers' : 'free-ran-ue · basic template'}
-            valueColor={getStatusMeta(nodes.ue.status).color}
-          />
-          <StatsCard
-            title="Healthy NFs"
-            value={totalNfs > 0 ? `${healthyCount} / ${totalNfs}` : '—'}
-            description={unhealthyCount > 0
-              ? `${unhealthyCount} NF${unhealthyCount === 1 ? '' : 's'} failing health check`
-              : 'All network functions healthy'}
-          />
-        </section>
+  // under ulcl-2slice the one gNB node stands for both slice gNBs; each
+  // up UE is counted on the slice its subscriber's sd belongs to
+  const upUes = ue.rows.filter((row) => row.status !== 'stopped')
+  const gnbSlices: GnbSlice[] | null = isTwoSliceCore
+    ? [
+      { name: 'slice1', status: gnbSlice1.node.status, ueCount: upUes.filter((row) => row.sd === SLICE1_SD).length },
+      { name: 'slice2', status: gnbSlice2.node.status, ueCount: upUes.filter((row) => row.sd === SLICE2_SD).length },
+    ]
+    : null
 
-        <section className={styles.topologySection}>
-          <div className={styles.topologyHeader}>
-            <div>
-              <h3>Network Topology</h3>
-              <p>Click a node to see its status and actions. Drag nodes to rearrange the layout.</p>
-            </div>
-            <div className={styles.legend}>
-              <span className={styles.legendItem}>
-                <span className={`${styles.legendDot} ${styles.legendDotRunning}`} />Running
-              </span>
-              <span className={styles.legendItem}>
-                <span className={`${styles.legendDot} ${styles.legendDotStopped}`} />Stopped
-              </span>
-              <span className={styles.legendItem}>
-                <span className={`${styles.legendDot} ${styles.legendDotUnhealthy}`} />Unhealthy
-              </span>
-            </div>
-          </div>
+  // ----- the "Selected node" aside -----
+  const isActionPending = selected === 'gnb' && isTwoSliceCore
+    ? (gnbSlice1.isActionPending || gnbSlice2.isActionPending)
+    : (activeTarget?.isActionPending ?? false)
+  const selectedNode = nodes[selected]
+  const isSelectedUp = selectedNode.status !== 'stopped'
+  const targetWord = selected === 'core' ? 'core' : 'gNB'
+  const primaryLabel = isActionPending
+    ? (isSelectedUp ? 'Stopping…' : 'Deploying…')
+    : `${isSelectedUp ? 'Stop' : 'Deploy'} ${targetWord}`
 
-          <div className={styles.topologyBody}>
-            <div className={styles.canvasWrap}>
-              <TopologyCanvas nodes={nodes} selected={selected} onSelect={setSelected} />
-            </div>
+  const selectedNf = selected === 'core' && selection.nf
+    ? free5gc.networkFunctions.find((nf) => nf.name === selection.nf) ?? null
+    : null
+  const selectedUeRow = selected === 'ue' ? ue.rows.find((row) => row.ueId === selection.ue) ?? null : null
+  const ueDeployBlockedReason = !anyGnbRunning ? 'Deploy gNB before deploying a UE instance' : undefined
 
-            {selected === 'ue' ? (
-              <UePanel
-                rows={ue.rows}
-                isLoading={ue.isLoadingSubscribers}
-                loadError={ue.subscribersError}
-                pendingInstances={ue.pendingInstances}
-                onDeploy={handleDeployUe}
-                onStop={handleStopUe}
-                onStopAll={handleStopAllUe}
-                onOpenTerminal={setUeTerminalInstance}
-                deployBlockedReason={!anyGnbRunning ? 'Deploy gNB before deploying a UE instance' : undefined}
-              />
+  const selectedLabel = selected === 'core'
+    ? (selectedNf?.name ?? 'free5GC core')
+    : selected === 'gnb' ? 'gNB' : (selectedUeRow?.ueId ?? 'UE')
+
+  function selectUe(ueId: string) {
+    setSelection({ node: 'ue', nf: null, ue: ueId })
+  }
+
+  let aside: ReactNode
+  if (selected === 'ue') {
+    const rows: DetailRow[] = [
+      { k: 'Simulator', v: 'free-ran-ue' },
+      { k: 'Template', v: 'basic' },
+      { k: 'Instances', v: `${ueRunning} / ${ue.rows.length} running`, mono: true },
+      ...(selectedUeRow
+        ? [
+          { k: 'PLMN', v: selectedUeRow.plmnId, mono: true },
+          ...(selectedUeRow.gpsi ? [{ k: 'GPSI', v: selectedUeRow.gpsi, mono: true }] : []),
+          { k: 'Last deployed', v: selectedUeRow.lastDeployed, mono: true },
+        ]
+        : [{ k: 'Last deployed', v: nodes.ue.lastDeployed, mono: true }]),
+    ]
+    const rowPending = selectedUeRow ? (ue.pendingInstances[selectedUeRow.ueId] ?? false) : false
+    const anyUePending = upUes.some((row) => ue.pendingInstances[row.ueId])
+    aside = (
+      <SelectedNodePanel
+        name={selectedUeRow?.ueId ?? 'UE'}
+        status={selectedUeRow?.status ?? nodes.ue.status}
+        statusText={selectedUeRow ? undefined : nodes.ue.statusLabel}
+        rows={rows}
+        hint={!selectedUeRow || selectedUeRow.status === 'stopped' ? ueDeployBlockedReason : undefined}
+        actions={selectedUeRow ? (
+          <>
+            {selectedUeRow.status !== 'stopped' ? (
+              <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={() => handleStopUe(selectedUeRow.ueId)} disabled={rowPending}>
+                {rowPending ? 'Stopping…' : 'Stop UE'}
+              </button>
             ) : (
-              <DetailPanel
-                node={selectedNode}
-                networkFunctions={selected === 'gnb' ? gnbNetworkFunctions : (activeTarget ? activeTarget.networkFunctions : [])}
-                onViewLogs={handleViewLogs}
-                onPrimaryAction={activeTarget ? handlePrimaryAction : undefined}
-                isActionPending={
-                  selected === 'gnb' && isTwoSliceCore
-                    ? (gnbSlice1.isActionPending || gnbSlice2.isActionPending)
-                    : (activeTarget?.isActionPending ?? false)
-                }
-                actionBlockedReason={actionBlockedReason}
-                templateOptions={selected === 'core' ? FREE5GC_TEMPLATE_OPTIONS : undefined}
-                selectedTemplate={selected === 'core' ? selectedTemplate : undefined}
-                onTemplateChange={selected === 'core' ? (value) => setSelectedTemplate(value as Free5gcTemplate) : undefined}
-              />
+              <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => handleDeployUe(selectedUeRow.ueId)} disabled={rowPending || Boolean(ueDeployBlockedReason)}>
+                {rowPending ? 'Deploying…' : 'Deploy UE'}
+              </button>
             )}
-          </div>
-        </section>
+            {selectedUeRow.status === 'running' && (
+              <button type="button" className={styles.btn} onClick={() => setUeTerminalInstance(selectedUeRow.ueId)}>Terminal</button>
+            )}
+            <button type="button" className={styles.btn} onClick={handleViewLogs}>View logs</button>
+          </>
+        ) : (
+          <>
+            {upUes.length > 0 && (
+              <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={handleStopAllUe} disabled={anyUePending}>
+                {anyUePending ? 'Stopping…' : 'Stop all'}
+              </button>
+            )}
+            <button type="button" className={styles.btn} onClick={handleViewLogs}>View logs</button>
+          </>
+        )}
+      />
+    )
+  } else {
+    let name = selectedNode.label
+    let status: NodeStatus = selectedNode.status
+    let rows: DetailRow[]
+    if (selected === 'core' && selectedNf) {
+      name = selectedNf.name
+      status = selectedNf.status
+      rows = [
+        { k: 'Service', v: selectedNf.name.toLowerCase(), mono: true },
+        { k: 'Part of', v: `free5GC · ${coreTemplateLabel}` },
+        { k: 'Core status', v: getStatusMeta(nodes.core.status).text },
+        { k: 'Last deployed', v: nodes.core.lastDeployed, mono: true },
+      ]
+    } else if (selected === 'core') {
+      name = 'free5GC core'
+      rows = [
+        { k: 'Stack', v: 'free5GC' },
+        { k: 'Template', v: coreTemplateLabel },
+        { k: 'Last deployed', v: nodes.core.lastDeployed, mono: true },
+      ]
+    } else {
+      rows = [
+        { k: 'Simulator', v: 'free-ran-ue' },
+        { k: 'Template', v: isTwoSliceCore ? 'ulcl-2slice (two slices)' : 'basic' },
+        { k: 'Last deployed', v: nodes.gnb.lastDeployed, mono: true },
+      ]
+    }
+    aside = (
+      <SelectedNodePanel
+        name={name}
+        status={status}
+        rows={rows}
+        services={selected === 'core' ? free5gc.networkFunctions : gnbNetworkFunctions}
+        selectedService={selected === 'core' ? selection.nf : null}
+        onSelectService={selected === 'core' ? (nf) => setSelection({ node: 'core', nf, ue: null }) : undefined}
+        hint={actionBlockedReason}
+        actions={(
+          <>
+            <button
+              type="button"
+              className={`${styles.btn} ${isSelectedUp ? styles.btnDanger : styles.btnPrimary}`}
+              onClick={handlePrimaryAction}
+              disabled={!activeTarget || isActionPending || Boolean(actionBlockedReason)}
+            >
+              {primaryLabel}
+            </button>
+            <button type="button" className={styles.btn} onClick={handleViewLogs}>View logs</button>
+          </>
+        )}
+      />
+    )
+  }
 
-        <section className={styles.topologySection}>
-          <div className={styles.topologyHeader}>
-            <div>
-              <h3>Detailed Network Topology</h3>
-              <p>The core's SBI service mesh, N2/N3 to the gNB, and Uu to each UE currently attached.</p>
-            </div>
-          </div>
+  return (
+    <AppLayout
+      crumbs={[{ label: 'Dashboard' }]}
+      overlay={(
+        <NotificationContainer
+          errors={errors}
+          successes={successes}
+          onClose={removeNotification}
+        />
+      )}
+    >
+      <section className={styles.pageHead}>
+        <h1 className={styles.title}>Lab dashboard</h1>
+        <span className={styles.subtitle}>free5GC core network and the free-ran-ue gNB / UE simulator</span>
+        <div className={styles.headActions}>
+          {coreStopped && (
+            <label className={styles.templatePicker}>
+              <span>Template</span>
+              <select
+                className={styles.select}
+                value={selectedTemplate}
+                onChange={(event) => setSelectedTemplate(event.target.value as Free5gcTemplate)}
+                disabled={free5gc.isActionPending}
+              >
+                {FREE5GC_TEMPLATE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button type="button" className={styles.btn} onClick={handleTearDown} disabled={!anythingUp || isTearingDown}>
+            {isTearingDown ? 'Tearing down…' : 'Tear down'}
+          </button>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleDeployCore} disabled={!coreStopped || free5gc.isActionPending}>
+            {free5gc.isActionPending && coreStopped ? 'Deploying…' : 'Deploy core'}
+          </button>
+        </div>
+      </section>
 
-          <DetailedTopology
-            free5gcNfs={free5gc.networkFunctions}
-            gnbStatus={nodes.gnb.status}
-            gnbSlice1Status={gnbSlice1.node.status}
-            gnbSlice2Status={gnbSlice2.node.status}
-            ueRows={ue.rows}
+      <section className={styles.meta} aria-label="Deployment status">
+        <div>
+          <span>Core network</span>
+          <b><StatusTag status={nodes.core.status} /><em>{coreNote}</em></b>
+        </div>
+        <div>
+          <span>gNB</span>
+          <b><StatusTag status={nodes.gnb.status} /><em>{gnbNote}</em></b>
+        </div>
+        <div>
+          <span>UE instances</span>
+          <b><StatusTag status={nodes.ue.status} /><span className="num">{ueRunning} / {ue.rows.length}</span><em>{ueNote}</em></b>
+        </div>
+        <div>
+          <span>Healthy NFs</span>
+          <b><span className="num">{totalNfs > 0 ? `${healthyCount} / ${totalNfs}` : '—'}</span><em>{nfNote}</em></b>
+        </div>
+      </section>
+
+      <section className={styles.panel} aria-label="Network topology">
+        <div className={styles.ph}>
+          <h2>Network topology</h2>
+          {LEGEND.map((status) => (
+            <span key={status} className={styles.legend}><StatusSwatch status={status} />{getStatusMeta(status).text}</span>
+          ))}
+          <span className={styles.aux}>selected: {selectedLabel}</span>
+        </div>
+        <TopologySchematic
+          template={coreTemplate}
+          templateLabel={coreTemplateLabel}
+          coreStatus={nodes.core.status}
+          coreNfs={free5gc.networkFunctions}
+          gnbStatus={nodes.gnb.status}
+          gnbTemplate={isTwoSliceCore ? 'ulcl-2slice template' : 'basic template'}
+          gnbSlices={gnbSlices}
+          ueStatus={nodes.ue.status}
+          ueRows={ue.rows}
+          selection={selection}
+          onSelect={setSelection}
+        />
+      </section>
+
+      <div className={styles.dash}>
+        <div className={styles.dashMain}>
+          <UeInstancesPanel
+            rows={ue.rows}
+            isLoading={ue.isLoadingSubscribers}
+            loadError={ue.subscribersError}
+            pendingInstances={ue.pendingInstances}
+            selectedUe={selected === 'ue' ? selection.ue : null}
+            onSelectUe={selectUe}
+            onDeploy={handleDeployUe}
+            onStop={handleStopUe}
+            onStopAll={handleStopAllUe}
+            onOpenTerminal={setUeTerminalInstance}
+            deployBlockedReason={ueDeployBlockedReason}
           />
-        </section>
-      </main>
+        </div>
+
+        {aside}
+      </div>
 
       <UeTerminalModal
         instance={ueTerminalInstance}
         onClose={() => setUeTerminalInstance(null)}
       />
-    </div>
+    </AppLayout>
   )
-}
-
-function getStatusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1)
 }

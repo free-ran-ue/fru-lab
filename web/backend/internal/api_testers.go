@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// getTestersRoutes list, add and remove testers, and forward the Status,
-// Setup and Run pages' requests to one of them: /testers/<id>/<rest> reaches
+// getTestersRoutes list, add and remove testers, and forward the Testers,
+// Setup, Runs and Bench pages' requests to one of them: /testers/<id>/<rest> reaches
 // <tester>/api/<rest>. The other tester pages still use /tester/, the
 // tester in config.yaml.
 func (b *backend) getTestersRoutes() util.Routes {
@@ -38,6 +38,10 @@ func (b *backend) getTestersRoutes() util.Routes {
 			HandlerFunc: b.handleTesterByID},
 		{Name: "TesterByIdNetworkPing", Method: http.MethodPost, Pattern: "/testers/:id/network/ping",
 			HandlerFunc: withLogging("TesterByIdNetworkPing", b.TesterLog, b.handleTesterByID)},
+		{Name: "TesterByIdBenchGet", Method: http.MethodGet, Pattern: "/testers/:id/bench",
+			HandlerFunc: b.handleTesterByID}, // polled; not logged per request
+		{Name: "TesterByIdBenchStart", Method: http.MethodPost, Pattern: "/testers/:id/bench",
+			HandlerFunc: withLogging("TesterByIdBenchStart", b.TesterLog, b.handleTesterByID)},
 		{Name: "TesterByIdSystem", Method: http.MethodGet, Pattern: "/testers/:id/system",
 			HandlerFunc: b.handleTesterByID},
 		{Name: "TesterByIdCpuLoad", Method: http.MethodGet, Pattern: "/testers/:id/system/cpuload",

@@ -1449,6 +1449,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+  /api/testers/{id}/bench:
+    get:
+      summary: One tester's latest data plane bench
+      description: Forwarded to that tester's /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
+      operationId: testerByIdBenchGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterBenchResult'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Start a data plane bench on one tester
+      description: Forwarded to that tester's /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
+      operationId: testerByIdBenchStart
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TesterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TesterBenchSettings'
+      responses:
+        '202':
+          description: Bench started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterBenchResult'
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No tester with that id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: A bench or a run is already running on that tester
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '502':
+          description: The tester is unreachable or rejected fru-lab's API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/testers/{id}/system:
     get:
       summary: One tester's CPU allocation and layout
