@@ -123,3 +123,11 @@
 .tbl td.pending { text-align: left; font-family: var(--font-sans); color: var(--muted); }
 .warnText { color: var(--warn); }
 .badText { color: var(--bad); }
+
+/* tester picker, the Settings form's first field */
+.select {
+  height: 1.875rem; padding: 0 0.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); font: 400 0.8125rem var(--font-sans); min-width: 0;
+}
+.select:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.select:disabled { color: var(--muted); background: var(--surface-sunken); cursor: not-allowed; }

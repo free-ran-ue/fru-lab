@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -101,8 +102,11 @@ function ScalingChart({ senders, steps }: { senders: number[], steps: TesterBenc
   )
 }
 
-// The bench runs on the tester in fru-lab's config.yaml (/api/tester/bench).
+// The bench runs on the tester picked at the top of Settings
+// (/api/testers/<id>/bench); ?tester=<id> keeps the choice in the URL.
 export default function TesterBenchPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const testerId = searchParams.get('tester') || DEFAULT_TESTER_ID
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [result, setResult] = useState<TesterBenchResult | null>(null)
   const [packetSize, setPacketSize] = useState(1400)
@@ -113,23 +117,39 @@ export default function TesterBenchPage() {
   // until (or unless) the tester answers
   const [system, setSystem] = useState<TesterSystemInfo | null>(null)
   const { testers } = useTesters()
+  // the tester whose answers are wanted: a reply for one picked before
+  // is dropped
+  const current = useRef(testerId)
+  current.current = testerId
 
   useEffect(() => {
-    api.testerByIdSystem(DEFAULT_TESTER_ID)
-      .then((response) => setSystem(response.data))
-      .catch(() => setSystem(null))
-  }, [])
+    setSystem(null)
+    api.testerByIdSystem(testerId)
+      .then((response) => { if (current.current === testerId) setSystem(response.data) })
+      .catch(() => { if (current.current === testerId) setSystem(null) })
+  }, [testerId])
 
   const load = useCallback(async () => {
+    const id = testerId
     try {
-      const response = await api.testerBenchGet()
-      setResult(response.data)
+      const response = await api.testerByIdBenchGet(id)
+      if (current.current === id) setResult(response.data)
     } catch (error) {
-      addError(extractErrorMessage(error, 'Failed to load the bench'))
+      if (current.current === id) {
+        setResult(null)
+        addError(extractErrorMessage(error, 'Failed to load the bench'))
+      }
     }
-  }, [addError])
+  }, [addError, testerId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    setResult(null)
+    load()
+  }, [load])
+
+  function pickTester(id: string) {
+    setSearchParams(id === DEFAULT_TESTER_ID ? {} : { tester: id }, { replace: true })
+  }
 
   // poll while a bench is measuring
   const isRunning = result?.state === 'running'
@@ -142,7 +162,7 @@ export default function TesterBenchPage() {
   async function handleStart() {
     setIsStarting(true)
     try {
-      const response = await api.testerBenchStart({ packetSize, stepSeconds, gso })
+      const response = await api.testerByIdBenchStart(testerId, { packetSize, stepSeconds, gso })
       setResult(response.data)
       addSuccess('Bench started')
     } catch (error) {
@@ -161,7 +181,8 @@ export default function TesterBenchPage() {
   const pending = isRunning ? planned.slice(steps.length) : []
   const estimateSec = (result?.cpus ? planned.length || 1 : 1) * (stepSeconds + 0.5)
   const stateTone = result?.state === 'failed' ? styles.tBad : result?.state === 'done' ? styles.tOk : isRunning ? styles.tRun : ''
-  const testerName = testerLabel(testers, DEFAULT_TESTER_ID)
+  const testerName = testerLabel(testers, testerId)
+  const testerKnown = testers === null ? null : testers.some((t) => t.id === testerId)
   const nics = system?.topology.interfaces ?? []
   const host = [
     result?.cpus ? `${result.cpus} CPUs` : '',
@@ -193,6 +214,17 @@ export default function TesterBenchPage() {
           {host && <span className={styles.aux}>host <span className={styles.mono}>{host}</span></span>}
         </div>
         <div className={styles.form}>
+          <div className={styles.fld}>
+            <label htmlFor="bench-tester">Tester</label>
+            <select id="bench-tester" className={styles.select} value={testerId}
+              disabled={isRunning || testers === null} onChange={(e) => pickTester(e.target.value)}>
+              {testerKnown === false && <option value={testerId}>Removed tester</option>}
+              {testers === null && <option value={testerId}>Loading testers…</option>}
+              {testers?.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}{t.reachable === false ? ' (not answering)' : ''}</option>
+              ))}
+            </select>
+          </div>
           <div className={styles.fld}>
             <label htmlFor="bench-size">Packet size (inner IP)</label>
             <div className={`${styles.inp} ${isRunning ? styles.inpOff : ''}`}>
@@ -230,7 +262,7 @@ export default function TesterBenchPage() {
             <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9l7-4.5z" fill="currentColor" /></svg>
             {isRunning ? 'Measuring…' : isStarting ? 'Starting…' : 'Start bench'}
           </button>
-          <span>Takes about <span className={styles.mono}>{Math.ceil(estimateSec)} s</span>. Cannot start while a test run is active on this tester; they would compete for the CPUs.</span>
+          <span>Takes about <span className={styles.mono}>{Math.ceil(estimateSec)} s</span>. Cannot start while a test run is active on {testerName}; they would compete for the CPUs.</span>
         </div>
       </section>
 

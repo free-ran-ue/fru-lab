@@ -649,13 +649,14 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         </div>
         <div>
           <h3>Bench</h3>
-          <p>不經過核網，量這台主機的 fru-tester 能送多快：上行封包經 loopback 送到一個不讀取的 socket，依序用 1、2、4… 條發送線到 CPU 核心數。</p>
+          <p>不經過核網，量一台 tester 主機的 fru-tester 能送多快：上行封包經 loopback 送到一個不讀取的 socket，依序用 1、2、4… 條發送線到 CPU 核心數。</p>
           <ul>
+            <li><b>Tester</b>：要量哪一台，預設是 config.yaml 裡那台。切換後顯示那台最近一次的結果和主機資訊；網址會帶 <code>?tester=</code>，可以直接分享。量測中不能切換。</li>
             <li><b>Packet size</b>（64–9000）：改大小時 pps 幾乎不變、Gbps 等比例變，證明成本在「每個封包」。</li>
             <li><b>Seconds per step</b>（1–30）：每一階量幾秒，越長越穩。</li>
             <li><b>UDP GSO</b>：關掉就是一次一個封包（sendmmsg），可以比較前後。</li>
           </ul>
-          <p class="hint">Scaling 是「n 條線 ÷ (1 條線 × n)」；線越多越低是正常的，代表多出來的線在互搶。Bench 和 run 不能同時跑。</p>
+          <p class="hint">Scaling 是「n 條線 ÷ (1 條線 × n)」；線越多越低是正常的，代表多出來的線在互搶。同一台 tester 上 Bench 和 run 不能同時跑；不同台互不影響。</p>
         </div>
       </div>
     </section>
@@ -673,7 +674,7 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
         <li><b>預設 tester</b>：就是 fru-lab <code>config.yaml</code> 裡 <code>backend.tester</code> 的那台，卡片下方寫著「From config.yaml」，不能在頁面上刪除。</li>
         <li><b>新增</b>：另一台機器只部署 fru-tester（它的 <code>listen</code> 要是 fru-lab 連得到的位址），然後在 Testers 頁按 <b>Add tester</b>，填它的 URL（例如 <code>http://10.0.0.2:9100</code>）和它 <code>tester.yaml</code> 裡的 <code>apiToken</code>。fru-lab 會先實際請那台 tester 回報狀態，連不到、token 不對、或已經在列表上都不會加入，並顯示原因。加入後存在 fru-lab 的資料庫，重啟也還在。</li>
         <li><b>移除</b>：手動加入的 tester 卡片下方有 <b>Remove</b>，只是讓 fru-lab 忘掉它，tester 本身照常執行。URL 或 token 要改就移除再重新加入。</li>
-        <li><b>目前的範圍</b>：Setup 可以選任一台 tester 跑（見「設定檔」），Runs 頁列出每台 tester 正在跑的 run（見「Runs 頁怎麼看」），History 收每台 tester 的 run 並標出是哪一台；Bench 仍然只看預設 tester。</li>
+        <li><b>目前的範圍</b>：Setup 可以選任一台 tester 跑（見「設定檔」），Runs 頁列出每台 tester 正在跑的 run（見「Runs 頁怎麼看」），History 收每台 tester 的 run 並標出是哪一台，Bench 可以選任一台 tester 量。</li>
       </ul>
       <h3>總覽</h3>
       <div class="tbl"><table>
