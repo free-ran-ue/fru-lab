@@ -42,14 +42,15 @@ docker-compose; profiles then name the node's interfaces.
 
 ## CPUs
 
-The System page offers the CPUs the pod may use. For exclusive data plane
+The Testers page offers the CPUs the pod may use. For exclusive data plane
 CPUs, run the kubelet with the static CPU manager policy and give the tester
 Guaranteed QoS (equal integer cpu requests and limits in `tester.resources`).
 
 ## Data
 
-`persistence.type` is `hostPath` (default, under `/var/lib/frulab`), `pvc` or
-`emptyDir` for both fru-lab's database and the tester's System settings.
+`frulab.persistence.type` (fru-lab's database) and `tester.persistence.type`
+(the tester's CPU allocation) are each `hostPath` (default, under
+`/var/lib/frulab`), `pvc` or `emptyDir`.
 PVCs are kept on `helm uninstall`.
 
 ## free5GC deploy pages
