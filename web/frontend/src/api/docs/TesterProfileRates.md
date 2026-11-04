@@ -5,7 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**n2** | [**TesterStageRate**](TesterStageRate.md) |  | [default to undefined]
+**n2** | [**TesterN2Rate**](TesterN2Rate.md) |  | [default to undefined]
 **registration** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
 **pdu** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]
 **deregistration** | [**TesterProcedureRate**](TesterProcedureRate.md) |  | [default to undefined]

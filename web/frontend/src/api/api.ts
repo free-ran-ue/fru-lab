@@ -440,6 +440,21 @@ export interface TesterLatency {
     'p99Ms': number;
     'maxMs': number;
 }
+/**
+ * Paces the gNBs\' N2 setup (SCTP association and NG Setup). A failed attempt with retries left goes to the back of the queue.
+ */
+export interface TesterN2Rate {
+    /**
+     * At most this many gNBs start their N2 setup per second. 0 or absent is no limit.
+     */
+    'ratePerSec'?: number;
+    /**
+     * At most this many gNBs are setting up at once. 0 or absent is no limit.
+     */
+    'maxInFlight'?: number;
+    'timeoutMs': number;
+    'retries': number;
+}
 export interface TesterNicLayout {
     'name': string;
     'driver': string;
@@ -587,7 +602,7 @@ export interface TesterProfileNetworkN6 {
     'uePool': string;
 }
 export interface TesterProfileRates {
-    'n2': TesterStageRate;
+    'n2': TesterN2Rate;
     'registration': TesterProcedureRate;
     'pdu': TesterProcedureRate;
     'deregistration': TesterProcedureRate;
@@ -651,10 +666,6 @@ export const TesterRunSnapshotStopReasonEnum = {
 
 export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReasonEnum[keyof typeof TesterRunSnapshotStopReasonEnum];
 
-export interface TesterStageRate {
-    'timeoutMs': number;
-    'retries': number;
-}
 /**
  * One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
  */

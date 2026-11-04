@@ -913,45 +913,76 @@ func (r *run) attemptDeregistration(i int) bool {
 	return false
 }
 
-// runN2 brings every gNB up concurrently. A failed attempt with retries
-// left goes to the back of the queue (design N3). It returns when every
-// gNB has a final outcome, or when Stop is requested (queued gNBs are
-// then left pending; in-flight attempts finish within their timeout).
+// runN2 brings the gNBs up: at most Rates.N2.RatePerSec start per second
+// and at most Rates.N2.MaxInFlight are connecting at once (0: no limit,
+// every gNB at once). A failed attempt with retries left goes to the back
+// of the queue (design N3) and is paced like the rest. It returns when
+// every gNB has a final outcome, or when Stop is requested (queued gNBs
+// are then left pending; in-flight attempts finish within their timeout).
 func (r *run) runN2() {
 	count := len(r.plan.Gnbs)
+	rate := r.profile.Rates.N2
 	n := &n2Round{
-		maxAttempts:  r.profile.Rates.N2.Retries + 1,
-		timeout:      time.Duration(r.profile.Rates.N2.TimeoutMs) * time.Millisecond,
+		maxAttempts:  rate.Retries + 1,
+		timeout:      time.Duration(rate.TimeoutMs) * time.Millisecond,
 		queue:        make(chan int, count),
 		firstAttempt: make([]time.Time, count),
 		left:         count,
 		allDone:      make(chan struct{}),
 	}
+	if count == 0 {
+		return
+	}
 	for i := range count {
 		n.queue <- i
 	}
+	inFlight := rate.MaxInFlight
+	if inFlight <= 0 || inFlight > count {
+		inFlight = count
+	}
+	var interval time.Duration
+	if rate.RatePerSec > 0 {
+		interval = time.Second / time.Duration(rate.RatePerSec)
+	}
 
-	var workers sync.WaitGroup
-	for range count {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			for {
-				select {
-				case <-r.ctx.Done():
-					return
-				case <-n.allDone:
-					return
-				case i := <-n.queue:
-					if r.ctx.Err() != nil { // select picks randomly among ready cases
-						return
-					}
-					r.attemptN2(n, i)
-				}
+	sem := make(chan struct{}, inFlight)
+	var attempts sync.WaitGroup
+	defer attempts.Wait()
+	next := time.Now()
+	for {
+		var i int
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-n.allDone:
+			return
+		case i = <-n.queue:
+		}
+		if r.ctx.Err() != nil { // select picks randomly among ready cases
+			return
+		}
+		// token bucket of depth 1: one start every interval
+		if wait := time.Until(next); interval > 0 && wait > 0 {
+			t := time.NewTimer(wait)
+			select {
+			case <-r.ctx.Done():
+				t.Stop()
+				return
+			case <-t.C:
 			}
+		}
+		next = maxTime(next, time.Now()).Add(interval)
+		select {
+		case <-r.ctx.Done():
+			return
+		case sem <- struct{}{}:
+		}
+		attempts.Add(1)
+		go func() {
+			defer func() { <-sem; attempts.Done() }()
+			r.attemptN2(n, i)
 		}()
 	}
-	workers.Wait()
 }
 
 // n2Round is the shared state of one runN2 call. queue never holds more

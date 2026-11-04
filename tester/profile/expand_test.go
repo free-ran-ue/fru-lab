@@ -27,7 +27,7 @@ func sampleProfile() Profile {
 		},
 		Traffic: Traffic{UlMbps: 1, DlMbps: 5, UlPacketSize: 1400, DlPacketSize: 1400, Port: 9200},
 		Rates: Rates{
-			N2:             StageRate{TimeoutMs: 5000, Retries: 1},
+			N2:             N2Rate{TimeoutMs: 5000, Retries: 1},
 			Registration:   ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
 			Pdu:            ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 10000, Retries: 1},
 			Deregistration: ProcedureRate{RatePerSec: 50, MaxInFlight: 200, TimeoutMs: 5000, Retries: 1},
