@@ -542,7 +542,7 @@ export default function TesterSetupPage() {
                   <Field label="Retries" path="rates.n2.retries" numeric {...fieldProps} />
                 </div>
                 <p className={styles.secFoot}>
-                  0 is no limit: every gNB connects at once. A gNB&apos;s UEs start registering as soon as it is up.
+                  gNBs per second 0 is no limit. Max in flight is at most 1000; 0 is 1000. A gNB&apos;s UEs start registering as soon as it is up.
                   A failed attempt with retries left goes to the back of the queue.
                 </p>
               </section>

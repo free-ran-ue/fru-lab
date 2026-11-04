@@ -23,7 +23,7 @@ export function useActiveRuns(): ActiveRuns {
       if (document.hidden) return
       try {
         const testers = (await api.testersList()).data
-        const runs = await Promise.allSettled(testers.map((t) => api.testerByIdRun(t.id)))
+        const runs = await Promise.allSettled(testers.map((t) => api.testerByIdRun(t.id, 0, 0)))
         const count = runs.filter((r) => r.status === 'fulfilled' && ACTIVE.includes(r.value.data.state)).length
         if (!cancelled) setState({ count, live: true })
       } catch {

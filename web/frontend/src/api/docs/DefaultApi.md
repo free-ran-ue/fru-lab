@@ -1685,9 +1685,15 @@ const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
 let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
+let gnbOffset: number; //Where the page of gNBs starts, counted within those gnbState keeps. (optional) (default to undefined)
+let gnbLimit: number; //How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\"gnbOffset\", \"gnbLimit\", \"gnbState\"} as a text message. (optional) (default to undefined)
+let gnbState: string; //Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. (optional) (default to undefined)
 
 const { status, data } = await apiInstance.testerByIdRun(
-    id
+    id,
+    gnbOffset,
+    gnbLimit,
+    gnbState
 );
 ```
 
@@ -1696,6 +1702,9 @@ const { status, data } = await apiInstance.testerByIdRun(
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
 | **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+| **gnbOffset** | [**number**] | Where the page of gNBs starts, counted within those gnbState keeps. | (optional) defaults to undefined|
+| **gnbLimit** | [**number**] | How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message. | (optional) defaults to undefined|
+| **gnbState** | [**string**] | Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. | (optional) defaults to undefined|
 
 
 ### Return type
@@ -2516,11 +2525,24 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.testerRunGet();
+let gnbOffset: number; //Where the page of gNBs starts, counted within those gnbState keeps. (optional) (default to undefined)
+let gnbLimit: number; //How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\"gnbOffset\", \"gnbLimit\", \"gnbState\"} as a text message. (optional) (default to undefined)
+let gnbState: string; //Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. (optional) (default to undefined)
+
+const { status, data } = await apiInstance.testerRunGet(
+    gnbOffset,
+    gnbLimit,
+    gnbState
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbOffset** | [**number**] | Where the page of gNBs starts, counted within those gnbState keeps. | (optional) defaults to undefined|
+| **gnbLimit** | [**number**] | How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message. | (optional) defaults to undefined|
+| **gnbState** | [**string**] | Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. | (optional) defaults to undefined|
 
 
 ### Return type

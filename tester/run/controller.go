@@ -278,17 +278,20 @@ func (c *Controller) Stop() (Snapshot, error) {
 	return r.snapshot(), nil
 }
 
-func (c *Controller) Snapshot() Snapshot {
+func (c *Controller) Snapshot() Snapshot { return c.SnapshotPage(AllGnbs) }
+
+// SnapshotPage is Snapshot listing only the gNBs q asks for.
+func (c *Controller) SnapshotPage(q GnbPage) Snapshot {
 	c.mu.Lock()
 	r := c.current
 	c.mu.Unlock()
 	if r == nil {
 		empty := metrics.NewStage("", 0).Snapshot()
-		return Snapshot{State: StateIdle, Gnbs: []GnbStatus{}, FailedUes: []UeFailure{},
+		return Snapshot{State: StateIdle, Gnbs: []GnbStatus{}, GnbCounts: map[GnbState]int{}, FailedUes: []UeFailure{},
 			N2: empty, Registration: empty, Pdu: empty, Deregistration: empty, N2Release: empty,
 			Dataplane: emptyDataplane()}
 	}
-	return r.snapshot()
+	return r.snapshotPage(q)
 }
 
 // Reports returns the last keptReports finished (stopped or failed)
@@ -493,14 +496,19 @@ func (r *run) requestStop(reason string) {
 	r.stop()
 }
 
-func (r *run) snapshot() Snapshot {
+func (r *run) snapshot() Snapshot { return r.snapshotPage(AllGnbs) }
+
+// snapshotPage lists the gNBs q asks for; Dataplane.Gnbs then holds the
+// same gNBs' traffic, in the same order.
+func (r *run) snapshotPage(q GnbPage) Snapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	gnbs, total, counts := q.pick(r.gnbs)
 	snap := Snapshot{
 		RunID: r.id, ProfileName: r.profile.Name, State: r.st, Error: r.errMsg,
 		N2: r.n2.Snapshot(), Registration: r.reg.Snapshot(), Pdu: r.pdu.Snapshot(),
 		Deregistration: r.dereg.Snapshot(), N2Release: r.n2Release.Snapshot(), StopReason: r.stopReason,
-		Gnbs:   append([]GnbStatus(nil), r.gnbs...),
+		Gnbs: gnbs, GnbTotal: total, GnbOffset: min(q.Offset, total), GnbCounts: counts,
 		Ues:    r.summary,
 		CpLoop: r.cp.snapshot(r.deps.Now()),
 		Cpus:   r.cpus,
@@ -511,6 +519,15 @@ func (r *run) snapshot() Snapshot {
 	}
 	if r.dp != nil {
 		snap.Dataplane = r.dp.Snapshot()
+		if len(gnbs) != len(r.gnbs) {
+			all := snap.Dataplane.Gnbs
+			snap.Dataplane.Gnbs = make([]dataplane.GnbTraffic, len(gnbs))
+			for i, g := range gnbs {
+				if g.Index-1 < len(all) {
+					snap.Dataplane.Gnbs[i] = all[g.Index-1]
+				}
+			}
+		}
 	}
 	started := r.startedAt
 	snap.StartedAt = &started
@@ -914,8 +931,8 @@ func (r *run) attemptDeregistration(i int) bool {
 }
 
 // runN2 brings the gNBs up: at most Rates.N2.RatePerSec start per second
-// and at most Rates.N2.MaxInFlight are connecting at once (0: no limit,
-// every gNB at once). A failed attempt with retries left goes to the back
+// and at most Rates.N2.MaxInFlight are connecting at once (0: no rate
+// limit; at most profile.MaxN2InFlight connecting). A failed attempt with retries left goes to the back
 // of the queue (design N3) and is paced like the rest. It returns when
 // every gNB has a final outcome, or when Stop is requested (queued gNBs
 // are then left pending; in-flight attempts finish within their timeout).
@@ -937,9 +954,10 @@ func (r *run) runN2() {
 		n.queue <- i
 	}
 	inFlight := rate.MaxInFlight
-	if inFlight <= 0 || inFlight > count {
-		inFlight = count
+	if inFlight <= 0 {
+		inFlight = profile.MaxN2InFlight
 	}
+	inFlight = min(inFlight, count)
 	var interval time.Duration
 	if rate.RatePerSec > 0 {
 		interval = time.Second / time.Duration(rate.RatePerSec)

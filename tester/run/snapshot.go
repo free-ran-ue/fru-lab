@@ -4,6 +4,7 @@
 package run
 
 import (
+	"slices"
 	"time"
 
 	"tester/cpuset"
@@ -143,12 +144,53 @@ type Snapshot struct {
 	Deregistration metrics.StageSnapshot `json:"deregistration"`
 	N2Release      metrics.StageSnapshot `json:"n2Release"`
 	// StopReason is "user" (Stop pressed) or "maxDuration"; empty while running.
-	StopReason string         `json:"stopReason"`
-	Gnbs       []GnbStatus    `json:"gnbs"`
-	Ues        UeSummary      `json:"ues"`
-	FailedUes  []UeFailure    `json:"failedUes"` // first maxFailuresListed failures
-	CpLoop     CpLoopSnapshot `json:"cpLoop"`
+	StopReason string `json:"stopReason"`
+	// Gnbs is the gNBs the request asked for (GnbPage): every gNB by
+	// default, or one page of those in the asked-for states. GnbTotal is
+	// how many match (the pager's total), GnbOffset where the page
+	// starts in them, and GnbCounts every gNB counted by state.
+	Gnbs      []GnbStatus      `json:"gnbs"`
+	GnbTotal  int              `json:"gnbTotal"`
+	GnbOffset int              `json:"gnbOffset"`
+	GnbCounts map[GnbState]int `json:"gnbCounts"`
+	Ues       UeSummary        `json:"ues"`
+	FailedUes []UeFailure      `json:"failedUes"` // first maxFailuresListed failures
+	CpLoop    CpLoopSnapshot   `json:"cpLoop"`
 	// Cpus is the CPU allocation the run used (empty lists: not pinned).
 	Cpus      cpuset.Allocation  `json:"cpus"`
 	Dataplane dataplane.Snapshot `json:"dataplane"`
+}
+
+// GnbPage picks the gNBs a Snapshot lists. With 10 000 gNBs the full list
+// is about 3 MB, too much to send every second: the run page asks for one
+// page. Limit < 0 lists every gNB (AllGnbs); States, when set, keeps
+// only gNBs in those states, and Offset counts within them.
+type GnbPage struct {
+	Offset int
+	Limit  int
+	States []GnbState
+}
+
+// AllGnbs lists every gNB: reports, and requests that ask for no page.
+var AllGnbs = GnbPage{Limit: -1}
+
+// MaxGnbPage is the largest page a request may ask for.
+const MaxGnbPage = 1000
+
+// pick returns the page of gnbs q asks for, how many gNBs match, and
+// every gNB counted by state.
+func (q GnbPage) pick(gnbs []GnbStatus) (page []GnbStatus, total int, counts map[GnbState]int) {
+	counts = map[GnbState]int{}
+	page = []GnbStatus{}
+	for _, g := range gnbs {
+		counts[g.State]++
+		if len(q.States) > 0 && !slices.Contains(q.States, g.State) {
+			continue
+		}
+		if total >= q.Offset && (q.Limit < 0 || total < q.Offset+q.Limit) {
+			page = append(page, g)
+		}
+		total++
+	}
+	return page, total, counts
 }

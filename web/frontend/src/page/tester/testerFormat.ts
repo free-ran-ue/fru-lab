@@ -41,10 +41,12 @@ export function formatLoss(rate: number): string {
 // A browser WebSocket can't set an Authorization header, so the stream
 // takes the JWT as ?token= (checked by fru-lab's handleTesterStream),
 // mirroring dashboard/terminalSocket.ts.
-export function buildTesterStreamUrl(testerId: string): string {
+// query adds more parameters, e.g. the gNB page (see GnbPageRequest).
+export function buildTesterStreamUrl(testerId: string, query: Record<string, string | number> = {}): string {
   const wsBase = apiBaseUrl.replace(/^http/, 'ws')
-  const token = localStorage.getItem('token') ?? ''
-  return `${wsBase}/api/testers/${encodeURIComponent(testerId)}/run/stream?token=${encodeURIComponent(token)}`
+  const params = new URLSearchParams({ token: localStorage.getItem('token') ?? '' })
+  for (const [k, v] of Object.entries(query)) params.set(k, String(v))
+  return `${wsBase}/api/testers/${encodeURIComponent(testerId)}/run/stream?${params}`
 }
 
 // formatBytes renders a memory size in binary units, e.g. 3.2 GiB.

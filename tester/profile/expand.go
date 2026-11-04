@@ -190,8 +190,8 @@ func validateFields(p Profile, verr *ValidationError) {
 	if p.Rates.N2.RatePerSec < 0 || p.Rates.N2.RatePerSec > 100000 {
 		verr.add("rates.n2.ratePerSec", "must be between 0 (no limit) and 100000")
 	}
-	if p.Rates.N2.MaxInFlight < 0 || p.Rates.N2.MaxInFlight > 100000 {
-		verr.add("rates.n2.maxInFlight", "must be between 0 (no limit) and 100000")
+	if p.Rates.N2.MaxInFlight < 0 || p.Rates.N2.MaxInFlight > MaxN2InFlight {
+		verr.add("rates.n2.maxInFlight", fmt.Sprintf("must be between 0 (%d) and %d", MaxN2InFlight, MaxN2InFlight))
 	}
 	validateProcedureRate(verr, "rates.registration", p.Rates.Registration)
 	validateProcedureRate(verr, "rates.pdu", p.Rates.Pdu)

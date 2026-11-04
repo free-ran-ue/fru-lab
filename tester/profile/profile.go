@@ -175,10 +175,14 @@ type ProcedureRate struct {
 	Retries     int `json:"retries"`
 }
 
+// MaxN2InFlight is the most gNBs that set up N2 at once, and what a
+// MaxInFlight of 0 means: the SCTP connect is a blocking syscall that
+// holds an OS thread, and Go stops the process at 10 000 threads.
+const MaxN2InFlight = 1000
+
 // N2Rate paces the gNBs' N2 setup (SCTP association and NG Setup): at
-// most RatePerSec gNBs start per second and at most MaxInFlight are
-// connecting at once. 0 means no limit for either, so every gNB starts
-// at once, as before the knobs existed. TimeoutMs bounds one attempt;
+// most RatePerSec gNBs start per second (0: no limit) and at most
+// MaxInFlight are connecting at once (0: MaxN2InFlight). TimeoutMs bounds one attempt;
 // Retries is how many more attempts a failed gNB gets (it is requeued at
 // the back each time).
 type N2Rate struct {

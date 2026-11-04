@@ -449,7 +449,7 @@ export interface TesterN2Rate {
      */
     'ratePerSec'?: number;
     /**
-     * At most this many gNBs are setting up at once. 0 or absent is no limit.
+     * At most this many gNBs are setting up at once, up to 1000. 0 or absent is 1000.
      */
     'maxInFlight'?: number;
     'timeoutMs': number;
@@ -636,7 +636,22 @@ export interface TesterRunSnapshot {
      * Why the run stopped; empty while running.
      */
     'stopReason': TesterRunSnapshotStopReasonEnum;
+    /**
+     * The gNBs asked for (gnbOffset, gnbLimit, gnbState); every gNB when no gnbLimit was given.
+     */
     'gnbs': Array<TesterGnbStatus>;
+    /**
+     * How many gNBs match gnbState (every gNB without it).
+     */
+    'gnbTotal': number;
+    /**
+     * Where gnbs starts within them.
+     */
+    'gnbOffset': number;
+    /**
+     * Every gNB of the run counted by state.
+     */
+    'gnbCounts': { [key: string]: number; };
     'ues': TesterUeSummary;
     /**
      * The first 200 UEs that failed; ues.failed has the total.
@@ -2115,10 +2130,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
          * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
          * @summary One tester\'s run
          * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerByIdRun: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        testerByIdRun: async (id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'id' is not null or undefined
             assertParamExists('testerByIdRun', 'id', id)
             const localVarPath = `/api/testers/{id}/run`
@@ -2137,6 +2155,18 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication bearerAuth required
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (gnbOffset !== undefined) {
+                localVarQueryParameter['gnbOffset'] = gnbOffset;
+            }
+
+            if (gnbLimit !== undefined) {
+                localVarQueryParameter['gnbLimit'] = gnbLimit;
+            }
+
+            if (gnbState !== undefined) {
+                localVarQueryParameter['gnbState'] = gnbState;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -2723,10 +2753,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         /**
          * Forwarded to fru-tester. State is `idle` before the first run.
          * @summary Current run snapshot
+         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerRunGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        testerRunGet: async (gnbOffset?: number, gnbLimit?: number, gnbState?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/tester/run`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -2742,6 +2775,18 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // authentication bearerAuth required
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (gnbOffset !== undefined) {
+                localVarQueryParameter['gnbOffset'] = gnbOffset;
+            }
+
+            if (gnbLimit !== undefined) {
+                localVarQueryParameter['gnbLimit'] = gnbLimit;
+            }
+
+            if (gnbState !== undefined) {
+                localVarQueryParameter['gnbState'] = gnbState;
+            }
 
             localVarHeaderParameter['Accept'] = 'application/json';
 
@@ -3491,11 +3536,14 @@ export const DefaultApiFp = function(configuration?: Configuration) {
          * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
          * @summary One tester\'s run
          * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerByIdRun(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRun(id, options);
+        async testerByIdRun(id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRun(id, gnbOffset, gnbLimit, gnbState, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdRun']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -3697,11 +3745,14 @@ export const DefaultApiFp = function(configuration?: Configuration) {
         /**
          * Forwarded to fru-tester. State is `idle` before the first run.
          * @summary Current run snapshot
+         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerRunGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerRunGet(options);
+        async testerRunGet(gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerRunGet(gnbOffset, gnbLimit, gnbState, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerRunGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -4137,11 +4188,14 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
          * @summary One tester\'s run
          * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerByIdRun(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerByIdRun(id, options).then((request) => request(axios, basePath));
+        testerByIdRun(id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
+            return localVarFp.testerByIdRun(id, gnbOffset, gnbLimit, gnbState, options).then((request) => request(axios, basePath));
         },
         /**
          * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
@@ -4295,11 +4349,14 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
         /**
          * Forwarded to fru-tester. State is `idle` before the first run.
          * @summary Current run snapshot
+         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerRunGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerRunGet(options).then((request) => request(axios, basePath));
+        testerRunGet(gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
+            return localVarFp.testerRunGet(gnbOffset, gnbLimit, gnbState, options).then((request) => request(axios, basePath));
         },
         /**
          * Forwarded to fru-tester. Only one run may be active at a time.
@@ -4734,11 +4791,14 @@ export class DefaultApi extends BaseAPI {
      * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
      * @summary One tester\'s run
      * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+     * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+     * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+     * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerByIdRun(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdRun(id, options).then((request) => request(this.axios, this.basePath));
+    public testerByIdRun(id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerByIdRun(id, gnbOffset, gnbLimit, gnbState, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -4908,11 +4968,14 @@ export class DefaultApi extends BaseAPI {
     /**
      * Forwarded to fru-tester. State is `idle` before the first run.
      * @summary Current run snapshot
+     * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
+     * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
+     * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerRunGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerRunGet(options).then((request) => request(this.axios, this.basePath));
+    public testerRunGet(gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerRunGet(gnbOffset, gnbLimit, gnbState, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

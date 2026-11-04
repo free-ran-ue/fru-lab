@@ -100,6 +100,8 @@ type fakeDataplane struct {
 	ues      map[int]fakeFlow
 	stopped  bool
 	startErr error
+	// gnbTraffic is what Snapshot reports per gNB; nil reports none
+	gnbTraffic []dataplane.GnbTraffic
 }
 
 type fakeFlow struct {
@@ -119,7 +121,7 @@ func (d *fakeDataplane) Stop(time.Duration) { d.mu.Lock(); d.stopped = true; d.m
 func (d *fakeDataplane) Snapshot() dataplane.Snapshot {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return dataplane.Snapshot{ActiveUes: len(d.ues), Gnbs: []dataplane.GnbTraffic{}, Series: []dataplane.Point{}}
+	return dataplane.Snapshot{ActiveUes: len(d.ues), Gnbs: append([]dataplane.GnbTraffic{}, d.gnbTraffic...), Series: []dataplane.Point{}}
 }
 
 func (d *fakeDataplane) flows() map[int]fakeFlow {
