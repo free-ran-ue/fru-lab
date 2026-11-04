@@ -389,11 +389,16 @@ export default function TesterSetupPage() {
 
   // the plan preview, worked out from the form
   const tpUes = profile.scale.throughputUeCount || 0
-  const regSec = tpUes / (profile.rates.registration.ratePerSec || NaN)
+  const gnbCount = profile.scale.gnbCount || 0
+  const n2Rate = profile.rates.n2.ratePerSec ?? 0
+  const n2Sec = n2Rate > 0 ? gnbCount / n2Rate : 0
+  // a UE cannot register before its gNB is up
+  const regSec = Math.max(n2Sec, tpUes / (profile.rates.registration.ratePerSec || NaN))
   const pduSec = Math.max(regSec, tpUes / (profile.rates.pdu.ratePerSec || NaN))
   const preview: [string, string][] = [
     ['UEs', `${(profile.scale.ueCount || 0).toLocaleString()} on ${(profile.scale.gnbCount || 0).toLocaleString()} gNB${profile.scale.gnbCount === 1 ? '' : 's'}`],
     ['Throughput UEs', tpUes.toLocaleString()],
+    ['All gNBs up after', n2Rate > 0 ? about(n2Sec) : 'at once'],
     ['All registered after', about(regSec)],
     ['All PDU sessions after', about(pduSec)],
     ['Offered uplink', offered(profile.traffic.ulMbps, tpUes)],
@@ -529,6 +534,20 @@ export default function TesterSetupPage() {
               </section>
 
               <section className={styles.sec}>
+                <div className={styles.secH}><h2>N2 setup pacing</h2><span className={styles.hint}>SCTP and NG Setup per gNB</span></div>
+                <div className={styles.secB}>
+                  <Field label="gNBs per second" path="rates.n2.ratePerSec" numeric {...fieldProps} />
+                  <Field label="Max in flight" path="rates.n2.maxInFlight" numeric {...fieldProps} />
+                  <Field label="Timeout per attempt (ms)" path="rates.n2.timeoutMs" numeric {...fieldProps} />
+                  <Field label="Retries" path="rates.n2.retries" numeric {...fieldProps} />
+                </div>
+                <p className={styles.secFoot}>
+                  0 is no limit: every gNB connects at once. A gNB&apos;s UEs start registering as soon as it is up.
+                  A failed attempt with retries left goes to the back of the queue.
+                </p>
+              </section>
+
+              <section className={styles.sec}>
                 <div className={styles.secH}><h2>UE template</h2><span className={styles.hint}>applied to every UE</span></div>
                 <div className={styles.secB}>
                   <Field label="First MSIN" path="ue.msinStart" {...fieldProps} />
@@ -573,15 +592,6 @@ export default function TesterSetupPage() {
                   <RateFields stage="deregistration" fieldProps={fieldProps} />
                 </div>
                 <p className={styles.secFoot}>After Stop, every UE that registered deregisters; the core releases its PDU session with it. Then each gNB&apos;s SCTP association is closed.</p>
-              </section>
-
-              <section className={styles.sec}>
-                <div className={styles.secH}><h2>N2 setup timing</h2><span className={styles.hint}>NG Setup per gNB</span></div>
-                <div className={styles.secB}>
-                  <Field label="Timeout per attempt (ms)" path="rates.n2.timeoutMs" numeric {...fieldProps} />
-                  <Field label="Retries" path="rates.n2.retries" numeric {...fieldProps} />
-                </div>
-                <p className={styles.secFoot}>A failed attempt with retries left goes to the back of the queue.</p>
               </section>
 
               <section className={styles.sec}>

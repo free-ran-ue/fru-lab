@@ -138,7 +138,7 @@ func (s Scale) Throughput() int {
 }
 
 type Rates struct {
-	N2           StageRate     `json:"n2"`
+	N2           N2Rate        `json:"n2"`
 	Registration ProcedureRate `json:"registration"`
 	Pdu          ProcedureRate `json:"pdu"`
 	// Deregistration paces the UE deregistrations that Stop runs; the core
@@ -167,7 +167,7 @@ func (r CpLoopRate) ProcedureRate() ProcedureRate {
 
 // ProcedureRate paces a per-UE stage: at most RatePerSec new attempts per
 // second (token bucket) and at most MaxInFlight attempts at once
-// (semaphore), each bounded by TimeoutMs; Retries as in StageRate.
+// (semaphore), each bounded by TimeoutMs; Retries as in N2Rate.
 type ProcedureRate struct {
 	RatePerSec  int `json:"ratePerSec"`
 	MaxInFlight int `json:"maxInFlight"`
@@ -175,9 +175,15 @@ type ProcedureRate struct {
 	Retries     int `json:"retries"`
 }
 
-// StageRate bounds one attempt with TimeoutMs; Retries is how many more
-// attempts a failed item gets (it is requeued at the back each time).
-type StageRate struct {
-	TimeoutMs int `json:"timeoutMs"`
-	Retries   int `json:"retries"`
+// N2Rate paces the gNBs' N2 setup (SCTP association and NG Setup): at
+// most RatePerSec gNBs start per second and at most MaxInFlight are
+// connecting at once. 0 means no limit for either, so every gNB starts
+// at once, as before the knobs existed. TimeoutMs bounds one attempt;
+// Retries is how many more attempts a failed gNB gets (it is requeued at
+// the back each time).
+type N2Rate struct {
+	RatePerSec  int `json:"ratePerSec,omitempty"`
+	MaxInFlight int `json:"maxInFlight,omitempty"`
+	TimeoutMs   int `json:"timeoutMs"`
+	Retries     int `json:"retries"`
 }

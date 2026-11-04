@@ -2070,7 +2070,7 @@ components:
           required: [n2, registration, pdu, deregistration, cpLoop]
           properties:
             n2:
-              $ref: '#/components/schemas/TesterStageRate'
+              $ref: '#/components/schemas/TesterN2Rate'
             registration:
               $ref: '#/components/schemas/TesterProcedureRate'
             pdu:
@@ -2188,10 +2188,19 @@ components:
         retries:
           type: integer
           example: 1
-    TesterStageRate:
+    TesterN2Rate:
       type: object
+      description: Paces the gNBs' N2 setup (SCTP association and NG Setup). A failed attempt with retries left goes to the back of the queue.
       required: [timeoutMs, retries]
       properties:
+        ratePerSec:
+          type: integer
+          description: At most this many gNBs start their N2 setup per second. 0 or absent is no limit.
+          example: 100
+        maxInFlight:
+          type: integer
+          description: At most this many gNBs are setting up at once. 0 or absent is no limit.
+          example: 100
         timeoutMs:
           type: integer
           example: 5000

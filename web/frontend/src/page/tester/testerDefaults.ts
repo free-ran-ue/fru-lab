@@ -43,7 +43,8 @@ export const DEFAULT_TESTER_PROFILE: TesterProfile = {
     n6: { interface: 'docker-cn-ran', sinkIp: '10.0.1.1/24', upfIp: '10.0.1.5', uePool: '10.60.0.0/16' },
   },
   rates: {
-    n2: { timeoutMs: 5000, retries: 1 },
+    // 0: no limit, every gNB sets up at once (the behaviour before the knobs)
+    n2: { ratePerSec: 0, maxInFlight: 0, timeoutMs: 5000, retries: 1 },
     registration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
     pdu: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 10000, retries: 1 },
     deregistration: { ratePerSec: 50, maxInFlight: 200, timeoutMs: 5000, retries: 1 },
@@ -78,8 +79,17 @@ function mergeKnown(defaults: unknown, saved: unknown): unknown {
 }
 
 // forTester is the profile as a tester takes it: without testerId, which
-// only fru-lab reads (a tester rejects fields it does not know).
+// only fru-lab reads (a tester rejects fields it does not know), and
+// without N2 pacing left at 0 (no limit), so a tester older than those
+// knobs still takes it.
 export function forTester(p: TesterProfile): TesterProfile {
   const { testerId: _testerId, ...rest } = p
-  return rest
+  const { ratePerSec, maxInFlight, ...n2 } = rest.rates.n2
+  return {
+    ...rest,
+    rates: {
+      ...rest.rates,
+      n2: { ...n2, ...(ratePerSec ? { ratePerSec } : {}), ...(maxInFlight ? { maxInFlight } : {}) },
+    },
+  }
 }
