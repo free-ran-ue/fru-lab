@@ -91,7 +91,9 @@ func rxQueues(name string) int {
 	return max(1, len(m))
 }
 
-func (e *XDPEngine) openPort(name string) (*xdpPort, error) {
+// openPort opens name once, with room in its steering map for targets
+// (address, port) pairs.
+func (e *XDPEngine) openPort(name string, targets int) (*xdpPort, error) {
 	for _, p := range e.ports {
 		if p.name == name {
 			return p, nil
@@ -105,7 +107,7 @@ func (e *XDPEngine) openPort(name string) (*xdpPort, error) {
 	if queues > xdp.MaxQueues {
 		return nil, fmt.Errorf("%s has %d queues; AF_XDP here serves at most %d (lower them with ethtool -L)", name, queues, xdp.MaxQueues)
 	}
-	steer, err := xdp.Steer(l.Attrs().Index)
+	steer, err := xdp.Steer(l.Attrs().Index, targets)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
@@ -139,20 +141,23 @@ func (e *XDPEngine) Start() (err error) {
 	if size := max(cfg.UlPacketSize, cfg.DlPacketSize); frameULHead+HeaderLen+size-ulHeadLen+gtpHeaderLen > xdp.FrameSize {
 		return fmt.Errorf("packets of %d bytes do not fit an AF_XDP frame (%d bytes)", size, xdp.FrameSize)
 	}
-	if e.n3, err = e.openPort(cfg.N3Interface); err != nil {
+	// N3 and N6 can be the same interface and so share one map: room for
+	// every gNB's N3 address and the sink on each
+	targets := len(cfg.GnbN3IPs) + 1
+	if e.n3, err = e.openPort(cfg.N3Interface, targets); err != nil {
 		return err
 	}
-	if e.n6, err = e.openPort(cfg.N6Interface); err != nil {
+	if e.n6, err = e.openPort(cfg.N6Interface, targets); err != nil {
 		return err
 	}
 	for g, ip := range cfg.GnbN3IPs {
 		e.gnbByIP[ip] = g
 		if err := e.n3.steer.Allow(ip, GtpPort); err != nil {
-			return err
+			return fmt.Errorf("steer N3 traffic for %s on %s: %w", ip, cfg.N3Interface, err)
 		}
 	}
 	if err := e.n6.steer.Allow(cfg.SinkIP, cfg.Port); err != nil {
-		return err
+		return fmt.Errorf("steer N6 traffic for %s on %s: %w", cfg.SinkIP, cfg.N6Interface, err)
 	}
 	for range min(len(e.n3.socks), cfg.Senders) {
 		e.ulShards = append(e.ulShards, &shard{})

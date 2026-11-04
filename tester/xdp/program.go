@@ -74,22 +74,32 @@ func steeringProgram() asm.Instructions {
 	}
 }
 
-// Steer loads the program onto ifindex, natively if the driver can,
-// otherwise in generic mode.
-func Steer(ifindex int) (*Steering, error) {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		return nil, fmt.Errorf("lift the memlock limit: %w", err)
-	}
-	spec := &ebpf.CollectionSpec{
+// steeringSpec is the program and its maps, with room in "targets" for
+// targets pairs.
+func steeringSpec(targets int) *ebpf.CollectionSpec {
+	return &ebpf.CollectionSpec{
 		Maps: map[string]*ebpf.MapSpec{
-			"targets": {Type: ebpf.Hash, KeySize: 8, ValueSize: 1, MaxEntries: 4096},
+			"targets": {Type: ebpf.Hash, KeySize: 8, ValueSize: 1, MaxEntries: uint32(max(targets, minTargets))},
 			"xsks":    {Type: ebpf.XSKMap, KeySize: 4, ValueSize: 4, MaxEntries: MaxQueues},
 		},
 		Programs: map[string]*ebpf.ProgramSpec{
 			"steer": {Type: ebpf.XDP, License: "Dual MIT/GPL", Instructions: steeringProgram()},
 		},
 	}
-	coll, err := ebpf.NewCollection(spec)
+}
+
+// minTargets is the smallest "targets" map Steer makes.
+const minTargets = 4096
+
+// Steer loads the program onto ifindex, natively if the driver can,
+// otherwise in generic mode. targets is how many (address, port) pairs
+// Allow will be given: one per gNB N3 address plus the N6 sink, so a run
+// with 10 000 gNBs needs a map of at least 10 001.
+func Steer(ifindex, targets int) (*Steering, error) {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return nil, fmt.Errorf("lift the memlock limit: %w", err)
+	}
+	coll, err := ebpf.NewCollection(steeringSpec(targets))
 	if err != nil {
 		return nil, fmt.Errorf("load the XDP program: %w", err)
 	}

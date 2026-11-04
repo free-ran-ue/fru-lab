@@ -64,7 +64,7 @@ func inPeer(t *testing.T, f func()) {
 
 func TestSteeringSendsOnlyAllowedUDPToTheSocket(t *testing.T) {
 	ifindex := vethPair(t)
-	st, err := Steer(ifindex)
+	st, err := Steer(ifindex, 1)
 	require.NoError(t, err, "the verifier accepts the program")
 	defer st.Close()
 	sock, err := Open(ifindex, 0, true)
@@ -111,7 +111,7 @@ func TestSteeringSendsOnlyAllowedUDPToTheSocket(t *testing.T) {
 
 func TestSocketSendsWholeFrames(t *testing.T) {
 	ifindex := vethPair(t)
-	st, err := Steer(ifindex) // a veth only transmits AF_XDP frames with XDP on
+	st, err := Steer(ifindex, 1) // a veth only transmits AF_XDP frames with XDP on
 	require.NoError(t, err)
 	defer st.Close()
 	sock, err := Open(ifindex, 0, true)
