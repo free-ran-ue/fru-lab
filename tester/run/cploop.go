@@ -87,7 +87,7 @@ func newCpLoop(r *run) *cpLoop {
 	l.cleanup = metrics.NewStage("cpCleanupDeregistration", len(l.ues))
 	if len(l.ues) > 0 {
 		l.state = CpWaiting
-		l.stage = newProcStage(r.profile.Rates.CpLoop.ProcedureRate(), len(r.plan.Ues), r.cpCycle)
+		l.stage = newProcStage(r.profile.Rates.CpLoop.ProcedureRate(), r.gnbOf, r.cpCycle)
 	}
 	return l
 }

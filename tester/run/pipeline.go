@@ -16,22 +16,24 @@ import (
 type procStage struct {
 	interval    time.Duration
 	maxInFlight int
-	queue       chan int // UE indexes; each UE is queued at most once at a time
+	queue       *rrQueue // UE indexes, taken a gNB at a time in turn
 	attempt     func(ue int) (retry bool)
 	inFlight    sync.WaitGroup
 }
 
-func newProcStage(r profile.ProcedureRate, ueCount int, attempt func(ue int) (retry bool)) *procStage {
+// newProcStage paces attempt; gnbOf is a UE's gNB, which the queue takes
+// turns over (nil: one group, plain FIFO order).
+func newProcStage(r profile.ProcedureRate, gnbOf func(ue int) int, attempt func(ue int) (retry bool)) *procStage {
 	return &procStage{
 		interval:    time.Second / time.Duration(r.RatePerSec),
 		maxInFlight: r.MaxInFlight,
-		queue:       make(chan int, ueCount),
+		queue:       newRRQueue(gnbOf),
 		attempt:     attempt,
 	}
 }
 
-// enqueue never blocks: the queue holds every UE at once.
-func (p *procStage) enqueue(ue int) { p.queue <- ue }
+// enqueue never blocks.
+func (p *procStage) enqueue(ue int) { p.queue.push(ue) }
 
 // run dispatches until ctx is done, then waits for in-flight attempts.
 // A failed attempt the callback wants retried goes to the back of the
@@ -41,12 +43,10 @@ func (p *procStage) run(ctx context.Context) {
 	sem := make(chan struct{}, p.maxInFlight)
 	next := time.Now()
 	for {
-		var ue int
-		select {
-		case <-ctx.Done():
+		ue, ok := p.queue.pop(ctx)
+		if !ok {
 			p.inFlight.Wait()
 			return
-		case ue = <-p.queue:
 		}
 		// token bucket of depth 1: one start every interval
 		if wait := time.Until(next); wait > 0 {
@@ -54,7 +54,7 @@ func (p *procStage) run(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				t.Stop()
-				p.queue <- ue
+				p.queue.push(ue)
 				p.inFlight.Wait()
 				return
 			case <-t.C:
@@ -63,7 +63,7 @@ func (p *procStage) run(ctx context.Context) {
 		next = maxTime(next, time.Now()).Add(p.interval)
 		select {
 		case <-ctx.Done():
-			p.queue <- ue
+			p.queue.push(ue)
 			p.inFlight.Wait()
 			return
 		case sem <- struct{}{}:
@@ -73,24 +73,14 @@ func (p *procStage) run(ctx context.Context) {
 			defer func() { <-sem; p.inFlight.Done() }()
 			// requeue a wanted retry; if we are stopping, drain finds it
 			if p.attempt(ue) {
-				p.queue <- ue
+				p.queue.push(ue)
 			}
 		}()
 	}
 }
 
 // drain returns the UEs still queued; call after run has returned.
-func (p *procStage) drain() []int {
-	var out []int
-	for {
-		select {
-		case ue := <-p.queue:
-			out = append(out, ue)
-		default:
-			return out
-		}
-	}
-}
+func (p *procStage) drain() []int { return p.queue.drain() }
 
 func maxTime(a, b time.Time) time.Time {
 	if a.After(b) {

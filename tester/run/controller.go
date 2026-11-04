@@ -450,8 +450,8 @@ func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify 
 	}
 	r.cp = newCpLoop(r)
 	r.summary.Pending = len(plan.Ues)
-	r.regStage = newProcStage(p.Rates.Registration, len(plan.Ues), r.attemptRegistration)
-	r.pduStage = newProcStage(p.Rates.Pdu, len(plan.Ues), r.attemptPdu)
+	r.regStage = newProcStage(p.Rates.Registration, r.gnbOf, r.attemptRegistration)
+	r.pduStage = newProcStage(p.Rates.Pdu, r.gnbOf, r.attemptPdu)
 	return r
 }
 
@@ -824,7 +824,7 @@ func (r *run) deregisterAll() {
 	defer finished()
 	var left atomic.Int64
 	left.Store(int64(len(todo)))
-	stage := newProcStage(r.profile.Rates.Deregistration, len(r.ues), func(i int) bool {
+	stage := newProcStage(r.profile.Rates.Deregistration, r.gnbOf, func(i int) bool {
 		retry := r.attemptDeregistration(i)
 		if !retry && left.Add(-1) == 0 {
 			finished()
@@ -1062,6 +1062,10 @@ func (r *run) attemptN2(n *n2Round, i int) {
 	r.skipGnbUes(i)
 	n.finished()
 }
+
+// gnbOf is UE i's gNB (0-based): the stages' queues take turns over it.
+// plan.Ues is fixed for the run, so no lock is needed.
+func (r *run) gnbOf(i int) int { return r.plan.Ues[i].Gnb }
 
 // startGnb wraps an up gNB's association and releases its UEs into the
 // registration stage.

@@ -28,7 +28,7 @@ func TestProcStageHonoursRate(t *testing.T) {
 	var starts []time.Time
 	var wg sync.WaitGroup
 	wg.Add(10)
-	p := newProcStage(profile.ProcedureRate{RatePerSec: 50, MaxInFlight: 100}, 10, func(int) bool {
+	p := newProcStage(profile.ProcedureRate{RatePerSec: 50, MaxInFlight: 100}, nil, func(int) bool {
 		mu.Lock()
 		starts = append(starts, time.Now())
 		mu.Unlock()
@@ -47,7 +47,7 @@ func TestProcStageCapsInFlight(t *testing.T) {
 	var cur, peak atomic.Int32
 	var wg sync.WaitGroup
 	wg.Add(8)
-	p := newProcStage(profile.ProcedureRate{RatePerSec: 100000, MaxInFlight: 2}, 8, func(int) bool {
+	p := newProcStage(profile.ProcedureRate{RatePerSec: 100000, MaxInFlight: 2}, nil, func(int) bool {
 		n := cur.Add(1)
 		for {
 			old := peak.Load()
@@ -72,7 +72,7 @@ func TestProcStageRequeuesRetriesAtTheBack(t *testing.T) {
 	tries := map[int]int{}
 	var wg sync.WaitGroup
 	wg.Add(6)
-	p := newProcStage(profile.ProcedureRate{RatePerSec: 100000, MaxInFlight: 1}, 3, func(ue int) bool {
+	p := newProcStage(profile.ProcedureRate{RatePerSec: 100000, MaxInFlight: 1}, nil, func(ue int) bool {
 		mu.Lock()
 		defer mu.Unlock()
 		order = append(order, ue)
@@ -89,7 +89,7 @@ func TestProcStageRequeuesRetriesAtTheBack(t *testing.T) {
 func TestProcStageStopLeavesQueuedUesForDrain(t *testing.T) {
 	started := make(chan int, 10)
 	release := make(chan struct{})
-	p := newProcStage(profile.ProcedureRate{RatePerSec: 100000, MaxInFlight: 1}, 5, func(ue int) bool {
+	p := newProcStage(profile.ProcedureRate{RatePerSec: 100000, MaxInFlight: 1}, nil, func(ue int) bool {
 		started <- ue
 		<-release
 		return false
