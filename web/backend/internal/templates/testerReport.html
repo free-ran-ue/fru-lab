@@ -151,6 +151,15 @@ section { scroll-margin-top: 12px; }
 
 <section class="card" id="control">
   <h2>Control plane</h2>
+  <div class="tiles" style="margin-bottom:16px">
+    <div class="tile"><div class="k">Registrations · average</div><div class="v ul">{{if .RegTime}}{{rate .RegAvg}}{{else}}—{{end}}</div><div class="s">{{if .S.Setup}}peak {{rate .RegPeak}} · {{end}}over {{dash .RegTime}}</div></div>
+    <div class="tile"><div class="k">PDU sessions · average</div><div class="v dl">{{if .PduTime}}{{rate .PduAvg}}{{else}}—{{end}}</div><div class="s">{{if .S.Setup}}peak {{rate .PduPeak}} · {{end}}over {{dash .PduTime}}</div></div>
+  </div>
+  {{if .S.Setup}}
+  <div class="chart-head"><h3 style="margin:0">Setup rate</h3><div class="legend"><span><i class="rx"></i>Registrations</span><span><i class="dereg"></i>PDU sessions</span><span><i class="fail"></i>Failed</span></div></div>
+  <div class="chart" data-setup></div>
+  <p class="hint" style="margin-bottom:14px">Procedures per second from the start of the run until every registration and PDU session had its outcome. The first 10 minutes have one point per second; after that each point is the average of 2, 4, 8 … seconds.</p>
+  {{end}}
   <div class="tbl"><table>
     <thead><tr><th class="l">Stage</th><th>Succeeded</th><th>Rejected</th><th>Timed out</th><th>Conn. errors</th><th>Retries</th><th>Not started</th><th>Total time</th><th>Average</th><th>p50</th><th>p95</th><th>p99</th><th>Max</th></tr></thead>
     <tbody>
@@ -412,23 +421,26 @@ section { scroll-margin-top: 12px; }
 
   var cpSeries = (report.snapshot.cpLoop && report.snapshot.cpLoop.series) || [];
   var cpBox = document.querySelector('.chart[data-cp]');
+  var setupSeries = report.snapshot.setup || [];
+  var setupBox = document.querySelector('.chart[data-setup]');
   function perSec(v) { return (+v.toFixed(1)) + '/s'; }
+  var cpLines = [['regPerSec', 'lineRx', 'Registered'], ['deregPerSec', 'lineDereg', 'Deregistered'], ['failPerSec', 'lineFail', 'Failed']];
+  var setupLines = [['regPerSec', 'lineRx', 'Registered'], ['pduPerSec', 'lineDereg', 'PDU sessions'], ['failPerSec', 'lineFail', 'Failed']];
 
-  // drawCp plots the control-plane loop's procedures per second.
-  function drawCp(box) {
+  // drawRate plots procedures per second; the first line is drawn on top.
+  function drawRate(box, series, lines, label, empty) {
     box.textContent = '';
-    if (cpSeries.length < 2) {
-      box.innerHTML = '<div class="empty">The loop ran for less than two seconds.</div>';
+    if (series.length < 2) {
+      box.innerHTML = '<div class="empty">' + empty + '</div>';
       return;
     }
     var W = box.clientWidth || 600, H = box.clientHeight || 210, L = 48, R = 10, T = 10, B = 24;
-    var lines = [['failPerSec', 'lineFail', 'Failed'], ['deregPerSec', 'lineDereg', 'Deregistered'], ['regPerSec', 'lineRx', 'Registered']];
     var all = [];
-    cpSeries.forEach(function (p) { all.push(p.regPerSec, p.deregPerSec, p.failPerSec); });
-    var tMax = cpSeries[cpSeries.length - 1].t || 1, yMax = niceMax(Math.max.apply(null, all));
+    series.forEach(function (p) { lines.forEach(function (l) { all.push(p[l[0]]); }); });
+    var tMax = series[series.length - 1].t || 1, yMax = niceMax(Math.max.apply(null, all));
     var x = function (t) { return L + (t / tMax) * (W - L - R); };
     var y = function (v) { return T + (1 - v / yMax) * (H - T - B); };
-    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Control-plane procedures per second' }, box);
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': label }, box);
     for (var i = 0; i <= 4; i++) {
       var v = (yMax / 4) * i;
       el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' }, svg);
@@ -438,8 +450,8 @@ section { scroll-margin-top: 12px; }
       var t = (tMax / 5) * j;
       el('text', { x: x(t), y: H - 6, 'text-anchor': j === 0 ? 'start' : j === 5 ? 'end' : 'middle', class: 'axis' }, svg).textContent = clock(t);
     }
-    lines.forEach(function (l) {
-      el('path', { d: cpSeries.map(function (p, k) { return (k ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(p[l[0]]).toFixed(1); }).join(''), class: l[1] }, svg);
+    lines.slice().reverse().forEach(function (l) {
+      el('path', { d: series.map(function (p, k) { return (k ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(p[l[0]]).toFixed(1); }).join(''), class: l[1] }, svg);
     });
     var cursor = el('line', { y1: T, y2: H - B, class: 'cursor', visibility: 'hidden' }, svg);
     var tip = document.createElement('div');
@@ -449,10 +461,10 @@ section { scroll-margin-top: 12px; }
     svg.addEventListener('mousemove', function (ev) {
       var r = svg.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W;
       var tt = ((px - L) / (W - L - R)) * tMax, k = 0, best = Infinity;
-      cpSeries.forEach(function (p, n) { var d = Math.abs(p.t - tt); if (d < best) { best = d; k = n; } });
-      var p = cpSeries[k], cx = x(p.t);
+      series.forEach(function (p, n) { var d = Math.abs(p.t - tt); if (d < best) { best = d; k = n; } });
+      var p = series[k], cx = x(p.t);
       cursor.setAttribute('x1', cx); cursor.setAttribute('x2', cx); cursor.setAttribute('visibility', 'visible');
-      tip.innerHTML = clock(p.t) + '<br>Registered ' + perSec(p.regPerSec) + '<br>Deregistered ' + perSec(p.deregPerSec) + '<br>Failed ' + perSec(p.failPerSec);
+      tip.innerHTML = clock(p.t) + lines.map(function (l) { return '<br>' + l[2] + ' ' + perSec(p[l[0]]); }).join('');
       tip.hidden = false;
       var left = (cx / W) * r.width;
       tip.style.left = (left > r.width / 2 ? left - tip.offsetWidth - 10 : left + 10) + 'px';
@@ -461,7 +473,11 @@ section { scroll-margin-top: 12px; }
   }
 
   var boxes = document.querySelectorAll('.chart[data-dir]');
-  function drawAll() { boxes.forEach(draw); if (cpBox) drawCp(cpBox); }
+  function drawAll() {
+    boxes.forEach(draw);
+    if (setupBox) drawRate(setupBox, setupSeries, setupLines, 'Registrations and PDU sessions per second', 'The run set up in less than two seconds.');
+    if (cpBox) drawRate(cpBox, cpSeries, cpLines, 'Control-plane procedures per second', 'The loop ran for less than two seconds.');
+  }
   drawAll();
   var pending;
   window.addEventListener('resize', function () { clearTimeout(pending); pending = setTimeout(drawAll, 150); });

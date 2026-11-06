@@ -2725,6 +2725,27 @@ components:
           $ref: '#/components/schemas/TesterCpuAllocation'
         cpLoop:
           $ref: '#/components/schemas/TesterCpLoopSnapshot'
+        setup:
+          type: array
+          description: Registrations and PDU sessions per second from the start of the run until both stages are done, in at most 600 points (like the data plane's). Absent from testers older than this field.
+          items:
+            $ref: '#/components/schemas/TesterSetupPoint'
+    TesterSetupPoint:
+      type: object
+      required: [t, regPerSec, pduPerSec, failPerSec]
+      properties:
+        t:
+          type: number
+          description: Seconds since the run started.
+        regPerSec:
+          type: number
+          description: Registrations accepted.
+        pduPerSec:
+          type: number
+          description: PDU sessions established.
+        failPerSec:
+          type: number
+          description: Registrations and PDU sessions that finally failed.
     TesterDataplaneSnapshot:
       type: object
       required: [engine, activeUes, ul, dl, gnbs, series]

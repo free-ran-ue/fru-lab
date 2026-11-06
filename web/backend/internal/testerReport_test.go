@@ -81,3 +81,45 @@ func TestReportNamesTheTester(t *testing.T) {
 		t.Fatal("an older run names a tester")
 	}
 }
+
+// The registration rate: the average is a tile; the per-second curve is
+// a chart, which an older run without the curve leaves out.
+func TestReportShowsTheRegistrationRate(t *testing.T) {
+	raw := strings.Replace(sampleReport, `"registration":{"expected":4,"accepted":4,`, `"registration":{"expected":4,"accepted":4,"totalTimeMs":2000,`, 1)
+	withCurve := strings.Replace(raw, `"runId":"20261002-150405",`,
+		`"runId":"20261002-150405","setup":[{"t":1,"regPerSec":3,"pduPerSec":1,"failPerSec":0},{"t":2,"regPerSec":1,"pduPerSec":3,"failPerSec":0}],`, 1)
+	page, err := renderTesterReport([]byte(withCurve), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(page)
+	for _, want := range []string{"Registrations · average", "2.0/s", "peak 3.0/s", "over 0:00:02", `data-setup`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+	page, err = renderTesterReport([]byte(raw), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if html := string(page); strings.Contains(html, `data-setup>`) || !strings.Contains(html, "2.0/s") {
+		t.Error("an older run without the curve should keep the average and drop the chart")
+	}
+}
+
+// Every stored run renders, including one with a control-plane loop and
+// a setup curve (each section of the template is executed).
+func TestReportRendersEverySection(t *testing.T) {
+	raw := strings.Replace(sampleReport, `"runId":"20261002-150405",`,
+		`"runId":"20261002-150405","setup":[{"t":1,"regPerSec":3,"pduPerSec":1,"failPerSec":0},{"t":2,"regPerSec":1,"pduPerSec":3,"failPerSec":0}],`+
+			`"cpLoop":{"ues":5,"state":"stopped","durationSec":10,"cycles":7,"registration":{"accepted":8},"deregistration":{"accepted":7},"cleanup":{},"series":[{"t":1,"regPerSec":1,"deregPerSec":1,"failPerSec":0}]},`, 1)
+	page, err := renderTesterReport([]byte(raw), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`id="cploop"`, "0.8/s", `data-setup`} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+}

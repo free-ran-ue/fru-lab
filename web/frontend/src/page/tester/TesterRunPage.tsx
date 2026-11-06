@@ -6,7 +6,7 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type {
-  TesterCauseCount, TesterCpLoopSnapshot, TesterCpPoint, TesterGnbTraffic, TesterRunSnapshot, TesterStageSnapshot,
+  TesterCauseCount, TesterCpLoopSnapshot, TesterCpPoint, TesterGnbTraffic, TesterRunSnapshot, TesterSetupPoint, TesterStageSnapshot,
   TesterTrafficDirection, TesterTrafficPoint, TesterUeSummary,
 } from '../../api'
 import { buildTesterStreamUrl, formatBps, formatBits, formatClock, formatLoss, formatMs } from './testerFormat'
@@ -214,26 +214,30 @@ function ThroughputChart({ series, dir }: { series: TesterTrafficPoint[], dir: '
   )
 }
 
-// CpChart plots the control-plane loop's per-second registrations,
-// deregistrations and failures from the loop's start.
-function CpChart({ series }: { series: TesterCpPoint[] }) {
+// RateLine is one curve of a RateChart: its name in the tooltip, value,
+// and line and swatch styles. Lines are drawn last-first, so the first is on top.
+interface RateLine<P> { name: string, value: (p: P) => number, line: string, swatch: string }
+
+// RateChart plots procedures per second over time: the control-plane
+// loop's, or registrations and PDU sessions while the run sets up.
+function RateChart<P extends { t: number }>({ series, lines, label, empty }: { series: P[], lines: RateLine<P>[], label: string, empty: string }) {
   const [ref, W] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
   const u = remScale()
   const H = Math.round(150 * u)
   const pad = { l: 40 * u, r: 8 * u, t: 8 * u, b: 20 * u }
   if (series.length < 2) {
-    return <div ref={ref} className={styles.chartEmpty}>The chart starts after two seconds of the loop.</div>
+    return <div ref={ref} className={styles.chartEmpty}>{empty}</div>
   }
   const t1 = series[series.length - 1].t
-  const peak = Math.max(1, ...series.flatMap((p) => [p.regPerSec, p.deregPerSec, p.failPerSec]))
+  const peak = Math.max(1, ...series.flatMap((p) => lines.map((l) => l.value(p))))
   const gridStep = niceStep(peak / 4)
   const top = Math.ceil(peak / gridStep) * gridStep
   const plotW = Math.max(1, W - pad.l - pad.r)
   const span = Math.max(1, t1)
   const x = (t: number) => pad.l + (t / span) * plotW
   const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b)
-  const line = (f: (p: TesterCpPoint) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
+  const line = (f: (p: P) => number) => series.map((p) => `${x(p.t).toFixed(1)},${y(f(p)).toFixed(1)}`).join(' ')
   const h = hover === null ? null : series[hover]
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
     const t = ((ev.clientX - ev.currentTarget.getBoundingClientRect().left - pad.l) / plotW) * span
@@ -245,7 +249,7 @@ function CpChart({ series }: { series: TesterCpPoint[] }) {
   return (
     <div ref={ref} className={styles.chartBox}>
       {W > 0 && (
-        <svg width={W} height={H} className={styles.chart} role="img" aria-label="Control-plane procedures per second over time"
+        <svg width={W} height={H} className={styles.chart} role="img" aria-label={label}
           onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
           {Array.from({ length: Math.round(top / gridStep) + 1 }, (_, k) => k * gridStep).map((v) => (
             <g key={v}>
@@ -256,23 +260,31 @@ function CpChart({ series }: { series: TesterCpPoint[] }) {
           {timeTicks(t1, plotW).map((t) => (
             <text key={t} x={x(t)} y={H - 5} textAnchor={t === 0 ? 'start' : x(t) > W - pad.r - 24 ? 'end' : 'middle'} className={styles.chartAxis}>{clock(t)}</text>
           ))}
-          <polyline points={line((p) => p.failPerSec)} className={styles.lineFail} />
-          <polyline points={line((p) => p.deregPerSec)} className={styles.lineDereg} />
-          <polyline points={line((p) => p.regPerSec)} className={styles.lineRx} />
+          {[...lines].reverse().map((l) => <polyline key={l.name} points={line(l.value)} className={l.line} />)}
           {h && <line x1={x(h.t)} x2={x(h.t)} y1={pad.t} y2={H - pad.b} className={styles.chartCursor} />}
         </svg>
       )}
       {h && W > 0 && (
         <div className={styles.chartTip} style={{ left: Math.min(x(h.t) + 10, W - 160) }}>
           <b>{clock(h.t)}</b>
-          <span><i className={styles.swatchRx} />Registered {perSec(h.regPerSec)}</span>
-          <span><i className={styles.swatchDereg} />Deregistered {perSec(h.deregPerSec)}</span>
-          <span><i className={styles.swatchFail} />Failed {perSec(h.failPerSec)}</span>
+          {lines.map((l) => <span key={l.name}><i className={l.swatch} />{l.name} {perSec(l.value(h))}</span>)}
         </div>
       )}
     </div>
   )
 }
+
+const CP_LINES: RateLine<TesterCpPoint>[] = [
+  { name: 'Registered', value: (p) => p.regPerSec, line: styles.lineRx, swatch: styles.swatchRx },
+  { name: 'Deregistered', value: (p) => p.deregPerSec, line: styles.lineDereg, swatch: styles.swatchDereg },
+  { name: 'Failed', value: (p) => p.failPerSec, line: styles.lineFail, swatch: styles.swatchFail },
+]
+
+const SETUP_LINES: RateLine<TesterSetupPoint>[] = [
+  { name: 'Registered', value: (p) => p.regPerSec, line: styles.lineRx, swatch: styles.swatchRx },
+  { name: 'PDU sessions', value: (p) => p.pduPerSec, line: styles.lineDereg, swatch: styles.swatchDereg },
+  { name: 'Failed', value: (p) => p.failPerSec, line: styles.lineFail, swatch: styles.swatchFail },
+]
 
 const failuresOf = (s: TesterStageSnapshot) => s.rejected + s.timedOut + s.failed
 
@@ -369,7 +381,7 @@ function CpLoopPanel({ cp }: { cp: TesterCpLoopSnapshot }) {
           <span className={styles.legendKey}><i className={styles.keyDereg} style={{ background: 'repeating-linear-gradient(90deg, var(--violet) 0 0.25rem, transparent 0.25rem 0.4375rem)' }} />Deregistrations/s</span>
           <span className={styles.legendKey}><i className={styles.keyFail} />Failed/s</span>
         </div>
-        <CpChart series={cp.series} />
+        <RateChart series={cp.series} lines={CP_LINES} label="Control-plane procedures per second over time" empty="The chart starts after two seconds of the loop." />
       </div>
       <ProcTable rows={[['Registration', cp.registration], ['Deregistration', cp.deregistration]]} />
       {causes.length > 0 && (
@@ -594,12 +606,18 @@ function RunBody({ s, gnbPage, gnbStates, onGnbs: showGnbs }: RunBodyProps) {
   const reg = s.registration
   const pct = (n: number, of: number) => (of > 0 ? `${((n / of) * 100).toFixed(1)}%` : '—')
   const regRate = reg.totalTimeMs > 0 ? reg.accepted / (reg.totalTimeMs / 1000) : null
+  // the live rate is the setup curve's last point (a tester older than
+  // the curve sends none)
+  const setup = s.setup ?? []
+  const lastSetup = setup.length ? setup[setup.length - 1] : null
+  const regNow = reg.done ? null : lastSetup?.regPerSec ?? null
   const throughputStages = [s.n2, s.registration, s.pdu, s.deregistration, s.n2Release]
   const failures = throughputStages.reduce((a, st) => a + failuresOf(st), 0)
   const attempts = throughputStages.reduce((a, st) => a + st.attempted, 0)
   const kpis = [
     { label: 'Registered UEs', value: reg.accepted.toLocaleString(), unit: `/ ${reg.expected.toLocaleString()}`, sub: `${pct(reg.accepted, reg.expected)} of target` },
-    { label: 'Registrations/s', value: regRate === null ? '—' : Math.round(regRate).toLocaleString(), unit: '/s', sub: regRate === null ? 'not started' : `average over ${formatClock(reg.totalTimeMs / 1000)}` },
+    { label: 'Registrations/s', value: regNow === null ? '—' : Math.round(regNow).toLocaleString(), unit: '/s', sub: reg.done ? 'registration finished' : regNow === null ? (s.setup ? 'not started' : 'not reported by this tester') : 'last second' },
+    { label: 'Avg registrations/s', value: regRate === null ? '—' : Math.round(regRate).toLocaleString(), unit: '/s', sub: regRate === null ? 'not started' : `over ${formatClock(reg.totalTimeMs / 1000)}` },
     { label: 'PDU sessions', value: s.ues.established.toLocaleString(), unit: 'active', sub: `${pct(s.ues.established, reg.accepted)} of registered` },
     { label: 'Failures', value: failures.toLocaleString(), unit: 'total', sub: `${pct(failures, attempts)} of attempts`, bad: failures > 0 },
   ]
@@ -648,6 +666,19 @@ function RunBody({ s, gnbPage, gnbStates, onGnbs: showGnbs }: RunBodyProps) {
           </div>
         ))}
       </section>
+
+      {s.setup && (
+        <section className={styles.panel}>
+          <div className={styles.panelHead}>
+            <h2 className={styles.panelTitle}>Setup rate</h2>
+            <span className={styles.legendKey}><i className={styles.keyDl} />Registrations/s</span>
+            <span className={styles.legendKey}><i className={styles.keyDereg} style={{ background: 'repeating-linear-gradient(90deg, var(--violet) 0 0.25rem, transparent 0.25rem 0.4375rem)' }} />PDU sessions/s</span>
+            <span className={styles.legendKey}><i className={styles.keyFail} />Failed/s</span>
+            <span className={styles.panelNote}>{lastSetup && reg.done && s.pdu.done ? `until ${clock(lastSetup.t)}` : 'per second'}</span>
+          </div>
+          <RateChart series={setup} lines={SETUP_LINES} label="Registrations and PDU sessions per second over the run" empty="The chart starts after two seconds of the run." />
+        </section>
+      )}
 
       <section className={styles.split}>
         <div className={`${styles.panel} ${styles.span2}`}>

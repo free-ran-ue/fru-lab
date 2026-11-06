@@ -660,6 +660,10 @@ export interface TesterRunSnapshot {
     'dataplane': TesterDataplaneSnapshot;
     'cpus': TesterCpuAllocation;
     'cpLoop': TesterCpLoopSnapshot;
+    /**
+     * Registrations and PDU sessions per second from the start of the run until both stages are done, in at most 600 points (like the data plane\'s). Absent from testers older than this field.
+     */
+    'setup'?: Array<TesterSetupPoint>;
 }
 
 export const TesterRunSnapshotStateEnum = {
@@ -684,6 +688,24 @@ export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReason
 /**
  * One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
  */
+export interface TesterSetupPoint {
+    /**
+     * Seconds since the run started.
+     */
+    't': number;
+    /**
+     * Registrations accepted.
+     */
+    'regPerSec': number;
+    /**
+     * PDU sessions established.
+     */
+    'pduPerSec': number;
+    /**
+     * Registrations and PDU sessions that finally failed.
+     */
+    'failPerSec': number;
+}
 export interface TesterStageSnapshot {
     'name': string;
     'expected': number;

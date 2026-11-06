@@ -66,7 +66,7 @@ type cpLoop struct {
 	stoppedAt  time.Time
 	registered int
 	cycles     int64
-	history    cpHistory
+	history    rateCurve[CpPoint]
 }
 
 // cpHistoryMax bounds the curve like the data plane's (600 points).
@@ -78,7 +78,7 @@ func newCpLoop(r *run) *cpLoop {
 		reg:   metrics.NewStage("cpRegistration", 0),
 		dereg: metrics.NewStage("cpDeregistration", 0),
 	}
-	l.history.max, l.history.width = cpHistoryMax, 1
+	l.history = newRateCurve[CpPoint](cpHistoryMax)
 	for i, u := range r.plan.Ues {
 		if u.Cp {
 			l.ues = append(l.ues, i)
@@ -289,45 +289,10 @@ func (r *run) cpIdle(i int, cycled bool) bool {
 	return r.ctx.Err() == nil
 }
 
-// cpHistory keeps the loop's whole rate curve in at most max points,
-// halving the resolution each time it fills, like the data plane's.
-type cpHistory struct {
-	max, width int
-	done       []CpPoint
-	sum        CpPoint
-	filled     int
+func (p CpPoint) plus(o CpPoint) CpPoint {
+	return CpPoint{T: o.T, RegPerSec: p.RegPerSec + o.RegPerSec, DeregPerSec: p.DeregPerSec + o.DeregPerSec, FailPerSec: p.FailPerSec + o.FailPerSec}
 }
 
-func (h *cpHistory) add(p CpPoint) {
-	h.sum = CpPoint{T: p.T, RegPerSec: h.sum.RegPerSec + p.RegPerSec,
-		DeregPerSec: h.sum.DeregPerSec + p.DeregPerSec, FailPerSec: h.sum.FailPerSec + p.FailPerSec}
-	h.filled++
-	if h.filled < h.width {
-		return
-	}
-	h.done = append(h.done, h.average())
-	h.sum, h.filled = CpPoint{}, 0
-	if len(h.done) < h.max {
-		return
-	}
-	for i := range len(h.done) / 2 {
-		a, b := h.done[2*i], h.done[2*i+1]
-		h.done[i] = CpPoint{T: b.T, RegPerSec: (a.RegPerSec + b.RegPerSec) / 2,
-			DeregPerSec: (a.DeregPerSec + b.DeregPerSec) / 2, FailPerSec: (a.FailPerSec + b.FailPerSec) / 2}
-	}
-	h.done = h.done[:len(h.done)/2]
-	h.width *= 2
-}
-
-func (h *cpHistory) average() CpPoint {
-	n := float64(h.filled)
-	return CpPoint{T: h.sum.T, RegPerSec: h.sum.RegPerSec / n, DeregPerSec: h.sum.DeregPerSec / n, FailPerSec: h.sum.FailPerSec / n}
-}
-
-func (h *cpHistory) points() []CpPoint {
-	out := append(make([]CpPoint, 0, len(h.done)+1), h.done...)
-	if h.filled > 0 {
-		out = append(out, h.average())
-	}
-	return out
+func (p CpPoint) div(n float64) CpPoint {
+	return CpPoint{T: p.T, RegPerSec: p.RegPerSec / n, DeregPerSec: p.DeregPerSec / n, FailPerSec: p.FailPerSec / n}
 }
