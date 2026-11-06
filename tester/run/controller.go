@@ -368,6 +368,7 @@ type run struct {
 	errMsg     string
 	startedAt  time.Time
 	stoppedAt  time.Time
+	setup      setupCurve // registrations and PDU sessions per second
 	gnbs       []GnbStatus
 	conns      []gnb.Conn
 	assocs     []*gnb.Association
@@ -432,6 +433,7 @@ func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify 
 		done:      make(chan struct{}),
 		st:        StateConfiguring,
 		startedAt: deps.Now(),
+		setup:     setupCurve{curve: newRateCurve[SetupPoint](setupHistoryMax)},
 		gnbs:      make([]GnbStatus, len(plan.Gnbs)),
 		conns:     make([]gnb.Conn, len(plan.Gnbs)),
 		assocs:    make([]*gnb.Association, len(plan.Gnbs)),
@@ -511,6 +513,7 @@ func (r *run) snapshotPage(q GnbPage) Snapshot {
 		Gnbs: gnbs, GnbTotal: total, GnbOffset: min(q.Offset, total), GnbCounts: counts,
 		Ues:    r.summary,
 		CpLoop: r.cp.snapshot(r.deps.Now()),
+		Setup:  r.setup.points(),
 		Cpus:   r.cpus,
 		// copy into a non-nil slice: an empty list must encode as [] (the
 		// Run page reads failedUes.length; null blanked it)
@@ -569,7 +572,8 @@ func (r *run) execute() {
 
 	var pipelines sync.WaitGroup
 	if r.ctx.Err() == nil { // Stop may arrive while IPs are being added
-		pipelines.Add(2)
+		pipelines.Add(3)
+		go func() { defer pipelines.Done(); r.sampleSetup() }()
 		go func() { defer pipelines.Done(); r.regStage.run(r.ctx) }()
 		go func() { defer pipelines.Done(); r.pduStage.run(r.ctx) }()
 		r.setState(StateN2)

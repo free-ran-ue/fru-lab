@@ -169,7 +169,12 @@ type reportSnapshot struct {
 		Series []reportPoint `json:"series"`
 	} `json:"dataplane"`
 	CpLoop reportCpLoop `json:"cpLoop"`
-	Cpus   struct {
+	// Setup is registrations and PDU sessions per second while the run
+	// set up (absent in older reports).
+	Setup []struct {
+		T, RegPerSec, PduPerSec, FailPerSec float64
+	} `json:"setup"`
+	Cpus struct {
 		CpCpus string `json:"cpCpus"`
 		DpCpus string `json:"dpCpus"`
 	} `json:"cpus"`
@@ -193,10 +198,14 @@ type reportView struct {
 	TrafficTime string
 	Stages      []reportStage
 	Directions  []reportDirection
-	UeStates    []reportSetting
-	Settings    []reportSettingGroup
-	Generated   string
-	Raw         json.RawMessage
+	// accepted registrations and PDU sessions over their stage's total
+	// time, the setup curve's highest point, and the total time
+	RegAvg, RegPeak, PduAvg, PduPeak float64
+	RegTime, PduTime                 string
+	UeStates                         []reportSetting
+	Settings                         []reportSettingGroup
+	Generated                        string
+	Raw                              json.RawMessage
 }
 
 // renderTesterReport turns one stored run report into the HTML report.
@@ -278,6 +287,13 @@ func newReportView(s reportSnapshot, profile json.RawMessage, now time.Time) rep
 		}
 	}
 
+	v.RegAvg, v.RegTime = stageRate(s.Registration)
+	v.PduAvg, v.PduTime = stageRate(s.Pdu)
+	for _, p := range s.Setup {
+		v.RegPeak = math.Max(v.RegPeak, p.RegPerSec)
+		v.PduPeak = math.Max(v.PduPeak, p.PduPerSec)
+	}
+
 	u := s.Ues
 	for _, kv := range []struct {
 		k string
@@ -308,6 +324,15 @@ func newReportView(s reportSnapshot, profile json.RawMessage, now time.Time) rep
 
 	v.Settings = profileSettings(profile)
 	return v
+}
+
+// stageRate is a stage's accepted items per second over its total time,
+// and that time; zero and "" before the stage started.
+func stageRate(st reportStage) (float64, string) {
+	if st.TotalTimeMs <= 0 {
+		return 0, ""
+	}
+	return float64(st.Accepted) / (st.TotalTimeMs / 1000), formatDuration(st.TotalTimeMs / 1000)
 }
 
 // profileSettings flattens the profile into titled groups of key/value

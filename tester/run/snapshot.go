@@ -156,6 +156,10 @@ type Snapshot struct {
 	Ues       UeSummary        `json:"ues"`
 	FailedUes []UeFailure      `json:"failedUes"` // first maxFailuresListed failures
 	CpLoop    CpLoopSnapshot   `json:"cpLoop"`
+	// Setup is registrations and PDU sessions per second from the start
+	// of the run until both stages are done (at most 600 points; later
+	// points average 2, 4, 8 … seconds).
+	Setup []SetupPoint `json:"setup"`
 	// Cpus is the CPU allocation the run used (empty lists: not pinned).
 	Cpus      cpuset.Allocation  `json:"cpus"`
 	Dataplane dataplane.Snapshot `json:"dataplane"`
