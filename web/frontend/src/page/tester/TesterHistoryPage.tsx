@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AppLayout from '../../components/layout/AppLayout'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -8,6 +8,14 @@ import { formatBps, formatBits, formatLoss, formatMs } from './testerFormat'
 import { useTesters } from './useTesters'
 import styles from './history.module.css'
 import { pageOf } from '../../components/pager/paging'
+import Modal from '../../components/modal/modal'
+
+// RUN_NAME_MAX is the longest name a run can have (the backend's limit).
+const RUN_NAME_MAX = 80
+
+// runLabel is what the Run column shows: the user's name, else the run ID
+// (its start date and time).
+const runLabel = (r: TesterHistorySummary) => r.name || r.runId
 
 // HISTORY_PAGE is how many runs one page of the history shows.
 const HISTORY_PAGE = 20
@@ -83,7 +91,7 @@ function save(blob: Blob, name: string) {
 }
 
 export default function TesterHistoryPage() {
-  const { errors, successes, addError, removeNotification } = useNotifications()
+  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
   const [runs, setRuns] = useState<TesterHistorySummary[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [comparing, setComparing] = useState(false)
@@ -95,15 +103,59 @@ export default function TesterHistoryPage() {
   // the tester's name when the run was stored, else its name now
   const testerName = (r: TesterHistorySummary) => r.testerName || testers?.find((t) => t.id === r.testerId)?.name || r.testerId
   const [page, setPage] = useState(1)
+  // the runs waiting for the delete confirmation
+  const [toDelete, setToDelete] = useState<TesterHistorySummary[] | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  // the run being renamed, and the name typed so far
+  const [editing, setEditing] = useState<{ id: string, name: string } | null>(null)
+  const [isRenaming, setIsRenaming] = useState(false)
 
-  useEffect(() => {
-    api.testerHistoryList()
-      .then((response) => setRuns(response.data))
-      .catch((error) => addError(extractErrorMessage(error, 'Failed to load the run history')))
-  }, [addError])
+  const refresh = useCallback(() => api.testerHistoryList()
+    .then((response) => {
+      setRuns(response.data)
+      // forget selections of runs that are gone
+      setSelected((cur) => cur.filter((id) => response.data.some((r) => r.id === id)))
+    })
+    .catch((error) => addError(extractErrorMessage(error, 'Failed to load the run history'))), [addError])
 
-  // toggle keeps at most two runs selected: picking a third drops the oldest pick.
-  const toggle = (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(-2)))
+  useEffect(() => { void refresh() }, [refresh])
+
+  const toggle = (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+
+  const handleDelete = async () => {
+    if (!toDelete) return
+    setIsDeleting(true)
+    try {
+      await api.testerHistoryDelete({ ids: toDelete.map((r) => r.id) })
+      addSuccess(toDelete.length === 1 ? `Deleted run ${runLabel(toDelete[0])}` : `Deleted ${toDelete.length} runs`)
+      setToDelete(null)
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to delete the runs'))
+    } finally {
+      setIsDeleting(false)
+      void refresh()
+    }
+  }
+
+  // rename saves the name being typed; an empty name goes back to the run ID
+  const rename = async () => {
+    if (!editing || isRenaming) return
+    const r = runs?.find((x) => x.id === editing.id)
+    // the run ID itself is the default, not a name
+    const typed = editing.name.trim()
+    const name = typed === r?.runId ? '' : typed
+    if (!r || name === r.name) { setEditing(null); return }
+    setIsRenaming(true)
+    try {
+      const response = await api.testerHistoryRename(r.id, { name })
+      setRuns((cur) => cur?.map((x) => (x.id === r.id ? response.data : x)) ?? null)
+      setEditing(null)
+    } catch (error) {
+      addError(extractErrorMessage(error, `Failed to rename run ${r.runId}`))
+    } finally {
+      setIsRenaming(false)
+    }
+  }
 
   // report fetches a run's HTML report (the API needs the JWT header, so
   // a plain link cannot) and opens it in a new tab or saves it.
@@ -137,7 +189,7 @@ export default function TesterHistoryPage() {
   const testerIds = [...new Set((runs ?? []).map((r) => r.testerId))]
   const q = query.trim().toLowerCase()
   const filtered = (runs ?? []).filter((r) =>
-    (q === '' || r.runId.toLowerCase().includes(q) || r.profileName.toLowerCase().includes(q))
+    (q === '' || r.runId.toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.profileName.toLowerCase().includes(q))
     && (testerFilter === '' || r.testerId === testerFilter)
     && (resultFilter === '' || resultOf(r) === resultFilter))
 
@@ -155,8 +207,12 @@ export default function TesterHistoryPage() {
       overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
       <section className={styles.head}>
         <h1 className={styles.title}>History</h1>
-        <span className={styles.sub}>The last 50 finished runs from every tester. Tick two to compare them; View opens a run&apos;s report, Download saves it as one offline HTML file.</span>
+        <span className={styles.sub}>The last 50 finished runs from every tester. Tick two to compare them, or tick any to delete them; the pencil renames a run. View opens a run&apos;s report, Download saves it as one offline HTML file.</span>
         <div className={styles.headActions}>
+          <button type="button" className={`${styles.btn} ${styles.btnDanger}`} disabled={selected.length === 0}
+            onClick={() => setToDelete((runs ?? []).filter((r) => selected.includes(r.id)))}>
+            {selected.length > 0 ? `Delete ${selected.length} selected` : 'Delete selected'}
+          </button>
           <button type="button" className={`${styles.btn} ${styles.btnP}`} onClick={() => setComparing((c) => !c)} disabled={selected.length !== 2}>
             {showCompare ? 'Hide comparison' : 'Compare 2 runs'}
           </button>
@@ -167,9 +223,10 @@ export default function TesterHistoryPage() {
         <div className={styles.ph}>
           <h2>Runs</h2>
           <span className={`${styles.aux} ${styles.mono}`}>{runs === null ? 'loading…' : `${runs.length} runs · ${selected.length} selected`}</span>
+          {selected.length > 0 && <button type="button" className={styles.lnk} onClick={() => setSelected([])}>Clear selection</button>}
         </div>
         <div className={styles.toolbar}>
-          <input className={`${styles.inp} ${styles.search}`} aria-label="Search runs" placeholder="Search run ID or profile"
+          <input className={`${styles.inp} ${styles.search}`} aria-label="Search runs" placeholder="Search run name, ID or profile"
             value={query} onChange={(e) => setQuery(e.target.value)} />
           <select className={styles.inp} aria-label="Tester" value={testerFilter} onChange={(e) => setTesterFilter(e.target.value)}>
             <option value="">All testers</option>
@@ -194,7 +251,14 @@ export default function TesterHistoryPage() {
             <table className={`${styles.tbl} ${styles.runsTbl}`}>
               <thead>
                 <tr>
-                  <th className={styles.c}><span className={styles.srOnly}>Compare</span></th>
+                  <th className={styles.c}>
+                    <input type="checkbox" className={styles.ck} aria-label="Select every run on this page"
+                      checked={shown.items.length > 0 && shown.items.every((r) => selected.includes(r.id))}
+                      onChange={(e) => {
+                        const ids = shown.items.map((r) => r.id)
+                        setSelected((cur) => (e.target.checked ? [...cur, ...ids.filter((id) => !cur.includes(id))] : cur.filter((id) => !ids.includes(id))))
+                      }} />
+                  </th>
                   <th>Started</th><th>Run</th><th>Profile</th><th>Tester</th><th>Result</th><th>Report</th>
                   {METRICS.map(([label]) => <th key={label} className={styles.r}>{label}</th>)}
                 </tr>
@@ -206,11 +270,31 @@ export default function TesterHistoryPage() {
                   return (
                     <tr key={r.id} className={sel ? styles.sel : undefined}>
                       <td className={styles.c}>
-                        <input type="checkbox" className={styles.ck} aria-label={`Compare run ${r.runId}`}
+                        <input type="checkbox" className={styles.ck} aria-label={`Select run ${runLabel(r)}`}
                           checked={sel} onChange={() => toggle(r.id)} />
                       </td>
                       <td className={`${styles.mono} ${styles.dim}`}>{started(r)}</td>
-                      <td className={styles.mono}>{r.runId}</td>
+                      <td>
+                        {editing?.id === r.id ? (
+                          <form className={styles.rename} onSubmit={(e) => { e.preventDefault(); void rename() }}>
+                            <input className={styles.inp} autoFocus onFocus={(e) => e.target.select()} aria-label={`Name of run ${r.runId}`} placeholder={r.runId}
+                              maxLength={RUN_NAME_MAX} value={editing.name} disabled={isRenaming}
+                              onChange={(e) => setEditing({ id: r.id, name: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null) }} />
+                            <button type="submit" className={styles.lnk} disabled={isRenaming}>Save</button>
+                            <button type="button" className={styles.lnk} onClick={() => setEditing(null)}>Cancel</button>
+                          </form>
+                        ) : (
+                          <span className={styles.runName}>
+                            <span className={r.name ? undefined : styles.mono} title={r.name ? `Run ${r.runId}` : undefined}>{runLabel(r)}</span>
+                            <button type="button" className={styles.pen} aria-label={`Rename run ${runLabel(r)}`} title="Rename"
+                              onClick={() => setEditing({ id: r.id, name: runLabel(r) })}>
+                              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M11.5 2.5l2 2L6 12l-2.75.75L4 10z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+                            </button>
+                          </span>
+                        )}
+                        {r.name && editing?.id !== r.id && <div className={`${styles.mono} ${styles.dim} ${styles.runSub}`}>{r.runId}</div>}
+                      </td>
                       <td>{r.profileName}</td>
                       <td><span className={styles.swatch}><i style={{ background: colorOf(r.testerId) }} />{testerName(r)}</span></td>
                       <td><span className={`${styles.tag} ${tone}`} title={r.error || undefined}><i />{label}</span></td>
@@ -254,7 +338,7 @@ export default function TesterHistoryPage() {
                     <th key={r.id} className={styles.r}>
                       <span className={styles.legend}><i style={{ background: COMPARE_COLORS[i] }} /><span className={styles.mono}>{started(r)}</span></span>
                       <br />
-                      <span className={styles.colSub}><span className={styles.mono}>{r.runId}</span> · {r.profileName} · {testerName(r)}</span>
+                      <span className={styles.colSub}>{r.name && <>{r.name} · </>}<span className={styles.mono}>{r.runId}</span> · {r.profileName} · {testerName(r)}</span>
                     </th>
                   ))}
                 </tr>
@@ -271,6 +355,22 @@ export default function TesterHistoryPage() {
           </div>
         </section>
       )}
+
+      <Modal
+        isOpen={toDelete !== null}
+        onClose={() => { if (!isDeleting) setToDelete(null) }}
+        title={toDelete?.length === 1 ? 'Delete run' : 'Delete runs'}
+        onSubmit={() => { void handleDelete() }}
+        submitLabel={isDeleting ? 'Deleting…' : 'Delete'}
+        submitDisabled={isDeleting}
+      >
+        <p className={styles.modalText}>
+          {toDelete?.length === 1
+            ? <>Delete run <strong>{runLabel(toDelete[0])}</strong> ({toDelete[0].profileName}, {testerName(toDelete[0])}) from the history?</>
+            : <>Delete <strong>{toDelete?.length}</strong> runs ({toDelete?.slice(0, 3).map(runLabel).join(', ')}{(toDelete?.length ?? 0) > 3 && ', …'}) from the history?</>}
+          {' '}Their reports go too, and a tester that still keeps them will not bring them back. This cannot be undone.
+        </p>
+      </Modal>
     </AppLayout>
   )
 }

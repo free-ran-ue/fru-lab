@@ -26,6 +26,7 @@ Name | Type | Description | Notes
 **dataplane** | [**TesterDataplaneSnapshot**](TesterDataplaneSnapshot.md) |  | [default to undefined]
 **cpus** | [**TesterCpuAllocation**](TesterCpuAllocation.md) |  | [default to undefined]
 **cpLoop** | [**TesterCpLoopSnapshot**](TesterCpLoopSnapshot.md) |  | [default to undefined]
+**setup** | [**Array&lt;TesterSetupPoint&gt;**](TesterSetupPoint.md) | Registrations and PDU sessions per second from the start of the run until both stages are done, in at most 600 points (like the data plane\&#39;s). Absent from testers older than this field. | [optional] [default to undefined]
 
 ## Example
 
@@ -54,6 +55,7 @@ const instance: TesterRunSnapshot = {
     dataplane,
     cpus,
     cpLoop,
+    setup,
 };
 ```
 

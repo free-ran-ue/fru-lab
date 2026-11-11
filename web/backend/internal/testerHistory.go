@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	loggergoModel "github.com/Alonza0314/logger-go/v2/model"
 	"github.com/gin-gonic/gin"
@@ -28,7 +29,13 @@ type testerRunStore interface {
 	SaveTesterRun(runID string, report []byte, keep int) (bool, error)
 	ListTesterRuns() ([]flctx.KV, error)
 	GetTesterRun(runID string) ([]byte, error)
+	TesterRunDeleted(runID string) (bool, error)
+	DeleteTesterRuns(runIDs []string) error
+	UpdateTesterRun(runID string, edit func([]byte) ([]byte, error)) (bool, error)
 }
+
+// testerRunNameMax bounds a run's name, in characters.
+const testerRunNameMax = 80
 
 // testerHistoryWatcher copies each finished run from every tester into
 // fru-lab's DB. A tester keeps its last few finished runs; fru-lab polls
@@ -69,6 +76,25 @@ func withTester(raw []byte, t storedTester) ([]byte, error) {
 		return nil, err
 	}
 	obj["tester"] = b
+	return json.Marshal(obj)
+}
+
+// withName sets the user's name for a stored run; "" removes it, so the
+// run shows its run ID again.
+func withName(raw []byte, name string) ([]byte, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	if name == "" {
+		delete(obj, "name")
+		return json.Marshal(obj)
+	}
+	b, err := json.Marshal(name)
+	if err != nil {
+		return nil, err
+	}
+	obj["name"] = b
 	return json.Marshal(obj)
 }
 
@@ -132,6 +158,11 @@ func (w *testerHistoryWatcher) pollTester(ctx context.Context, t *testerTarget) 
 		} else if old != nil {
 			continue
 		}
+		if deleted, err := w.store.TesterRunDeleted(key); err != nil {
+			return err
+		} else if deleted {
+			continue
+		}
 		// the name it reports now; the id if it does not say
 		name, err := w.testers.probe(ctx, t.url, t.token)
 		if err != nil || name == "" {
@@ -159,6 +190,7 @@ type testerHistorySummary struct {
 	ID                string     `json:"id"`
 	TesterID          string     `json:"testerId"`
 	TesterName        string     `json:"testerName"` // as it was when the run was stored; "" for older runs
+	Name              string     `json:"name"`       // the user's name for the run; "" shows the run ID
 	RunID             string     `json:"runId"`
 	ProfileName       string     `json:"profileName"`
 	State             string     `json:"state"`
@@ -195,6 +227,7 @@ type storedDirection struct {
 // storedReport is the part of fru-tester's report the history reads.
 type storedReport struct {
 	Tester   *storedTester `json:"tester"` // absent: the default tester, stored before testers could be added
+	Name     string        `json:"name"`   // set by renaming the run in the history
 	Snapshot struct {
 		RunID          string      `json:"runId"`
 		ProfileName    string      `json:"profileName"`
@@ -225,7 +258,7 @@ func summarize(key string, raw []byte) (testerHistorySummary, error) {
 	}
 	s, dp := r.Snapshot, r.Snapshot.Dataplane
 	return testerHistorySummary{
-		ID: key, TesterID: tester.ID, TesterName: tester.Name,
+		ID: key, TesterID: tester.ID, TesterName: tester.Name, Name: r.Name,
 		RunID: s.RunID, ProfileName: s.ProfileName, State: s.State, Error: s.Error, StopReason: s.StopReason,
 		StartedAt: s.StartedAt, StoppedAt: s.StoppedAt, GnbCount: s.N2.Expected, UeCount: s.Registration.Expected,
 		Registered: s.Registration.Accepted, RegistrationP95Ms: s.Registration.P95Ms,
@@ -252,6 +285,51 @@ func addTesterHistoryRoutes(group *gin.RouterGroup, store testerRunStore) {
 			}
 		}
 		c.JSON(http.StatusOK, out)
+	})
+	group.DELETE("/tester/history", func(c *gin.Context) {
+		var req struct {
+			IDs []string `json:"ids"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+			c.JSON(http.StatusBadRequest, model.ResponseTesterAction{Message: "List the runs to delete"})
+			return
+		}
+		if err := store.DeleteTesterRuns(req.IDs); err != nil {
+			c.JSON(http.StatusInternalServerError, model.ResponseTesterAction{Message: "Failed to delete the runs"})
+			return
+		}
+		c.JSON(http.StatusOK, model.ResponseTesterAction{Message: fmt.Sprintf("Deleted %d runs", len(req.IDs))})
+	})
+	group.PATCH("/tester/history/:runId", func(c *gin.Context) {
+		var req struct {
+			Name *string `json:"name"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.Name == nil {
+			c.JSON(http.StatusBadRequest, model.ResponseTesterAction{Message: "Give the run a name"})
+			return
+		}
+		name := strings.TrimSpace(*req.Name)
+		if utf8.RuneCountInString(name) > testerRunNameMax {
+			c.JSON(http.StatusBadRequest, model.ResponseTesterAction{Message: fmt.Sprintf("A run's name is at most %d characters", testerRunNameMax)})
+			return
+		}
+		var summary testerHistorySummary
+		found, err := store.UpdateTesterRun(c.Param("runId"), func(raw []byte) ([]byte, error) {
+			out, err := withName(raw, name)
+			if err != nil {
+				return nil, err
+			}
+			summary, err = summarize(c.Param("runId"), out)
+			return out, err
+		})
+		switch {
+		case err != nil:
+			c.JSON(http.StatusInternalServerError, model.ResponseTesterAction{Message: "Failed to rename the run"})
+		case !found:
+			c.JSON(http.StatusNotFound, model.ResponseTesterAction{Message: "No such run in the history"})
+		default:
+			c.JSON(http.StatusOK, summary)
+		}
 	})
 	group.GET("/tester/history/:runId", func(c *gin.Context) {
 		raw, ok := storedRun(c, store)

@@ -101,3 +101,44 @@ func TestTesterRunsStoreOnceAndKeepNewest(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A deleted run is gone and is not stored again when its tester still
+// reports it; renaming edits the stored report, and a missing run is
+// not found.
+func TestTesterRunsDeleteAndUpdate(t *testing.T) {
+	db, err := newBboltDb(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Release() }()
+	d := &dbContext{db: db}
+	for _, id := range []string{"run-1", "run-2"} {
+		if _, err := d.SaveTesterRun(id, []byte(`{}`), 50); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := d.DeleteTesterRuns([]string{"run-1", "never-stored"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := d.GetTesterRun("run-1"); got != nil {
+		t.Fatalf("deleted run still there: %s", got)
+	}
+	if deleted, _ := d.TesterRunDeleted("run-1"); !deleted {
+		t.Fatal("run-1 must be remembered as deleted")
+	}
+	if saved, _ := d.SaveTesterRun("run-1", []byte(`{}`), 50); saved {
+		t.Fatal("a deleted run must not be stored again")
+	}
+
+	found, err := d.UpdateTesterRun("run-2", func(raw []byte) ([]byte, error) { return []byte(`{"name":"x"}`), nil })
+	if err != nil || !found {
+		t.Fatalf("update: %v, %v", found, err)
+	}
+	if got, _ := d.GetTesterRun("run-2"); string(got) != `{"name":"x"}` {
+		t.Fatalf("after update %s", got)
+	}
+	if found, err := d.UpdateTesterRun("run-1", func(raw []byte) ([]byte, error) { return raw, nil }); found || err != nil {
+		t.Fatalf("update of a deleted run: %v, %v", found, err)
+	}
+}

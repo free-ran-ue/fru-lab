@@ -8,6 +8,7 @@ Name | Type | Description | Notes
 **id** | **string** | Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester\&#39;s runs; the run ID, \&quot;@\&quot; and the tester\&#39;s id for another tester\&#39;s. | [default to undefined]
 **testerId** | **string** | The tester that ran it (\&quot;default\&quot; for the one in config.yaml, and for runs stored before testers could be added). | [default to undefined]
 **testerName** | **string** | That tester\&#39;s name when the run was stored; empty for runs stored before testers could be added. | [default to undefined]
+**name** | **string** | The name the user gave the run in the History page; empty shows the run ID. | [default to undefined]
 **runId** | **string** |  | [default to undefined]
 **profileName** | **string** |  | [default to undefined]
 **state** | **string** |  | [default to undefined]
@@ -37,6 +38,7 @@ const instance: TesterHistorySummary = {
     id,
     testerId,
     testerName,
+    name,
     runId,
     profileName,
     state,

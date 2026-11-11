@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.S.ProfileName}} · {{.S.RunID}} · Throughput Tester report</title>
+<title>{{if .Name}}{{.Name}} · {{end}}{{.S.ProfileName}} · {{.S.RunID}} · Throughput Tester report</title>
 <style>
 :root {
   --bg: #f6f7fb; --paper: #ffffff; --ink: #0f172a; --ink-2: #475569; --ink-3: #94a3b8;
@@ -108,6 +108,7 @@ section { scroll-margin-top: 12px; }
   <div class="eyebrow">fru-lab · Throughput Tester report</div>
   <h1 style="margin-top:8px">{{.S.ProfileName}} <span class="pill {{.ResultClass}}">{{.Result}}</span></h1>
   <div class="meta">
+    {{if .Name}}<span>Name <b>{{.Name}}</b></span>{{end}}
     <span>Run <b class="mono">{{.S.RunID}}</b></span>
     {{if .Tester}}<span>Tester <b>{{.Tester}}</b></span>{{end}}
     <span>Started <b><time datetime="{{if .S.StartedAt}}{{.S.StartedAt.Format "2006-01-02T15:04:05Z07:00"}}{{end}}">{{time .S.StartedAt}}</time></b></span>
