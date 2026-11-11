@@ -16,6 +16,8 @@
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btnP { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
 .btnP:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btnDanger { border-color: var(--bad); background: var(--bad); color: var(--surface); }
+.btnDanger:hover:not(:disabled) { background: var(--bad-ink); border-color: var(--bad-ink); color: var(--surface); }
 
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; scroll-margin-top: 1rem; }
 .ph {
@@ -87,3 +89,18 @@
 .pager .btn { height: 1.625rem; padding: 0 0.625rem; font-size: 0.75rem; }
 
 .empty { margin: 0; padding: 0.875rem; font-size: 0.8125rem; color: var(--muted); }
+
+/* the Run column: the run's name and its rename pencil */
+.runName { display: inline-flex; align-items: center; gap: 0.375rem; }
+.pen {
+  display: inline-flex; align-items: center; justify-content: center; width: 1.375rem; height: 1.375rem; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; opacity: 0.55;
+}
+.tbl tr:hover .pen, .pen:focus-visible { opacity: 1; }
+.pen:hover { color: var(--accent); background: var(--accent-soft); }
+.runSub { font-size: 0.6875rem; margin-top: 0.125rem; }
+.rename { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0; }
+.rename .inp { width: 14rem; height: 1.625rem; }
+.lnk:disabled { opacity: 0.5; cursor: default; }
+
+.modalText { margin: 0 0 0.75rem; font-size: 0.875rem; color: var(--ink-2); }

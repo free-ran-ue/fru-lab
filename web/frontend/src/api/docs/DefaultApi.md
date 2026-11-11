@@ -40,8 +40,10 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**testerByIdRunStop**](#testerbyidrunstop) | **POST** /api/testers/{id}/run/stop | Stop the active run on one tester|
 |[**testerByIdStatus**](#testerbyidstatus) | **GET** /api/testers/{id}/status | One tester\&#39;s host and process|
 |[**testerByIdSystem**](#testerbyidsystem) | **GET** /api/testers/{id}/system | One tester\&#39;s CPU allocation and layout|
+|[**testerHistoryDelete**](#testerhistorydelete) | **DELETE** /api/tester/history | Delete finished runs from the history|
 |[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON)|
 |[**testerHistoryList**](#testerhistorylist) | **GET** /api/tester/history | Finished runs, newest first|
+|[**testerHistoryRename**](#testerhistoryrename) | **PATCH** /api/tester/history/{runId} | Rename a finished run|
 |[**testerHistoryReportHtml**](#testerhistoryreporthtml) | **GET** /api/tester/history/{runId}/report.html | One finished run\&#39;s report as a self-contained HTML page|
 |[**testerNetworkInterfaces**](#testernetworkinterfaces) | **GET** /api/tester/network/interfaces | Interfaces on fru-tester\&#39;s host|
 |[**testerNetworkPing**](#testernetworkping) | **POST** /api/tester/network/ping | Ping test of one network|
@@ -1949,6 +1951,59 @@ const { status, data } = await apiInstance.testerByIdSystem(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **testerHistoryDelete**
+> MessageResponse testerHistoryDelete(testerHistoryDeleteRequest)
+
+fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterHistoryDeleteRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let testerHistoryDeleteRequest: TesterHistoryDeleteRequest; //
+
+const { status, data } = await apiInstance.testerHistoryDelete(
+    testerHistoryDeleteRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerHistoryDeleteRequest** | **TesterHistoryDeleteRequest**|  | |
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | Deleted |  -  |
+|**400** | No run listed |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **testerHistoryGet**
 > TesterRunReport testerHistoryGet()
 
@@ -2041,6 +2096,62 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **testerHistoryRename**
+> TesterHistorySummary testerHistoryRename(testerHistoryRenameRequest)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    TesterHistoryRenameRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let runId: string; //The run\'s id from the history list (TesterHistorySummary.id). (default to undefined)
+let testerHistoryRenameRequest: TesterHistoryRenameRequest; //
+
+const { status, data } = await apiInstance.testerHistoryRename(
+    runId,
+    testerHistoryRenameRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **testerHistoryRenameRequest** | **TesterHistoryRenameRequest**|  | |
+| **runId** | [**string**] | The run\&#39;s id from the history list (TesterHistorySummary.id). | defaults to undefined|
+
+
+### Return type
+
+**TesterHistorySummary**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The run\&#39;s updated history row |  -  |
+|**400** | No name, or a name longer than 80 characters |  -  |
+|**404** | No such run |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

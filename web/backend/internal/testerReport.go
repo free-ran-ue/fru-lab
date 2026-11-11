@@ -192,6 +192,7 @@ type reportSettingGroup struct {
 type reportView struct {
 	S           reportSnapshot
 	Tester      string // the tester that ran it; "" for runs stored before that was kept
+	Name        string // the user's name for the run; "" if not renamed
 	Result      string
 	ResultClass string // ok, bad or muted
 	Duration    string
@@ -214,6 +215,7 @@ func renderTesterReport(raw []byte, now time.Time) ([]byte, error) {
 		Profile  json.RawMessage `json:"profile"`
 		Snapshot reportSnapshot  `json:"snapshot"`
 		Tester   *storedTester   `json:"tester"`
+		Name     string          `json:"name"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return nil, err
@@ -222,6 +224,7 @@ func renderTesterReport(raw []byte, now time.Time) ([]byte, error) {
 	if r.Tester != nil {
 		v.Tester = r.Tester.Name
 	}
+	v.Name = r.Name
 	v.Raw = raw
 	var b bytes.Buffer
 	if err := testerReportTmpl.Execute(&b, v); err != nil {

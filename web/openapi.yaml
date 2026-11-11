@@ -1635,7 +1635,83 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TesterHistorySummary'
+    delete:
+      summary: Delete finished runs from the history
+      description: fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
+      operationId: testerHistoryDelete
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                  description: The runs' ids from the history list (TesterHistorySummary.id).
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: No run listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/tester/history/{runId}:
+    patch:
+      summary: Rename a finished run
+      operationId: testerHistoryRename
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: The run's id from the history list (TesterHistorySummary.id).
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 80
+                  description: The new name, trimmed; empty goes back to showing the run ID.
+      responses:
+        '200':
+          description: The run's updated history row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TesterHistorySummary'
+        '400':
+          description: No name, or a name longer than 80 characters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
     get:
       summary: One finished run's full report (JSON)
       operationId: testerHistoryGet
@@ -2892,7 +2968,7 @@ components:
           $ref: '#/components/schemas/TesterRunSnapshot'
     TesterHistorySummary:
       type: object
-      required: [id, testerId, testerName, runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
+      required: [id, testerId, testerName, name, runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
       properties:
         id:
           type: string
@@ -2904,6 +2980,10 @@ components:
         testerName:
           type: string
           description: That tester's name when the run was stored; empty for runs stored before testers could be added.
+        name:
+          type: string
+          description: The name the user gave the run in the History page; empty shows the run ID.
+          example: baseline 1000 UE
         runId:
           type: string
         profileName:

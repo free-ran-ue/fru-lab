@@ -381,6 +381,18 @@ export interface TesterGnbTraffic {
     'dlTxBytes': number;
     'dlRxBytes': number;
 }
+export interface TesterHistoryDeleteRequest {
+    /**
+     * The runs\' ids from the history list (TesterHistorySummary.id).
+     */
+    'ids': Array<string>;
+}
+export interface TesterHistoryRenameRequest {
+    /**
+     * The new name, trimmed; empty goes back to showing the run ID.
+     */
+    'name': string;
+}
 export interface TesterHistorySummary {
     /**
      * Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester\'s runs; the run ID, \"@\" and the tester\'s id for another tester\'s.
@@ -394,6 +406,10 @@ export interface TesterHistorySummary {
      * That tester\'s name when the run was stored; empty for runs stored before testers could be added.
      */
     'testerName': string;
+    /**
+     * The name the user gave the run in the History page; empty shows the run ID.
+     */
+    'name': string;
     'runId': string;
     'profileName': string;
     'state': string;
@@ -685,9 +701,6 @@ export const TesterRunSnapshotStopReasonEnum = {
 
 export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReasonEnum[keyof typeof TesterRunSnapshotStopReasonEnum];
 
-/**
- * One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
- */
 export interface TesterSetupPoint {
     /**
      * Seconds since the run started.
@@ -706,6 +719,9 @@ export interface TesterSetupPoint {
      */
     'failPerSec': number;
 }
+/**
+ * One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
+ */
 export interface TesterStageSnapshot {
     'name': string;
     'expected': number;
@@ -2359,6 +2375,45 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
+         * @summary Delete finished runs from the history
+         * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryDelete: async (testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'testerHistoryDeleteRequest' is not null or undefined
+            assertParamExists('testerHistoryDelete', 'testerHistoryDeleteRequest', testerHistoryDeleteRequest)
+            const localVarPath = `/api/tester/history`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerHistoryDeleteRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON)
          * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
@@ -2424,6 +2479,49 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Rename a finished run
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+         * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryRename: async (runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'runId' is not null or undefined
+            assertParamExists('testerHistoryRename', 'runId', runId)
+            // verify required parameter 'testerHistoryRenameRequest' is not null or undefined
+            assertParamExists('testerHistoryRename', 'testerHistoryRenameRequest', testerHistoryRenameRequest)
+            const localVarPath = `/api/tester/history/{runId}`
+                .replace('{runId}', encodeURIComponent(String(runId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PATCH', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(testerHistoryRenameRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -3624,6 +3722,19 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
+         * @summary Delete finished runs from the history
+         * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerHistoryDelete(testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryDelete(testerHistoryDeleteRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON)
          * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
@@ -3646,6 +3757,20 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryList(options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Rename a finished run
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+         * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async testerHistoryRename(runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterHistorySummary>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryRename(runId, testerHistoryRenameRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryRename']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -4261,6 +4386,16 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.testerByIdSystem(id, options).then((request) => request(axios, basePath));
         },
         /**
+         * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
+         * @summary Delete finished runs from the history
+         * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryDelete(testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.testerHistoryDelete(testerHistoryDeleteRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary One finished run\'s full report (JSON)
          * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
@@ -4278,6 +4413,17 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         testerHistoryList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterHistorySummary>> {
             return localVarFp.testerHistoryList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Rename a finished run
+         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+         * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        testerHistoryRename(runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterHistorySummary> {
+            return localVarFp.testerHistoryRename(runId, testerHistoryRenameRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
@@ -4869,6 +5015,17 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
+     * @summary Delete finished runs from the history
+     * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerHistoryDelete(testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistoryDelete(testerHistoryDeleteRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * 
      * @summary One finished run\'s full report (JSON)
      * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
@@ -4887,6 +5044,18 @@ export class DefaultApi extends BaseAPI {
      */
     public testerHistoryList(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).testerHistoryList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Rename a finished run
+     * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+     * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public testerHistoryRename(runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).testerHistoryRename(runId, testerHistoryRenameRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

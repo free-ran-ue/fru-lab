@@ -51,7 +51,7 @@ tester:
 
 `apiToken` must match `apiToken` in `tester.yaml`. More testers can be added from the Testers page.
 
-The Throughput Tester guide is written in Chinese: [docs/superpowers/throughput-tester-guide.html](docs/superpowers/throughput-tester-guide.html) (open the file in a browser).
+See the [fru-lab guide](docs/guide.html) (Chinese) for setting up testers, running tests and reading the results.
 
 ## Install - Docker Compose
 
@@ -103,9 +103,7 @@ The chart in `helm/` deploys fru-lab and fru-tester to Kubernetes. See [helm/REA
 
 ## Guide
 
-- [Basic Guide](docs/basic-guide.md) - log in, deploy the core, add subscribers, deploy UEs, open a UE terminal and read logs.
-- [Images Guide](docs/images-guide.md) - check, pull, update and clear the Docker images this app deploys.
-- [Throughput Tester guide (Chinese)](docs/superpowers/throughput-tester-guide.html) - set up testers and profiles, start runs and read the results.
+[docs/guide.html](docs/guide.html) is the full user guide (in Chinese; open the file in a browser): deploying the core, subscribers, gNB and UEs, logs and images, and the Throughput Tester from the first run to tuning and troubleshooting.
 
 ## TODO
 
