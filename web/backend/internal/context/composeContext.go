@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,11 +23,10 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/cli/cli/command"
 	cliflags "github.com/docker/cli/cli/flags"
-	"github.com/docker/compose/v2/pkg/api"
-	"github.com/docker/compose/v2/pkg/compose"
-	dockertypes "github.com/docker/docker/api/types"
-	containertypes "github.com/docker/docker/api/types/container"
-	dockernetwork "github.com/docker/docker/api/types/network"
+	"github.com/docker/compose/v5/pkg/api"
+	"github.com/docker/compose/v5/pkg/compose"
+	dockernetwork "github.com/moby/moby/api/types/network"
+	dockerclient "github.com/moby/moby/client"
 )
 
 // composeTemplate is one materializable template: where it lives in the
@@ -113,9 +113,14 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		return nil, fmt.Errorf("failed to initialize docker cli: %v", err)
 	}
 
+	service, err := compose.NewComposeService(dockerCli)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create compose service: %v", err)
+	}
+
 	c := &composeContext{
 		dockerCli: dockerCli,
-		service:   compose.NewComposeService(dockerCli),
+		service:   service,
 
 		workDir:        ie.WorkDir,
 		webconsolePort: ie.WebconsolePort,
@@ -213,16 +218,21 @@ func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
 	apiClient := c.dockerCli.Client()
 
 	for _, n := range c.sharedNetworks {
-		if _, err := apiClient.NetworkInspect(ctx, n.name, dockernetwork.InspectOptions{}); err == nil {
+		if _, err := apiClient.NetworkInspect(ctx, n.name, dockerclient.NetworkInspectOptions{}); err == nil {
 			c.CtxLog.Debugf("Shared network %s already exists", n.name)
 			continue
 		}
 
+		subnet, err := netip.ParsePrefix(n.subnet)
+		if err != nil {
+			return fmt.Errorf("invalid subnet %s for network %s: %v", n.subnet, n.name, err)
+		}
+
 		c.CtxLog.Infof("Creating shared network %s (%s)", n.name, n.subnet)
-		if _, err := apiClient.NetworkCreate(ctx, n.name, dockernetwork.CreateOptions{
+		if _, err := apiClient.NetworkCreate(ctx, n.name, dockerclient.NetworkCreateOptions{
 			Driver: "bridge",
 			IPAM: &dockernetwork.IPAM{
-				Config: []dockernetwork.IPAMConfig{{Subnet: n.subnet}},
+				Config: []dockernetwork.IPAMConfig{{Subnet: subnet}},
 			},
 			Options: map[string]string{
 				"com.docker.network.bridge.name": n.bridgeName,
@@ -467,7 +477,7 @@ func summariesToStatusResult(summaries []api.ContainerSummary) *ComposeStatusRes
 	for _, summary := range summaries {
 		result.Services = append(result.Services, model.ServiceStatus{
 			Name:   summary.Service,
-			Status: mapServiceStatus(summary.State, summary.Health),
+			Status: mapServiceStatus(string(summary.State), string(summary.Health)),
 		})
 
 		if summary.Created > lastCreated {
@@ -777,34 +787,35 @@ func (c *composeContext) ueContainerName(instanceID string) string {
 // ID (needed for ResizeUeShell). TTY mode means stdout/stderr are already
 // combined into one stream with no framing, so the caller can just copy
 // bytes straight to/from a websocket without any stdcopy demuxing.
-func (c *composeContext) AttachUeShell(ctx context.Context, instanceID string) (dockertypes.HijackedResponse, string, error) {
+func (c *composeContext) AttachUeShell(ctx context.Context, instanceID string) (dockerclient.HijackedResponse, string, error) {
 	containerName := c.ueContainerName(instanceID)
 	apiClient := c.dockerCli.Client()
 
-	execCreated, err := apiClient.ContainerExecCreate(ctx, containerName, containertypes.ExecOptions{
+	execCreated, err := apiClient.ExecCreate(ctx, containerName, dockerclient.ExecCreateOptions{
 		Cmd:          []string{"/bin/sh"},
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          true,
+		TTY:          true,
 	})
 	if err != nil {
-		return dockertypes.HijackedResponse{}, "", fmt.Errorf("failed to create shell for ue instance %s: %v", instanceID, err)
+		return dockerclient.HijackedResponse{}, "", fmt.Errorf("failed to create shell for ue instance %s: %v", instanceID, err)
 	}
 
-	hijacked, err := apiClient.ContainerExecAttach(ctx, execCreated.ID, containertypes.ExecAttachOptions{Tty: true})
+	attached, err := apiClient.ExecAttach(ctx, execCreated.ID, dockerclient.ExecAttachOptions{TTY: true})
 	if err != nil {
-		return dockertypes.HijackedResponse{}, "", fmt.Errorf("failed to attach shell for ue instance %s: %v", instanceID, err)
+		return dockerclient.HijackedResponse{}, "", fmt.Errorf("failed to attach shell for ue instance %s: %v", instanceID, err)
 	}
 
-	return hijacked, execCreated.ID, nil
+	return attached.HijackedResponse, execCreated.ID, nil
 }
 
 // ResizeUeShell tells the container-side pty about the browser terminal's
 // current size, so full-screen programs (vi, top, ...) render correctly.
 func (c *composeContext) ResizeUeShell(ctx context.Context, execID string, height, width uint) error {
-	return c.dockerCli.Client().ContainerExecResize(ctx, execID, containertypes.ResizeOptions{
+	_, err := c.dockerCli.Client().ExecResize(ctx, execID, dockerclient.ExecResizeOptions{
 		Height: height,
 		Width:  width,
 	})
+	return err
 }

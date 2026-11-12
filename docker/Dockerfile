@@ -1,7 +1,7 @@
 # -------------------------------
 # Stage 1: Build Go binary
 # -------------------------------
-FROM golang:1.26.2 AS builder
+FROM golang:1.26.11 AS builder
 WORKDIR /src/backend
 
 COPY web/backend/go.mod web/backend/go.sum ./

@@ -3,12 +3,10 @@ package context
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	dockerimage "github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/pkg/jsonmessage"
+	dockerclient "github.com/moby/moby/client"
 )
 
 // KnownImage describes one of the docker images the app's compose templates
@@ -102,7 +100,7 @@ func (c *composeContext) RemoveImage(ctx context.Context, key string) error {
 		return fmt.Errorf("unknown image key %s", key)
 	}
 
-	if _, err := c.dockerCli.Client().ImageRemove(ctx, known.Ref, dockerimage.RemoveOptions{}); err != nil {
+	if _, err := c.dockerCli.Client().ImageRemove(ctx, known.Ref, dockerclient.ImageRemoveOptions{}); err != nil {
 		return fmt.Errorf("failed to remove image %s: %v", known.Ref, err)
 	}
 
@@ -112,7 +110,7 @@ func (c *composeContext) RemoveImage(ctx context.Context, key string) error {
 // PullImage re-pulls a known image's pinned tag (always "latest" or a fixed
 // version, per the templates) from its registry. The pull response is a
 // streamed sequence of progress messages that must be fully drained for the
-// pull to actually run to completion; jsonmessage also surfaces any
+// pull to actually run to completion; Wait also surfaces any
 // mid-stream error (e.g. manifest not found) that a plain HTTP status can't.
 func (c *composeContext) PullImage(ctx context.Context, key string) error {
 	known := FindKnownImage(key)
@@ -120,17 +118,14 @@ func (c *composeContext) PullImage(ctx context.Context, key string) error {
 		return fmt.Errorf("unknown image key %s", key)
 	}
 
-	rc, err := c.dockerCli.Client().ImagePull(ctx, known.Ref, dockerimage.PullOptions{})
+	resp, err := c.dockerCli.Client().ImagePull(ctx, known.Ref, dockerclient.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image %s: %v", known.Ref, err)
 	}
-	defer func() {
-		if closeErr := rc.Close(); closeErr != nil {
-			c.CtxLog.Warnf("Failed to close pull stream for image %s: %v", known.Ref, closeErr)
-		}
-	}()
 
-	if err := jsonmessage.DisplayJSONMessagesStream(rc, io.Discard, 0, false, nil); err != nil {
+	// Wait drains the progress stream (closing it when done) and surfaces any
+	// mid-stream error message as an error.
+	if err := resp.Wait(ctx); err != nil {
 		return fmt.Errorf("failed to pull image %s: %v", known.Ref, err)
 	}
 
