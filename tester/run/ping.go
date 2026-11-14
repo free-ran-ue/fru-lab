@@ -76,7 +76,11 @@ func (c *Controller) Ping(p profile.Profile, plane string) (PingResult, error) {
 
 func (c *Controller) pingFrom(plane string, t profile.PingTarget) (res PingResult) {
 	res = PingResult{Plane: plane, Interface: t.Interface, Source: t.Source.String(), Target: t.Peer.String(), Sent: pingCount, RttMs: []float64{}}
-	ch, err := placeAddr(c.deps.Addrs, t.Interface, t.Source)
+	err := ensurePromote(c.deps.Addrs, c.deps.Log.Infof, t.Interface)
+	var ch addrChange
+	if err == nil {
+		ch, err = placeAddr(c.deps.Addrs, t.Interface, t.Source)
+	}
 	if err != nil {
 		res.Sent, res.Error = 0, fmt.Sprintf("could not put %s on %s: %v", t.Source, t.Interface, err)
 		return res

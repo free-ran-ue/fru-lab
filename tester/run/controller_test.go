@@ -36,6 +36,55 @@ type fakeAddrs struct {
 	log       []string
 	failAdd   int // 1-based; 0 = never
 	adds      int
+	// shared models one host for several controllers: Add puts addresses
+	// where FindAddr sees them, and routes are kept
+	shared   bool
+	routes   map[string]bool
+	claims   map[string]map[int]string // key -> claim id -> note
+	claimIDs int
+	promoted []string
+	hostLock sync.Mutex
+}
+
+func (f *fakeAddrs) EnsurePromoteSecondaries(iface string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.promoted = append(f.promoted, iface)
+	return true, nil
+}
+
+func (f *fakeAddrs) Lock() (func(), error) {
+	f.hostLock.Lock()
+	return f.hostLock.Unlock, nil
+}
+
+func (f *fakeAddrs) Claim(key, note string) (func(), error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.claims == nil {
+		f.claims = map[string]map[int]string{}
+	}
+	if f.claims[key] == nil {
+		f.claims[key] = map[int]string{}
+	}
+	f.claimIDs++
+	id := f.claimIDs
+	f.claims[key][id] = note
+	return func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		delete(f.claims[key], id)
+	}, nil
+}
+
+func (f *fakeAddrs) Claims(key string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, n := range f.claims[key] {
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 type hostAddr struct {
@@ -83,6 +132,16 @@ func (f *fakeAddrs) EnsureRoute(iface string, dst netip.Prefix, gw netip.Addr) (
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.log = append(f.log, "route "+dst.String()+" via "+gw.String()+" dev "+iface)
+	if f.shared {
+		if f.routes == nil {
+			f.routes = map[string]bool{}
+		}
+		key := iface + " " + dst.String() + " " + gw.String()
+		if f.routes[key] {
+			return false, nil
+		}
+		f.routes[key] = true
+	}
 	return true, nil
 }
 
@@ -90,6 +149,7 @@ func (f *fakeAddrs) RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) e
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.log = append(f.log, "unroute "+dst.String())
+	delete(f.routes, iface+" "+dst.String()+" "+gw.String())
 	return nil
 }
 
@@ -136,6 +196,14 @@ func (f *fakeAddrs) Add(iface string, p netip.Prefix) error {
 	f.adds++
 	if f.adds == f.failAdd {
 		return errors.New("operation not permitted")
+	}
+	if f.shared {
+		for _, h := range f.hostAddrs {
+			if h.prefix.Addr() == p.Addr() {
+				return errors.New("file exists")
+			}
+		}
+		f.hostAddrs = append(f.hostAddrs, hostAddr{iface: iface, prefix: p})
 	}
 	f.present = append(f.present, p)
 	f.log = append(f.log, "add "+iface+" "+p.String())

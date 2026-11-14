@@ -1116,6 +1116,16 @@ sudo tcpdump -ni <span data-v="n6">ens2f2</span> udp port 9200 -c 5</pre></div>
           <li><b>在 Setup 的 Tester 選單選它</b>
             <p>Runs 列出每台正在跑的 run；History 收每台的 run 並標出是哪一台；Bench 可以選任一台量。手動加入的 tester 在 Actions 欄有 <span class="ui">Remove</span>；預設 tester（<code>config.yaml</code> 那台）不能從頁面移除。</p></li>
         </ol>
+        <details class="ref">
+          <summary>同一台機器跑多台 tester、共用同一張網卡</summary>
+          <div class="body"><ul>
+            <li>每台 tester 的 <b>gNB 起始 IP</b>（N2、N3 的 Start IP）要錯開，IP 範圍不能重疊；重疊時後開始的那台會因為 IP 已存在而失敗。</li>
+            <li><b>sink IP 和 UE pool 路由可以共用</b>。每台 tester 會登記自己正在用的 sink IP 和路由，只有最後一台停下的才會把它們刪掉；其他 tester 停下時只刪自己加的 gNB IP。登記用的是 host 網路裡的 abstract unix socket，tester 當掉時登記會自動消失。</li>
+            <li>run 開始前，fru-tester 會在 N2、N3、N6 網卡上打開 <code>net.ipv4.conf.&lt;網卡&gt;.promote_secondaries</code>，之後不會關回去。這個設定關著時，刪掉一個網段的第一個 IP（primary），kernel 會把同網段的其他 IP 全部一起刪掉，連別台 tester 的也會被刪。fru-tester 是用 netlink 設定的，在 container 裡只要有 NET_ADMIN 就能設；設不成功時，run 會直接失敗並說明原因。</li>
+            <li>共用 sink IP 時，<b>流量的 Port 要錯開</b>。socket 引擎的 sink 開了 <code>SO_REUSEPORT</code>，同一個 IP 和 port 會讓 kernel 把封包分給兩台 tester，結果會顯示成掉包。</li>
+            <li>AF_XDP 一張網卡同時只能掛一個 XDP 程式。第二台 tester 在同一張網卡用 AF_XDP 會掛不上：<code>auto</code> 會改用 socket 並寫出原因，指定 <code>afxdp</code> 則會失敗。</li>
+          </ul></div>
+        </details>
         <p><b>CPU 分配</b>決定 tester 主機上哪些 CPU 給控制面（CP：N2、註冊、PDU）、哪些給資料面（DP：收送封包）。在單台 tester 頁設定，run 開始前設好，run 進行中不能改。</p>
         <figure><div class="shot"><img src="images/tester-cpu.png" alt="CPU allocation 面板" width="1224" height="490" loading="lazy"></div><figcaption>點一顆 CPU 切換：not pinned → control plane → data plane。也可以直接打清單，例如 <code>0-3</code>、<code>4-15</code>。</figcaption></figure>
         <div class="warnbox"><b>綁核不會讓總用量變少</b><p>它讓 CP 和 DP 互不搶 CPU、結果比較穩、比較好解讀。kernel 收包的那一份跑在網卡中斷所在的 CPU，fru-tester 不會去改中斷設定，要自己把 N3、N6 網卡的中斷設到資料面 CPU。</p></div>
