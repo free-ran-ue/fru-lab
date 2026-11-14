@@ -375,15 +375,9 @@ type run struct {
 	ues        []ueRun
 	summary    UeSummary
 	failures   []UeFailure
-	added      []addedAddr  // in the order they were added
-	routes     []addedRoute // routes this run added
-	dp         Dataplane    // nil until the IPs are configured
-}
-
-type addedRoute struct {
-	iface string
-	dst   netip.Prefix
-	gw    netip.Addr
+	added      []addedAddr   // in the order they were added
+	routes     []routeChange // routes this run claimed
+	dp         Dataplane     // nil until the IPs are configured
 }
 
 // ueRun is one UE's progress; guarded by run.mu except nas and link,
@@ -413,6 +407,7 @@ type addedAddr struct {
 	iface    string
 	prefix   netip.Prefix
 	replaced netip.Prefix
+	release  func() // drops the claim on a shared address; nil for a gNB's
 }
 
 func newRun(id string, p profile.Profile, plan *profile.Plan, deps Deps, notify func()) *run {
@@ -641,6 +636,12 @@ func (r *run) skipUnfinished() {
 // via the UPF's N6 (design Q16). removeIPs undoes exactly what was added.
 func (r *run) configureIPs() error {
 	nw := r.profile.Network
+	// Without promote_secondaries, removing the first address of a subnet
+	// takes every other address in it away, other testers' included.
+	if err := ensurePromote(r.deps.Addrs, func(f string, a ...any) { r.deps.Log.Infof("run %s: "+f, append([]any{r.id}, a...)...) },
+		nw.N2.Interface, nw.N3.Interface, nw.N6.Interface); err != nil {
+		return err
+	}
 	// The sink first: it goes on with its own prefix length, so the host
 	// also gets a route to that subnet (the UPF's N6 IP is usually in it).
 	// If it replaces a host address with another prefix, that has to
@@ -652,7 +653,7 @@ func (r *run) configureIPs() error {
 	}
 	if ch.added.IsValid() {
 		r.mu.Lock()
-		r.added = append(r.added, addedAddr{iface: ch.iface, prefix: ch.added, replaced: ch.replaced})
+		r.added = append(r.added, addedAddr{iface: ch.iface, prefix: ch.added, replaced: ch.replaced, release: ch.release})
 		r.mu.Unlock()
 	}
 	for _, g := range r.plan.Gnbs {
@@ -669,13 +670,13 @@ func (r *run) configureIPs() error {
 		}
 	}
 	pool, gw := netip.MustParsePrefix(nw.N6.UePool), netip.MustParseAddr(nw.N6.UpfIP)
-	added, err := r.deps.Addrs.EnsureRoute(nw.N6.Interface, pool, gw)
+	rc, claimed, err := placeRoute(r.deps.Addrs, nw.N6.Interface, pool, gw)
 	if err != nil {
 		return fmt.Errorf("configure UE pool route: %w", err)
 	}
-	if added {
+	if claimed {
 		r.mu.Lock()
-		r.routes = append(r.routes, addedRoute{iface: nw.N6.Interface, dst: pool, gw: gw})
+		r.routes = append(r.routes, rc)
 		r.mu.Unlock()
 	}
 	return nil
@@ -735,9 +736,12 @@ func emptyDataplane() dataplane.Snapshot {
 	return dataplane.Snapshot{Gnbs: []dataplane.GnbTraffic{}, Series: []dataplane.Point{}}
 }
 
-// removeIPs removes the routes this run added, then walks the addresses
-// backwards so a primary address (added first) goes last; removing it
-// first would make the kernel drop the secondaries with it.
+// removeIPs removes only what this run put on the host: the routes it
+// claimed (unless another tester still uses them), then its addresses,
+// walked backwards so a primary address (added first) goes last. A shared
+// address stays while another tester claims it, and promote_secondaries
+// (configureIPs) keeps other testers' addresses in a subnet when this
+// run's primary goes.
 func (r *run) removeIPs() {
 	r.mu.Lock()
 	added, routes := r.added, r.routes
@@ -745,13 +749,13 @@ func (r *run) removeIPs() {
 	r.mu.Unlock()
 	var errs []error
 	for _, rt := range routes {
-		if err := r.deps.Addrs.RemoveRoute(rt.iface, rt.dst, rt.gw); err != nil {
+		if err := rt.undo(r.deps.Addrs); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	for i := len(added) - 1; i >= 0; i-- {
 		a := added[i]
-		if err := (addrChange{iface: a.iface, added: a.prefix, replaced: a.replaced}).undo(r.deps.Addrs); err != nil {
+		if err := (addrChange{iface: a.iface, added: a.prefix, replaced: a.replaced, release: a.release}).undo(r.deps.Addrs); err != nil {
 			errs = append(errs, err)
 		}
 	}

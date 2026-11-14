@@ -37,6 +37,15 @@ type AddrManager interface {
 	RemoveRoute(iface string, dst netip.Prefix, gw netip.Addr) error
 	// MTU is iface's MTU.
 	MTU(iface string) (int, error)
+	// EnsurePromoteSecondaries makes removing a subnet's first address
+	// keep the subnet's other addresses; changed if it had to be turned on.
+	EnsurePromoteSecondaries(iface string) (changed bool, err error)
+	// Lock serialises address changes between the testers on this host.
+	Lock() (unlock func(), err error)
+	// Claim marks key as in use by this tester until release.
+	Claim(key, note string) (release func(), err error)
+	// Claims lists the notes of every claim on key on this host.
+	Claims(key string) ([]string, error)
 }
 
 // Netlink is the real AddrManager; it needs CAP_NET_ADMIN.
