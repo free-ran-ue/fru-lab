@@ -4,10 +4,10 @@ go 1.26.11
 
 require (
 	github.com/Alonza0314/logger-go/v2 v2.1.0
-	github.com/compose-spec/compose-go/v2 v2.16.2
+	github.com/compose-spec/compose-go/v2 v2.17.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/docker/cli v29.10.0+incompatible
-	github.com/docker/compose/v5 v5.7.1
+	github.com/docker/compose/v5 v5.8.0
 	github.com/free-ran-ue/util v0.2.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
@@ -20,7 +20,7 @@ require (
 require (
 	connectrpc.com/connect v1.19.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
-	github.com/DefangLabs/secret-detector v0.0.0-20260916192156-3e28d7ed64df // indirect
+	github.com/DefangLabs/secret-detector v1.1.0 // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -73,7 +73,6 @@ require (
 	github.com/in-toto/attestation v1.2.0 // indirect
 	github.com/in-toto/in-toto-golang v0.11.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/inhies/go-bytesize v0.0.0-20220417184213-4913239db9cf // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -83,6 +82,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.16 // indirect
 	github.com/moby/buildkit v0.33.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/extensions v0.0.0-20261020100352-d2819d88bcbe // indirect
 	github.com/moby/go-archive v0.3.3 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
@@ -140,8 +140,8 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
