@@ -1,6 +1,0 @@
-apiVersion: v2
-name: frulab
-description: fru-lab, a GUI to deploy and simulate free5GC with free-ran-ue gNB / UEs
-type: application
-version: 0.1.0
-appVersion: "latest"

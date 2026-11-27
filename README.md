@@ -68,11 +68,3 @@ The compose file runs the `fru-lab` container. fru-lab deploys free5GC/gNB/UE by
     ```bash
     docker compose down
     ```
-
-## Install - Helm
-
-The chart in `helm/` deploys fru-lab to Kubernetes. See [helm/README.md](helm/README.md).
-
-## TODO
-
-- Setup Script
