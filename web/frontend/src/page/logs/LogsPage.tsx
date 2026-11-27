@@ -3,13 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { ImageInfo } from '../../api'
-import { useFree5gcStatus } from '../dashboard/useFree5gcStatus'
-import { useGnbStatus } from '../dashboard/useGnbStatus'
-import { useGnbSliceStatus } from '../dashboard/useGnbSliceStatus'
-import { getStatusMeta } from '../dashboard/statusMeta'
-import type { NodeStatus } from '../dashboard/types'
-import { useUeInstances } from '../dashboard/useUeInstances'
-import { detectFree5gcTemplate } from '../dashboard/free5gcTemplate'
+import { useFree5gcStatus } from '../../lab/useFree5gcStatus'
+import { useGnbStatus } from '../../lab/useGnbStatus'
+import { useGnbSliceStatus } from '../../lab/useGnbSliceStatus'
+import { getStatusMeta } from '../../lab/statusMeta'
+import type { NodeStatus } from '../../lab/types'
+import { useUeInstances } from '../../lab/useUeInstances'
+import { detectFree5gcTemplate } from '../../lab/free5gcTemplate'
 import styles from './logs-page.module.css'
 
 type LogTargetKind = 'core' | 'gnb' | 'gnb-slice1' | 'gnb-slice2' | 'ue'
@@ -75,7 +75,7 @@ export default function LogsPage() {
 
   // gnb-slice1/gnb-slice2 are independent, concurrently deployable gNBs
   // under the ulcl-2slice template - shown instead of the single "gNB"
-  // entry, same condition the Dashboard's canvas uses.
+  // entry, same condition the topology uses.
   const isTwoSliceCore = detectFree5gcTemplate(free5gc.networkFunctions) === 'ulcl-2slice'
 
   const targets: LogTarget[] = useMemo(() => [
@@ -118,7 +118,7 @@ export default function LogsPage() {
   }, [])
 
   // resolve the initial selection from ?target=&instance= (set when a
-  // Dashboard "Logs" button deep-links here) once the target list is known.
+  // lab page's "View logs" button deep-links here) once the target list is known.
   // Must wait for BOTH the subscriber fetch and the deploy-status fetch to
   // finish - `targets` only includes a ue row once both have resolved, and
   // resolving early locks onto the wrong default (core) permanently, since

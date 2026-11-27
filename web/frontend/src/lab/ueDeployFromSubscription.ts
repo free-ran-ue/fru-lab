@@ -1,6 +1,6 @@
-import type { DeployUeRequest } from '../../api'
-import type { Subscription } from '../../webconsoleApi'
-import { fromSubscription } from '../subscribers/subscriberForm'
+import type { DeployUeRequest } from '../api'
+import type { Subscription } from '../webconsoleApi'
+import { fromSubscription } from '../page/subscribers/subscriberForm'
 
 // Derives the fields a UE instance's config needs straight from a webconsole
 // Subscription - the fru-lab backend never talks to webconsole itself, so

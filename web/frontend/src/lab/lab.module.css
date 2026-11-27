@@ -1,7 +1,8 @@
-/* Lab dashboard, v2 prototype (LabDashboard.dc.html) in v1 colours and
-   v1 rounded corners. The frame (sidebar, header bar, content padding and
-   16px gap) comes from AppLayout. Shared by DashboardPage,
-   UeInstancesPanel and SelectedNodePanel. */
+/* Shared by the lab pages (Dashboard, Core Network, free-ran, free-ue)
+   and their panels (SelectedNodePanel, UeInstancesPanel): v2 prototype
+   (LabDashboard.dc.html) in v1 colours and rounded corners. The frame
+   (sidebar, header bar, content padding and 16px gap) comes from
+   AppLayout. */
 
 /* title row: h1 + subtitle inline; deploy controls right */
 .pageHead {
@@ -406,4 +407,69 @@
 /* no Services table: the actions' top border already separates them */
 .kv:has(+ .acts) {
   border-bottom: 0;
+}
+
+/* ----- Dashboard: one column per lab page (Core Network, free-ran,
+   free-ue), read-only ----- */
+.trio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.open {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent-ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.open:hover {
+  text-decoration: underline;
+}
+
+.more {
+  padding: 0.5rem 0.875rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* the NF grid on Core Network: compact chips, wrapping */
+.nfGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  padding: 0.875rem;
+}
+
+.nfChip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.nfChip:hover {
+  background: var(--surface-sunken);
+}
+
+.nfChip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nfChip b {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
 }

@@ -43,6 +43,10 @@
   color: var(--chrome-accent);
 }
 
+.navTop {
+  padding-top: 0.75rem;
+}
+
 .navGroup {
   margin: 0;
   padding: 1rem 1rem 0.375rem;

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
-import { api } from '../../apiClient'
+import { api } from '../apiClient'
 import { useDeployTarget } from './useDeployTarget'
-import type { RequestDeployFree5gcTemplateEnum } from '../../api'
+import type { RequestDeployFree5gcTemplateEnum } from '../api'
 
 export function useFree5gcStatus() {
   const deployApi = useMemo(() => ({

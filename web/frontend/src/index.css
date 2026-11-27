@@ -1,4 +1,4 @@
-/* fru-lab design tokens. Colours follow the logo (docs/images/frulab-logo.png):
+/* fru-lab design tokens. Colours follow the logo (src/assets/frulab-logo.png):
    indigo-to-violet on a near-black ink. Status colours stay green/amber/red
    so they read at a glance. Use the variables, not hex values, in modules. */
 @import '@fontsource/ibm-plex-sans/400.css';

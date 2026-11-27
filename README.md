@@ -1,6 +1,6 @@
 # fru Lab
 
-![frulab](./docs/images/frulab-logo.png)
+![frulab](./web/frontend/src/assets/frulab-logo.png)
 
 fru-lab is a GUI-driven 5G deployment simulator. From the browser it deploys the free5GC core network and the free-ran-ue gNB / UE simulator as containers on the host's Docker daemon (one UE container per subscriber), manages subscribers through the free5GC webconsole, and shows status, logs, images and a terminal into every UE.
 
@@ -72,10 +72,6 @@ The compose file runs the `fru-lab` container. fru-lab deploys free5GC/gNB/UE by
 ## Install - Helm
 
 The chart in `helm/` deploys fru-lab to Kubernetes. See [helm/README.md](helm/README.md).
-
-## Guide
-
-[docs/guide.html](docs/guide.html) is the full user guide (in Chinese; open the file in a browser): deploying the core, subscribers, gNB and UEs, logs and images.
 
 ## TODO
 

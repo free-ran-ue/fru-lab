@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AxiosPromise } from 'axios'
-import type { DeployStatusResponse, DeployLogsResponse, MessageResponse } from '../../api'
+import type { DeployStatusResponse, DeployLogsResponse, MessageResponse } from '../api'
 import type { DeploymentNode, NetworkFunction, NodeStatus } from './types'
 
 const POLL_INTERVAL_MS = 4000

@@ -1,0 +1,29 @@
+/* Core Network's sub-tabs: Network functions | Subscribers */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tabOn,
+.tabOn:hover {
+  color: var(--accent-ink);
+  border-bottom-color: var(--accent);
+}

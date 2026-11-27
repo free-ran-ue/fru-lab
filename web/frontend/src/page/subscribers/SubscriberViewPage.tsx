@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
+import CoreTabs from '../../lab/CoreTabs'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import { fromSubscription, snssaiKey, type SubscriberFormState } from './subscriberForm'
 import styles from './webconsole-style.module.css'
@@ -63,7 +64,8 @@ export default function SubscriberViewPage() {
   const flowRules = form ? form.sessions.flatMap((session) => session.flowRules.map((rule) => ({ session, rule }))) : []
 
   return (
-    <AppLayout crumbs={[{ label: 'Subscribers', to: '/subscribers' }, { label: <span className="num">{ueId}</span> }]}>
+    <AppLayout crumbs={[{ label: 'Subscribers', to: '/core-network/subscribers' }, { label: <span className="num">{ueId}</span> }]}>
+      <CoreTabs />
       <section className={styles.pageHeader}>
         <div className={styles.titleBlock}>
           <h1 className={`${styles.title} num`}>{ueId}</h1>
@@ -73,12 +75,12 @@ export default function SubscriberViewPage() {
           </p>
         </div>
         <div className={styles.headerActions}>
-          <button type="button" className={styles.btn} onClick={() => navigate('/subscribers')}>Back</button>
+          <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')}>Back</button>
           {!isLoading && !loadError && form && (
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => navigate(`/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}
+              onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}
             >
               Edit
             </button>

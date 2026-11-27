@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api } from '../../apiClient'
-import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
-import type { Subscriber } from '../../webconsoleApi'
+import { api } from '../apiClient'
+import { webconsoleApi, extractWebconsoleErrorMessage } from '../webconsoleApiClient'
+import type { Subscriber } from '../webconsoleApi'
 import { subscriptionToUeDeployRequest } from './ueDeployFromSubscription'
-import { fromSubscription } from '../subscribers/subscriberForm'
+import { fromSubscription } from '../page/subscribers/subscriberForm'
 import type { NodeStatus } from './types'
 
 const POLL_INTERVAL_MS = 4000

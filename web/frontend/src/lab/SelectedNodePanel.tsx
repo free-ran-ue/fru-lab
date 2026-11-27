@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { StatusSwatch, StatusTag } from './StatusTag'
 import type { NetworkFunction, NodeStatus } from './types'
-import styles from './dashboard-page.module.css'
+import styles from './lab.module.css'
 
 export interface DetailRow {
   k: string

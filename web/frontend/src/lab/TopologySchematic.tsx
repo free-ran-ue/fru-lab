@@ -29,9 +29,14 @@ interface TopologySchematicProps {
   gnbSlices: GnbSlice[] | null
   ueStatus: NodeStatus
   ueRows: UeRow[]
-  selection: TopologySelection
+  // null on the dashboard, where a click opens the node's page
+  selection: TopologySelection | null
   onSelect: (selection: TopologySelection) => void
+  // only the free5GC core frame and the DN (the Core Network page); N2 and
+  // N3 come in from the left edge
+  coreOnly?: boolean
 }
+
 
 // The v2 dashboard's one engineered schematic: UE → Uu → gNB → N2 / N3 →
 // the free5GC core frame (SBI bus with the control-plane NFs, AMF, SMF(s)
@@ -47,6 +52,9 @@ const PLANE_NFS = new Set(['AMF', 'SMF', 'SMF1', 'SMF2', 'UPF', 'I-UPF', 'PSA-UP
 const NF_H = 26
 const CORE_X = 450
 const CORE_Y = 20
+// where the core-only view starts: just left of the core frame, so the N2
+// and N3 links show as entering from the RAN side
+const CORE_ONLY_X = CORE_X - 60
 const X0 = 466
 const TOP_Y = 56
 const BUS_Y = 104
@@ -209,11 +217,11 @@ function Pressable({ label, pressed, onPress, children }: { label: string; press
   )
 }
 
-export default function TopologySchematic({ template, templateLabel, coreStatus, coreNfs, gnbStatus, gnbTemplate, gnbSlices, ueStatus, ueRows, selection, onSelect }: TopologySchematicProps) {
+export default function TopologySchematic({ template, templateLabel, coreStatus, coreNfs, gnbStatus, gnbTemplate, gnbSlices, ueStatus, ueRows, selection, onSelect, coreOnly = false }: TopologySchematicProps) {
   const nfStatus = new Map(coreNfs.map((nf) => [nf.name, nf.status]))
   const layout = buildLayout(template, coreNfs.map((nf) => nf.name))
   const healthy = coreNfs.filter((nf) => nf.status === 'running').length
-  const coreOn = selection.node === 'core'
+  const coreOn = selection?.node === 'core'
 
   const ueRunning = ueRows.filter((row) => row.status === 'running').length
   const shownUes = ueRows.length > MAX_UE_SWATCHES ? ueRows.slice(0, MAX_UE_SWATCHES - 1) : ueRows
@@ -221,18 +229,21 @@ export default function TopologySchematic({ template, templateLabel, coreStatus,
   const gnbBox: Box = { x: GNB_X, y: GNB_Y, w: GNB_W, h: layout.gnbH }
 
   const selectCore = () => onSelect({ node: 'core', nf: null, ue: null })
+  const viewX = coreOnly ? CORE_ONLY_X : 0
 
   return (
     <div className={styles.wrap}>
       <svg
-        viewBox={`0 0 ${layout.width} ${layout.height}`}
+        viewBox={`${viewX} 0 ${layout.width - viewX} ${layout.height}`}
         className={styles.svg}
         role="group"
-        aria-label="UE connects over Uu to the gNB; the gNB connects over N2 to the AMF and over N3 to the UPF inside the free5GC core; SMF controls the UPFs over N4; the last UPF reaches the data network over N6. Select a node for details."
+        aria-label={coreOnly
+          ? 'The free5GC core: the control-plane NFs on the SBI bus; N2 from the gNB reaches the AMF and N3 the first UPF; SMF controls the UPFs over N4; the last UPF reaches the data network over N6. Select an NF for details.'
+          : 'UE connects over Uu to the gNB; the gNB connects over N2 to the AMF and over N3 to the UPF inside the free5GC core; SMF controls the UPFs over N4; the last UPF reaches the data network over N6. Select a node for details.'}
       >
         {/* core frame first, so its fill sits behind every link and node;
             clicking anywhere on it that isn't an NF selects the core */}
-        <Pressable label={`free5GC core, ${templateLabel}`} pressed={coreOn && selection.nf === null} onPress={selectCore}>
+        <Pressable label={`free5GC core, ${templateLabel}`} pressed={coreOn && selection?.nf === null} onPress={selectCore}>
           <rect
             x={CORE_X + 0.5}
             y={CORE_Y + 0.5}
@@ -249,7 +260,7 @@ export default function TopologySchematic({ template, templateLabel, coreStatus,
         </Pressable>
 
         <g className={styles.links}>
-          <path d={`M160 ${UU_Y}H${GNB_X}`} />
+          {!coreOnly && <path d={`M160 ${UU_Y}H${GNB_X}`} />}
           <path d={`M${GNB_X + GNB_W} ${N2_Y}H${X0}`} />
           <path d={`M${X0} ${BUS_Y}H${layout.coreRight - 20}`} />
           {layout.links.map((link) => (
@@ -258,7 +269,7 @@ export default function TopologySchematic({ template, templateLabel, coreStatus,
         </g>
 
         <g fontSize={10.5} className={styles.iface}>
-          <text x={200} y={UU_Y - 6} textAnchor="middle">Uu</text>
+          {!coreOnly && <text x={200} y={UU_Y - 6} textAnchor="middle">Uu</text>}
           <text x={(GNB_X + GNB_W + X0) / 2} y={N2_Y - 6} textAnchor="middle">N2</text>
           <text x={layout.coreRight - 20} y={BUS_Y + 14} textAnchor="end" className={styles.monoMuted}>SBI</text>
           {layout.labels.map((label) => (
@@ -267,8 +278,8 @@ export default function TopologySchematic({ template, templateLabel, coreStatus,
         </g>
 
         {/* UE: the whole fleet as one node, one swatch per subscriber */}
-        <Pressable label={`UE, ${ueRunning} of ${ueRows.length} running`} pressed={selection.node === 'ue'} onPress={() => onSelect({ node: 'ue', nf: null, ue: null })}>
-          <rect x={UE_BOX.x + 0.5} y={UE_BOX.y + 0.5} width={UE_BOX.w} height={UE_BOX.h} rx={4} className={`${styles.node} ${selection.node === 'ue' ? styles.nodeOn : ''}`} />
+        {!coreOnly && (<Pressable label={`UE, ${ueRunning} of ${ueRows.length} running`} pressed={selection?.node === 'ue'} onPress={() => onSelect({ node: 'ue', nf: null, ue: null })}>
+          <rect x={UE_BOX.x + 0.5} y={UE_BOX.y + 0.5} width={UE_BOX.w} height={UE_BOX.h} rx={4} className={`${styles.node} ${selection?.node === 'ue' ? styles.nodeOn : ''}`} />
           <text x={32} y={170} fontSize={12} className={styles.title}>UE</text>
           <Swatch x={145} y={166} status={ueStatus} />
           <text x={32} y={186} fontSize={11} className={styles.sub}>free-ran-ue</text>
@@ -285,11 +296,11 @@ export default function TopologySchematic({ template, templateLabel, coreStatus,
             </>
           )}
           <text x={32} y={222} fontSize={10.5} className={styles.mono}>{ueRunning} / {ueRows.length} up</text>
-        </Pressable>
+        </Pressable>)}
 
         {/* gNB: one node; under ulcl-2slice it stands for both slice gNBs */}
-        <Pressable label={`gNB, ${gnbStatus}`} pressed={selection.node === 'gnb'} onPress={() => onSelect({ node: 'gnb', nf: null, ue: null })}>
-          <rect x={gnbBox.x + 0.5} y={gnbBox.y + 0.5} width={gnbBox.w} height={gnbBox.h} rx={4} className={`${styles.node} ${selection.node === 'gnb' ? styles.nodeOn : ''}`} />
+        {!coreOnly && (<Pressable label={`gNB, ${gnbStatus}`} pressed={selection?.node === 'gnb'} onPress={() => onSelect({ node: 'gnb', nf: null, ue: null })}>
+          <rect x={gnbBox.x + 0.5} y={gnbBox.y + 0.5} width={gnbBox.w} height={gnbBox.h} rx={4} className={`${styles.node} ${selection?.node === 'gnb' ? styles.nodeOn : ''}`} />
           <text x={252} y={148} fontSize={12} className={styles.title}>gNB</text>
           <Swatch x={365} y={144} status={gnbStatus} />
           <text x={252} y={164} fontSize={11} className={styles.sub}>free-ran-ue</text>
@@ -303,11 +314,11 @@ export default function TopologySchematic({ template, templateLabel, coreStatus,
               </g>
             )
           })}
-        </Pressable>
+        </Pressable>)}
 
         {layout.nfs.map(({ name, box }) => {
           const status = nfStatus.get(name)
-          const on = coreOn && selection.nf === name
+          const on = coreOn && selection?.nf === name
           return (
             <Pressable
               key={name}

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from '../sidebar/Sidebar'
 import { useApiLive } from './useApiLive'
 import styles from './layout.module.css'
@@ -10,8 +10,8 @@ export interface Crumb {
 }
 
 interface AppLayoutProps {
-  // the page's breadcrumb, outermost first; the section ("Core network")
-  // is added in front
+  // the page's breadcrumb, outermost first; the section (from the URL) is
+  // added in front
   crumbs: Crumb[]
   // tags after the breadcrumb, e.g. "UNSAVED"
   crumbExtra?: ReactNode
@@ -20,6 +20,16 @@ interface AppLayoutProps {
   // above everything (notifications)
   overlay?: ReactNode
   children: ReactNode
+}
+
+// sectionOf is the breadcrumb's first entry for a URL: the sidebar item the
+// page belongs to.
+function sectionOf(pathname: string): Crumb | null {
+  if (pathname.startsWith('/core-network')) return { label: 'Core Network', to: '/core-network' }
+  if (pathname.startsWith('/free-ran')) return { label: 'free-ran', to: '/free-ran' }
+  if (pathname.startsWith('/free-ue')) return { label: 'free-ue', to: '/free-ue' }
+  if (pathname.startsWith('/logs') || pathname.startsWith('/images')) return { label: 'Tools' }
+  return null
 }
 
 // utcClock is hh:mm:ss UTC, ticking every second.
@@ -40,7 +50,8 @@ export default function AppLayout({ crumbs, crumbExtra, headerActions, overlay, 
   const live = useApiLive()
   const clock = useUtcClock()
   const user = localStorage.getItem('username') || 'admin'
-  const trail: Crumb[] = [{ label: 'Core network' }, ...crumbs]
+  const section = sectionOf(useLocation().pathname)
+  const trail: Crumb[] = section ? [section, ...crumbs] : crumbs
 
   function handleLogout() {
     localStorage.removeItem('token')

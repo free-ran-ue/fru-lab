@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
+import CoreTabs from '../../lab/CoreTabs'
 import Modal from '../../components/modal/modal'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -37,7 +38,7 @@ export default function SubscribersPage() {
   function startAdd() {
     if (!isCountValid) return
     setIsAskingCount(false)
-    navigate(`/subscribers/new?count=${parsedCount}`)
+    navigate(`/core-network/subscribers/new?count=${parsedCount}`)
   }
 
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
@@ -142,6 +143,8 @@ export default function SubscribersPage() {
       crumbs={[{ label: 'Subscribers' }]}
       overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
     >
+      <CoreTabs />
+
       <section className={styles.header}>
         <h1 className={styles.title}>Subscribers</h1>
         <span className={styles.subtitle}>free5GC UDR via WebConsole</span>
@@ -157,7 +160,7 @@ export default function SubscribersPage() {
             </>
           )}
           <button type="button" className={styles.btn} onClick={() => { setUeCount('2'); setIsAskingCount(true) }}>Add in bulk</button>
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/subscribers/new')}>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/core-network/subscribers/new')}>
             Add subscriber
           </button>
         </div>
@@ -244,7 +247,7 @@ export default function SubscribersPage() {
                         <button
                           type="button"
                           className={styles.lnk}
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
+                          onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
                         >
                           View
                         </button>
@@ -252,7 +255,7 @@ export default function SubscribersPage() {
                         <button
                           type="button"
                           className={styles.lnk}
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
+                          onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
                         >
                           Edit
                         </button>

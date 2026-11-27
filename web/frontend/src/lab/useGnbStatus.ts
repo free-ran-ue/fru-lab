@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { api } from '../../apiClient'
+import { api } from '../apiClient'
 import { useDeployTarget } from './useDeployTarget'
 
 export function useGnbStatus() {

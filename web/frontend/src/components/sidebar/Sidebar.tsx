@@ -28,7 +28,9 @@ function Icon({ children }: { children: ReactNode }) {
 
 const ICONS = {
   dashboard: <Icon><path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z" /></Icon>,
-  subscribers: <Icon><circle cx="8" cy="5.5" r="2.5" /><path d="M3 13.5c.8-2.4 2.7-3.5 5-3.5s4.2 1.1 5 3.5" /></Icon>,
+  core: <Icon><rect x="2.5" y="2.5" width="11" height="4" rx="1" /><rect x="2.5" y="9.5" width="11" height="4" rx="1" /><path d="M5 4.5h.01M5 11.5h.01" /></Icon>,
+  ran: <Icon><path d="M8 7v7M5.5 14h5M8 7l-2.5 7M8 7l2.5 7" /><path d="M5.2 4.2a4 4 0 0 1 5.6 0M3.4 2.4a6.5 6.5 0 0 1 9.2 0" /></Icon>,
+  ue: <Icon><rect x="4.5" y="1.5" width="7" height="13" rx="1.5" /><path d="M7 12h2" /></Icon>,
   logs: <Icon><path d="M3 4h10M3 8h10M3 12h6" /></Icon>,
   images: <Icon><path d="M8 2.5l5.5 3-5.5 3-5.5-3zM2.5 8.5l5.5 3 5.5-3M2.5 11l5.5 3 5.5-3" /></Icon>,
   logout: <Icon><path d="M6 2.5H3v11h3M10 5l3 3-3 3M13 8H6" /></Icon>,
@@ -38,8 +40,9 @@ interface SidebarProps {
   onLogout?: () => void
 }
 
-// Sidebar is the v2 navigation: the brand row, the icon links, and Log out
-// at the bottom.
+// Sidebar is the v2 navigation: the brand row, Dashboard, the three lab
+// pages (Core Network, free-ran, free-ue), the tools, and Log out at the
+// bottom.
 export default function Sidebar({ onLogout }: SidebarProps) {
   return (
     <aside className={styles.sidebar}>
@@ -48,10 +51,19 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         <span className={styles.wordmark}>fru-<span className={styles.wordmarkLab}>lab</span></span>
       </Link>
 
-      <p className={styles.navGroup}>Core network</p>
-      <nav className={styles.nav} aria-label="Core network">
+      <nav className={`${styles.nav} ${styles.navTop}`} aria-label="Overview">
         <NavLink to="/" end className={navItemClassName}>{ICONS.dashboard}Dashboard</NavLink>
-        <NavLink to="/subscribers" className={navItemClassName}>{ICONS.subscribers}Subscribers</NavLink>
+      </nav>
+
+      <p className={styles.navGroup}>Lab</p>
+      <nav className={styles.nav} aria-label="Lab">
+        <NavLink to="/core-network" className={navItemClassName}>{ICONS.core}Core Network</NavLink>
+        <NavLink to="/free-ran" className={navItemClassName}>{ICONS.ran}free-ran</NavLink>
+        <NavLink to="/free-ue" className={navItemClassName}>{ICONS.ue}free-ue</NavLink>
+      </nav>
+
+      <p className={styles.navGroup}>Tools</p>
+      <nav className={styles.nav} aria-label="Tools">
         <NavLink to="/logs" className={navItemClassName}>{ICONS.logs}Logs</NavLink>
         <NavLink to="/images" className={navItemClassName}>{ICONS.images}Images</NavLink>
       </nav>

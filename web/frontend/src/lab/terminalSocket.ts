@@ -1,4 +1,4 @@
-import { apiBaseUrl } from '../../apiClient'
+import { apiBaseUrl } from '../apiClient'
 
 // A browser WebSocket can't set an Authorization header on its handshake
 // request, so the ue terminal endpoint takes the JWT as a query param

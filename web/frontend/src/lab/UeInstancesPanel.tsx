@@ -1,6 +1,6 @@
 import { StatusTag } from './StatusTag'
 import type { UeRow } from './useUeInstances'
-import styles from './dashboard-page.module.css'
+import styles from './lab.module.css'
 
 interface UeInstancesPanelProps {
   rows: UeRow[]
@@ -27,7 +27,7 @@ export default function UeInstancesPanel({ rows, isLoading, loadError, pendingIn
   let emptyText: string | null = null
   if (isLoading) emptyText = 'Loading subscribers…'
   else if (loadError) emptyText = loadError
-  else if (rows.length === 0) emptyText = 'No subscribers yet. Create one on the Subscribers page first.'
+  else if (rows.length === 0) emptyText = 'No subscribers yet. Add them under Core Network → Subscribers first.'
 
   return (
     <section className={styles.panel} aria-label="UE instances">

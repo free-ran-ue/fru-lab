@@ -6,6 +6,9 @@ import SubscriberFormPage from './page/subscribers/SubscriberFormPage'
 import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
 import LogsPage from './page/logs/LogsPage'
 import ImagesPage from './page/images/ImagesPage'
+import CoreNetworkPage from './page/core/CoreNetworkPage'
+import FreeRanPage from './page/ran/FreeRanPage'
+import FreeUePage from './page/ue/FreeUePage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -29,7 +32,31 @@ export default function App() {
         )}
       />
       <Route
-        path="/subscribers"
+        path="/core-network"
+        element={(
+          <RequireAuth>
+            <CoreNetworkPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/free-ran"
+        element={(
+          <RequireAuth>
+            <FreeRanPage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/free-ue"
+        element={(
+          <RequireAuth>
+            <FreeUePage />
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/core-network/subscribers"
         element={(
           <RequireAuth>
             <SubscribersPage />
@@ -37,7 +64,7 @@ export default function App() {
         )}
       />
       <Route
-        path="/subscribers/new"
+        path="/core-network/subscribers/new"
         element={(
           <RequireAuth>
             <SubscriberFormPage />
@@ -45,7 +72,7 @@ export default function App() {
         )}
       />
       <Route
-        path="/subscribers/:ueId/:plmnId/edit"
+        path="/core-network/subscribers/:ueId/:plmnId/edit"
         element={(
           <RequireAuth>
             <SubscriberFormPage />
@@ -53,7 +80,7 @@ export default function App() {
         )}
       />
       <Route
-        path="/subscribers/:ueId/:plmnId"
+        path="/core-network/subscribers/:ueId/:plmnId"
         element={(
           <RequireAuth>
             <SubscriberViewPage />
@@ -77,6 +104,8 @@ export default function App() {
         )}
       />
       {/* the Status page replaced the System page */}
+      {/* Subscribers moved under Core Network */}
+      <Route path="/subscribers/*" element={<Navigate to="/core-network/subscribers" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
