@@ -9,10 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +24,7 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/cli/cli/command"
 	cliflags "github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v5/pkg/api"
@@ -564,11 +568,116 @@ func mapServiceStatus(state, health string) string {
 func (c *composeContext) release() {
 	c.CtxLog.Infoln("Release composeContext...")
 
+	ctx, cancel := context.WithTimeout(context.Background(), teardownTimeout)
+	defer cancel()
+	c.teardown(ctx)
+
 	if err := c.dockerCli.Client().Close(); err != nil {
 		c.CtxLog.Errorf("Failed to close docker client: %v", err)
 	}
 
 	c.CtxLog.Infoln("composeContext released")
+}
+
+// teardownTimeout bounds the whole shutdown teardown: every UE, gNB and
+// core container stopped, then the shared networks removed.
+const teardownTimeout = 2 * time.Minute
+
+// ueProjectPrefix starts every UE instance's compose project name (see
+// ueProjectName).
+const ueProjectPrefix = "frulab-ue-"
+
+// teardown runs on shutdown and removes everything fru-lab created on the
+// Docker host: the UE, gNB and core compose projects (in that order, the
+// one the backend enforces for single stops), then the shared networks and
+// their host bridge interfaces. A shared network cannot be removed while a
+// container is still attached, so the projects go first.
+func (c *composeContext) teardown(ctx context.Context) {
+	projects, err := c.deployedProjects(ctx)
+	if err != nil {
+		c.CtxLog.Warnf("Docker is not reachable, nothing to tear down: %v", err)
+		return
+	}
+
+	for _, name := range teardownOrder(projects, c.targets) {
+		c.CtxLog.Infof("Tearing down project %s", name)
+		if err := c.service.Down(ctx, name, api.DownOptions{RemoveOrphans: true}); err != nil {
+			c.CtxLog.Errorf("Failed to tear down project %s: %v", name, err)
+		}
+	}
+
+	c.removeSharedNetworks(ctx)
+}
+
+// deployedProjects lists the compose projects that have containers on the
+// Docker host, running or not.
+func (c *composeContext) deployedProjects(ctx context.Context) (map[string]bool, error) {
+	list, err := c.dockerCli.Client().ContainerList(ctx, dockerclient.ContainerListOptions{
+		All:     true,
+		Filters: dockerclient.Filters{}.Add("label", api.ProjectLabel),
+	})
+	if err != nil {
+		return nil, err
+	}
+	projects := map[string]bool{}
+	for _, item := range list.Items {
+		projects[item.Labels[api.ProjectLabel]] = true
+	}
+	return projects, nil
+}
+
+// teardownOrder picks fru-lab's own projects out of projects: UE instances
+// first, then the gNBs, then the core.
+func teardownOrder(projects map[string]bool, targets map[string]composeTarget) []string {
+	var order []string
+	ues := make([]string, 0)
+	for name := range projects {
+		if strings.HasPrefix(name, ueProjectPrefix) {
+			ues = append(ues, name)
+		}
+	}
+	sort.Strings(ues)
+	order = append(order, ues...)
+	for _, target := range []string{
+		constant.DEPLOY_TARGET_GNB_SLICE1,
+		constant.DEPLOY_TARGET_GNB_SLICE2,
+		constant.DEPLOY_TARGET_GNB,
+		constant.DEPLOY_TARGET_FREE5GC,
+	} {
+		if name := targets[target].projectName; projects[name] {
+			order = append(order, name)
+		}
+	}
+	return order
+}
+
+// removeSharedNetworks removes the shared docker networks; docker deletes
+// their bridge interfaces with them. A bridge interface that is somehow
+// left on the host (it is only visible when fru-lab runs on the host, not
+// in a container) is deleted too.
+func (c *composeContext) removeSharedNetworks(ctx context.Context) {
+	c.networksMu.Lock()
+	defer c.networksMu.Unlock()
+
+	apiClient := c.dockerCli.Client()
+	for _, n := range c.sharedNetworks {
+		if _, err := apiClient.NetworkRemove(ctx, n.name, dockerclient.NetworkRemoveOptions{}); err != nil {
+			if !cerrdefs.IsNotFound(err) {
+				c.CtxLog.Errorf("Failed to remove network %s: %v", n.name, err)
+			}
+		} else {
+			c.CtxLog.Infof("Removed shared network %s", n.name)
+		}
+
+		if _, err := net.InterfaceByName(n.bridgeName); err != nil {
+			continue
+		}
+		c.CtxLog.Infof("Bridge %s is still on the host, deleting it", n.bridgeName)
+		if out, err := exec.CommandContext(ctx, "ip", "link", "delete", n.bridgeName).CombinedOutput(); err != nil {
+			c.CtxLog.Errorf("Failed to delete bridge %s: %v: %s", n.bridgeName, err, strings.TrimSpace(string(out)))
+		}
+	}
+	c.networksReady = false
 }
 
 // UeInstanceConfig carries the subscriber-derived fields that get templated
@@ -602,7 +711,7 @@ func (c *composeContext) ueWorkingDir(instanceID string) string {
 }
 
 func (c *composeContext) ueProjectName(instanceID string) string {
-	return "frulab-ue-" + instanceID
+	return ueProjectPrefix + instanceID
 }
 
 // loadUeProject mirrors loadProject's materialize-then-load approach, but
