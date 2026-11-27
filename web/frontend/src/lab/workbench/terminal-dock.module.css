@@ -1,0 +1,170 @@
+/* UE shells docked under the Overview topology, split side by side; dark
+   in both themes. */
+.dock {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 10rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome);
+  border-top: 1px solid var(--chrome-border);
+}
+
+/* drag the top edge to resize the dock */
+.resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  z-index: 3;
+  cursor: row-resize;
+}
+
+.resize:hover {
+  background: var(--accent);
+}
+
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: 2rem;
+  border-bottom: 1px solid var(--chrome-border);
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--chrome-border);
+  border-bottom: 2px solid transparent;
+  cursor: grab;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--chrome-active);
+  border-bottom-color: var(--accent);
+}
+
+.tabName,
+.close,
+.closeAll {
+  border: 0;
+  background: transparent;
+  color: var(--chrome-muted);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tabName {
+  height: 100%;
+  padding: 0 0.25rem 0 0.75rem;
+}
+
+.tab[aria-selected='true'] .tabName,
+.tabName:hover,
+.close:hover,
+.closeAll:hover {
+  color: var(--chrome-strong);
+}
+
+.close {
+  padding: 0 0.5rem;
+}
+
+.hint {
+  align-self: center;
+  margin-left: auto;
+  padding: 0 0.75rem;
+  color: var(--chrome-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.closeAll {
+  padding: 0 0.75rem;
+  font-family: inherit;
+}
+
+/* panes on odd columns, 6px dividers between; row 1 heads, row 2 shells */
+.body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.paneHead {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 1.5rem;
+  padding-left: 0.625rem;
+  border-bottom: 1px solid var(--chrome-border);
+  color: var(--chrome-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  cursor: default;
+}
+
+.paneHead span {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paneOn {
+  color: var(--chrome-strong);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.pane {
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane[hidden] {
+  display: none;
+}
+
+.divider {
+  grid-row: 1 / span 2;
+  background: var(--chrome-border);
+  cursor: col-resize;
+}
+
+.divider:hover {
+  background: var(--accent);
+}
+
+/* while a tab is dragged: where it would land */
+.drop {
+  grid-row: 2;
+  z-index: 2;
+  position: relative;
+}
+
+.drop_left::after,
+.drop_right::after,
+.drop_center::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  pointer-events: none;
+}
+
+.drop_left::after { left: 0; width: 50%; }
+.drop_right::after { right: 0; width: 50%; }
+.drop_center::after { left: 0; right: 0; }

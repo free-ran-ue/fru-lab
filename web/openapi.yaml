@@ -175,11 +175,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployLogsResponse'
 
-  /api/deploy/gnb:
-    post:
-      summary: Deploy gNB
-      description: Fails with 409 if the core network isn't running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-      operationId: deployGnbUp
+  /api/deploy/gnbs:
+    get:
+      summary: List the gNBs deployed from gNB profiles
+      description: One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+      operationId: deployGnbList
       security:
         - bearerAuth: []
       responses:
@@ -188,15 +188,54 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MessageResponse'
+                $ref: '#/components/schemas/DeployGnbListResponse'
         '401':
           description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/gnbs/{profileId}:
+    post:
+      summary: Deploy the gNB of one gNB profile
+      description: Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile's n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+      operationId: deployGnbUp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such gNB profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
         '409':
-          description: Conflict - the core network isn't running yet
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -208,50 +247,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
     delete:
-      summary: Stop gNB
-      description: Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+      summary: Stop the gNB of one gNB profile
+      description: Fails with 409 while a UE deployed onto this gNB still runs.
       operationId: deployGnbDown
       security:
         - bearerAuth: []
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
         '409':
-          description: Conflict - a UE instance is still running
+          description: Conflict - a UE on this gNB still runs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/deploy/gnb/status:
-    get:
-      summary: Get gNB deploy status
-      operationId: deployGnbStatus
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
         '401':
           description: Unauthorized
           content:
@@ -263,16 +282,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
+                $ref: '#/components/schemas/MessageResponse'
 
-  /api/deploy/gnb/logs:
+  /api/deploy/gnbs/{profileId}/logs:
     get:
-      summary: Get gNB container logs
+      summary: Get the logs of one profile gNB
       operationId: deployGnbLogs
       security:
         - bearerAuth: []
       parameters:
-        - $ref: '#/components/parameters/LogService'
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -291,155 +314,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
-
-  /api/deploy/gnb-slice/{slice}:
-    post:
-      summary: Deploy a gNB slice (ulcl-2slice only)
-      description: Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn't running yet.
-      operationId: deployGnbSliceUp
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
                 $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: Conflict - the core network isn't running yet
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    delete:
-      summary: Stop a gNB slice (ulcl-2slice only)
-      description: Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-      operationId: deployGnbSliceDown
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: Conflict - a UE instance is still running
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/deploy/gnb-slice/{slice}/status:
-    get:
-      summary: Get a gNB slice's deploy status
-      operationId: deployGnbSliceStatus
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
-
-  /api/deploy/gnb-slice/{slice}/logs:
-    get:
-      summary: Get a gNB slice's container logs
-      operationId: deployGnbSliceLogs
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
 
   /api/deploy/ue:
     get:
@@ -466,6 +341,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeployUeListResponse'
+
+  /api/deploy/ue-profiles/{profileId}:
+    post:
+      summary: Deploy the UE of one UE profile
+      description: Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile's, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+      operationId: deployUeProfileUp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployUeProfileRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such UE profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
 
   /api/deploy/ue/{instance}:
     post:
@@ -596,6 +522,421 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployUeLogsResponse'
 
+  /api/host/interfaces:
+    get:
+      summary: List the host's network interfaces
+      description: The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker's own bridges and veths are left out).
+      operationId: hostInterfaceList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HostInterface'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/gnb:
+    get:
+      summary: List the saved gNB profiles
+      operationId: gnbProfileList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GnbProfile'
+    post:
+      summary: Save a new gNB profile
+      operationId: gnbProfileCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: The saved profile, with its id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GnbProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/gnb/check:
+    post:
+      summary: Check a gnb profile for conflicts with the saved ones
+      description: The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+      operationId: gnbProfileCheck
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileCheckResult'
+        '400':
+          description: Bad Request - a field is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/gnb/bulk:
+    post:
+      summary: Create several gnb profiles from one
+      description: Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+      operationId: gnbProfileBulkCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileBulkRequest'
+      responses:
+        '200':
+          description: The created profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GnbProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such source profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/gnb/render:
+    post:
+      summary: Preview the config file a gNB profile deploys
+      operationId: gnbProfileRender
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderedConfig'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/gnb/{id}:
+    put:
+      summary: Update a gNB profile
+      operationId: gnbProfileUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GnbProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Delete a gNB profile
+      operationId: gnbProfileDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue:
+    get:
+      summary: List the saved UE profiles
+      operationId: ueProfileList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UeProfile'
+    post:
+      summary: Save a new UE profile
+      operationId: ueProfileCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: The saved profile, with its id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UeProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue/check:
+    post:
+      summary: Check a ue profile for conflicts with the saved ones
+      description: The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+      operationId: ueProfileCheck
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileCheckResult'
+        '400':
+          description: Bad Request - a field is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/ue/bulk:
+    post:
+      summary: Create several ue profiles from one
+      description: Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+      operationId: ueProfileBulkCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileBulkRequest'
+      responses:
+        '200':
+          description: The created profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UeProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such source profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/ue/render:
+    post:
+      summary: Preview the config file a UE profile deploys
+      operationId: ueProfileRender
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderedConfig'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue/{id}:
+    put:
+      summary: Update a UE profile
+      operationId: ueProfileUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UeProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Delete a UE profile
+      operationId: ueProfileDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/images:
     get:
       summary: List the images this app deploys
@@ -693,1077 +1034,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
 
-  /api/tester/profiles:
-    get:
-      summary: List the saved Throughput Tester profiles
-      description: Every saved profile, sorted by name.
-      operationId: testerProfileList
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TesterStoredProfile'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    post:
-      summary: Save a new Throughput Tester profile
-      description: Stores the profile as-is under a new ID. Its name is required and must not match another profile's (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
-      operationId: testerProfileCreate
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterProfile'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStoredProfile'
-        '400':
-          description: Body is not a JSON object, or the name is empty
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: Another profile already has this name
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/profiles/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: One saved profile
-      operationId: testerProfileGet
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStoredProfile'
-        '404':
-          description: No such profile
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    put:
-      summary: Replace a saved profile
-      description: Same name rules as creating one; keeping its own name is fine.
-      operationId: testerProfileUpdate
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterProfile'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStoredProfile'
-        '400':
-          description: Body is not a JSON object, or the name is empty
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No such profile
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: Another profile already has this name
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    delete:
-      summary: Delete a saved profile
-      operationId: testerProfileDelete
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No such profile
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/tester/profile/validate:
-    post:
-      summary: Validate a profile and preview the per-gNB plan
-      description: Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
-      operationId: testerProfileValidate
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterProfile'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterValidateResponse'
-        '502':
-          description: fru-tester is unreachable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '503':
-          description: backend.tester.url is not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/tester/run:
-    get:
-      summary: Current run snapshot
-      description: Forwarded to fru-tester. State is `idle` before the first run.
-      operationId: testerRunGet
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbOffset'
-        - $ref: '#/components/parameters/GnbLimit'
-        - $ref: '#/components/parameters/GnbState'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunSnapshot'
-        '502':
-          description: fru-tester is unreachable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '503':
-          description: backend.tester.url is not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    post:
-      summary: Start a run
-      description: Forwarded to fru-tester. Only one run may be active at a time.
-      operationId: testerRunStart
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterProfile'
-      responses:
-        '202':
-          description: Run started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunSnapshot'
-        '400':
-          description: Profile is invalid
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStartErrorResponse'
-        '409':
-          description: A run is already active
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: fru-tester is unreachable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '503':
-          description: backend.tester.url is not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/tester/run/stop:
-    post:
-      summary: Stop the active run
-      description: Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
-      operationId: testerRunStop
-      security:
-        - bearerAuth: []
-      responses:
-        '202':
-          description: Stop requested
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunSnapshot'
-        '409':
-          description: No active run
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/network/interfaces:
-    get:
-      summary: Interfaces on fru-tester's host
-      description: Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page's interface menus.
-      operationId: testerNetworkInterfaces
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TesterInterface'
-        '502':
-          description: fru-tester is unreachable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '503':
-          description: backend.tester.url is not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/network/ping:
-    post:
-      summary: Ping test of one network
-      description: Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR's prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF's N3 or the UPF's N6 three times, and removes the address again. Only that network's fields are checked. Not while a run is active.
-      operationId: testerNetworkPing
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterPingRequest'
-      responses:
-        '200':
-          description: Test done; received may be 0
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterPingResult'
-        '400':
-          description: That network's settings are wrong (errors lists the fields), or an unknown plane
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStartErrorResponse'
-        '409':
-          description: A run or another ping test is active
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/bench:
-    get:
-      summary: Latest data plane bench
-      description: Forwarded to fru-tester. State is `idle` before the first bench.
-      operationId: testerBenchGet
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterBenchResult'
-    post:
-      summary: Start a data plane bench
-      description: Measures how fast this host's fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
-      operationId: testerBenchStart
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterBenchSettings'
-      responses:
-        '202':
-          description: Bench started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterBenchResult'
-        '400':
-          description: Invalid settings
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: A bench or a run is already running
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/system:
-    get:
-      summary: The tester host's CPU allocation and layout (Status page)
-      description: Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-      operationId: testerSystemGet
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterSystemInfo'
-  /api/tester/system/cpuload:
-    get:
-      summary: How busy each CPU of the tester host is (Status page)
-      description: Forwarded to fru-tester, which reads /proc/stat. The whole host's load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-      operationId: testerSystemCpuLoad
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterCpuLoad'
-  /api/tester/status:
-    get:
-      summary: The tester host and process (Status page)
-      description: Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
-      operationId: testerStatusGet
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStatus'
-        '502':
-          description: fru-tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/system/cpus:
-    put:
-      summary: Set the CPU allocation for the next runs
-      description: Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
-      operationId: testerSystemCpusPut
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterCpuAllocation'
-      responses:
-        '200':
-          description: Stored, in canonical form
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterCpuAllocation'
-        '400':
-          description: Invalid; errors name the field
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterCpusErrorResponse'
-        '409':
-          description: A run is active
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers:
-    get:
-      summary: Every tester fru-lab can reach (Status page)
-      description: The tester in config.yaml (backend.tester, id "default", builtIn) first, then the ones added here. API tokens are never returned; each tester's name comes from its own status.
-      operationId: testersList
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TesterEntry'
-    post:
-      summary: Add a tester
-      description: fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
-      operationId: testersAdd
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterAddRequest'
-      responses:
-        '201':
-          description: Added
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterAdded'
-        '400':
-          description: Not added; the message says why (unreachable, wrong token, already listed)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}:
-    delete:
-      summary: Remove an added tester
-      description: Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
-      operationId: testersDelete
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '200':
-          description: Removed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: The tester in config.yaml
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/status:
-    get:
-      summary: One tester's host and process
-      description: Forwarded to that tester's /api/status, like /api/tester/status is to the tester in config.yaml.
-      operationId: testerByIdStatus
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStatus'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/run:
-    get:
-      summary: One tester's run
-      description: Forwarded to that tester's /api/run, like /api/tester/run is to the tester in config.yaml.
-      operationId: testerByIdRun
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-        - $ref: '#/components/parameters/GnbOffset'
-        - $ref: '#/components/parameters/GnbLimit'
-        - $ref: '#/components/parameters/GnbState'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunSnapshot'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    post:
-      summary: Start a run on one tester
-      description: Forwarded to that tester's /api/run, like /api/tester/run is to the tester in config.yaml.
-      operationId: testerByIdRunStart
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterProfile'
-      responses:
-        '202':
-          description: Started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunSnapshot'
-        '400':
-          description: Invalid profile
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStartErrorResponse'
-        '409':
-          description: A run or a bench is already running
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/run/stop:
-    post:
-      summary: Stop the active run on one tester
-      description: Forwarded to that tester's /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run's live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
-      operationId: testerByIdRunStop
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '202':
-          description: Stop requested
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunSnapshot'
-        '409':
-          description: No active run
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/profile/validate:
-    post:
-      summary: Validate a profile on one tester
-      description: Forwarded to that tester's /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
-      operationId: testerByIdProfileValidate
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterProfile'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterValidateResponse'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/network/interfaces:
-    get:
-      summary: One tester's network interfaces
-      description: Forwarded to that tester's /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
-      operationId: testerByIdNetworkInterfaces
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TesterInterface'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/network/ping:
-    post:
-      summary: Ping test from one tester
-      description: Forwarded to that tester's /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
-      operationId: testerByIdNetworkPing
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterPingRequest'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterPingResult'
-        '400':
-          description: Invalid profile
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterStartErrorResponse'
-        '409':
-          description: A run is active
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/bench:
-    get:
-      summary: One tester's latest data plane bench
-      description: Forwarded to that tester's /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
-      operationId: testerByIdBenchGet
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterBenchResult'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    post:
-      summary: Start a data plane bench on one tester
-      description: Forwarded to that tester's /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
-      operationId: testerByIdBenchStart
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterBenchSettings'
-      responses:
-        '202':
-          description: Bench started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterBenchResult'
-        '400':
-          description: Invalid settings
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: A bench or a run is already running on that tester
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/system:
-    get:
-      summary: One tester's CPU allocation and layout
-      description: Forwarded to that tester's /api/system, like /api/tester/system is to the tester in config.yaml.
-      operationId: testerByIdSystem
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterSystemInfo'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/system/cpuload:
-    get:
-      summary: How busy each CPU of one tester's host is
-      description: Forwarded to that tester's /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
-      operationId: testerByIdCpuLoad
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterCpuLoad'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/testers/{id}/system/cpus:
-    put:
-      summary: Set one tester's CPU allocation
-      description: Forwarded to that tester's /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
-      operationId: testerByIdCpusPut
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/TesterId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TesterCpuAllocation'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterCpuAllocation'
-        '404':
-          description: No tester with that id
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '502':
-          description: The tester is unreachable or rejected fru-lab's API token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/history:
-    get:
-      summary: Finished runs, newest first
-      description: fru-lab keeps the last 50 runs fru-tester finished.
-      operationId: testerHistoryList
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TesterHistorySummary'
-    delete:
-      summary: Delete finished runs from the history
-      description: fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
-      operationId: testerHistoryDelete
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ids]
-              properties:
-                ids:
-                  type: array
-                  minItems: 1
-                  items:
-                    type: string
-                  description: The runs' ids from the history list (TesterHistorySummary.id).
-      responses:
-        '200':
-          description: Deleted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '400':
-          description: No run listed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/history/{runId}:
-    patch:
-      summary: Rename a finished run
-      operationId: testerHistoryRename
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: runId
-          in: path
-          required: true
-          description: The run's id from the history list (TesterHistorySummary.id).
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:
-                  type: string
-                  maxLength: 80
-                  description: The new name, trimmed; empty goes back to showing the run ID.
-      responses:
-        '200':
-          description: The run's updated history row
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterHistorySummary'
-        '400':
-          description: No name, or a name longer than 80 characters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: No such run
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    get:
-      summary: One finished run's full report (JSON)
-      operationId: testerHistoryGet
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: runId
-          in: path
-          required: true
-          description: The run's id from the history list (TesterHistorySummary.id).
-          schema:
-            type: string
-      responses:
-        '200':
-          description: The profile the run used and its final snapshot
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TesterRunReport'
-        '404':
-          description: No such run
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-  /api/tester/history/{runId}/report.html:
-    get:
-      summary: One finished run's report as a self-contained HTML page
-      description: Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
-      operationId: testerHistoryReportHtml
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: runId
-          in: path
-          required: true
-          description: The run's id from the history list (TesterHistorySummary.id).
-          schema:
-            type: string
-      responses:
-        '200':
-          description: The HTML report
-          content:
-            text/html:
-              schema:
-                type: string
-        '404':
-          description: No such run
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -1771,38 +1041,6 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
-    GnbOffset:
-      name: gnbOffset
-      in: query
-      required: false
-      description: Where the page of gNBs starts, counted within those gnbState keeps.
-      schema:
-        type: integer
-        minimum: 0
-    GnbLimit:
-      name: gnbLimit
-      in: query
-      required: false
-      description: How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {"gnbOffset", "gnbLimit", "gnbState"} as a text message.
-      schema:
-        type: integer
-        minimum: 0
-        maximum: 1000
-    GnbState:
-      name: gnbState
-      in: query
-      required: false
-      description: Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-      schema:
-        type: string
-    TesterId:
-      name: id
-      in: path
-      required: true
-      description: A tester from GET /api/testers; "default" is the one in config.yaml.
-      schema:
-        type: string
-        example: default
     UeInstance:
       name: instance
       in: path
@@ -1827,17 +1065,6 @@ components:
       schema:
         type: string
         example: amf
-    GnbSlice:
-      name: slice
-      in: path
-      required: true
-      description: Which ulcl-2slice slice's gNB to act on.
-      schema:
-        type: string
-        enum:
-          - slice1
-          - slice2
-        example: slice1
   schemas:
     LoginRequest:
       type: object
@@ -1885,6 +1112,8 @@ components:
         lastDeployed:
           type: string
           format: date-time
+        gnb:
+          $ref: '#/components/schemas/GnbDeployment'
     ServiceStatus:
       type: object
       required:
@@ -1921,7 +1150,6 @@ components:
           enum:
             - basic
             - ulcl
-            - ulcl-2slice
           example: basic
     DeployUeRequest:
       type: object
@@ -1975,6 +1203,9 @@ components:
         instance:
           type: string
           example: imsi-208930000000001
+        gnb:
+          type: string
+          description: The gNB target it was deployed onto (gnb-<profileId>); empty when unknown.
         status:
           type: string
           example: running
@@ -2044,1134 +1275,203 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageInfo'
-    TesterStoredProfile:
+    GnbDeployment:
       type: object
-      required: [id, updatedAt, profile]
+      required: [profileName, core, amfIp]
+      properties:
+        profileId:
+          type: string
+        profileName:
+          type: string
+        core:
+          type: string
+          enum: [lab, external]
+        amfIp:
+          type: string
+        hostIp:
+          type: string
+        hostInterface:
+          type: string
+        gnbId:
+          type: string
+        gnbName:
+          type: string
+        sd:
+          type: string
+        n2Ip:
+          type: string
+          description: Its N2/N3 address (cn-ran, or the host's address on an external core).
+        ranIp:
+          type: string
+          description: Where UEs dial it (ran-ue), picked by fru-lab; the host address on an external core.
+    RenderedConfig:
+      type: object
+      required: [yaml]
+      properties:
+        yaml:
+          type: string
+    GnbProfile:
+      type: object
+      required: [name, gnbId, mcc, mnc, tac, sst, core]
       properties:
         id:
+          type: string
+        name:
+          type: string
+        gnbId:
+          type: string
+          example: '000314'
+        gnbName:
+          type: string
+        mcc:
+          type: string
+        mnc:
+          type: string
+        tac:
+          type: string
+          example: '000001'
+        sst:
+          type: string
+        sd:
+          type: string
+        core:
+          type: string
+          enum: [lab, external]
+          description: lab dials the free5GC fru-lab deploys; external runs the gNB on the host network and dials amfIp / upfIp.
+        amfIp:
+          type: string
+        amfPort:
+          type: integer
+        upfIp:
+          type: string
+        upfPort:
+          type: integer
+        n2Ip:
+          type: string
+          example: 10.0.1.20
+          description: Lab core only - the gNB's N2/N3 address on the lab's cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core's). Unique among the gNB profiles.
+        hostInterface:
+          type: string
+          example: eth0
+          description: External core only - the host interface the gNB listens on (see /api/host/interfaces).
+        hostIp:
+          type: string
+          description: External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
+        logLevel:
           type: string
         updatedAt:
           type: string
           format: date-time
-        profile:
-          $ref: '#/components/schemas/TesterProfile'
-    TesterProfile:
+    UeProfile:
       type: object
-      required: [name, scale, gnb, ue, traffic, network, rates]
+      required: [name, mcc, mnc, msin, permanentKey, opValue, amf, sqn, sst]
       properties:
+        id:
+          type: string
         name:
           type: string
-          example: 1000 UE baseline
-        testerId:
+        mcc:
           type: string
-          description: Which tester (GET /api/testers) runs this profile; absent means "default", the one in config.yaml. Only fru-lab reads it; leave it out of what is sent to a tester, which rejects fields it does not know.
-          example: default
-        scale:
-          type: object
-          required: [gnbCount, ueCount, throughputUeCount]
-          properties:
-            gnbCount:
-              type: integer
-              example: 10
-            ueCount:
-              type: integer
-              example: 1000
-            throughputUeCount:
-              type: integer
-              description: How many UEs, the first ones, establish a PDU session and carry traffic (0..ueCount). The rest are the control-plane test - they register and deregister in a loop (rates.cpLoop) once every throughput UE is done. fru-tester treats an absent value as ueCount.
-              example: 1000
-        gnb:
-          type: object
-          required: [gnbIdStart, namePattern, mcc, mnc, tac, sst, sd]
-          properties:
-            gnbIdStart:
-              type: string
-              description: 6 or 8 hex digits; incremented per gNB, keeping its width.
-              example: '000314'
-            namePattern:
-              type: string
-              description: Must contain {i}, replaced by the 1-based gNB index.
-              example: gNB-{i}
-            mcc:
-              type: string
-              example: '208'
-            mnc:
-              type: string
-              example: '93'
-            tac:
-              type: string
-              example: '000001'
-            sst:
-              type: integer
-              example: 1
-            sd:
-              type: string
-              description: Empty or 6 hex digits.
-              example: '010203'
-        ue:
-          $ref: '#/components/schemas/TesterUeTemplate'
-        traffic:
-          $ref: '#/components/schemas/TesterTraffic'
-        network:
-          type: object
-          required: [n2, n3, n6]
-          properties:
-            n2:
-              type: object
-              required: [interface, cidr, startIp, amfIp, amfPort]
-              properties:
-                interface:
-                  type: string
-                  example: ens19
-                cidr:
-                  type: string
-                  example: 10.0.1.0/24
-                startIp:
-                  type: string
-                  example: 10.0.1.100
-                amfIp:
-                  type: string
-                  example: 10.0.1.1
-                amfPort:
-                  type: integer
-                  example: 38412
-            n3:
-              type: object
-              required: [interface, cidr, startIp, upfIp, upfPort]
-              properties:
-                interface:
-                  type: string
-                  example: ens20
-                cidr:
-                  type: string
-                  example: 10.0.2.0/24
-                startIp:
-                  type: string
-                  example: 10.0.2.100
-                upfIp:
-                  type: string
-                  example: 10.0.2.1
-                upfPort:
-                  type: integer
-                  example: 2152
-            n6:
-              type: object
-              description: Data-network side. Uplink is addressed to the sink; downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
-              required: [interface, sinkIp, upfIp, uePool]
-              properties:
-                interface:
-                  type: string
-                  example: docker-cn-ran
-                sinkIp:
-                  type: string
-                  description: The sink's address with its prefix length, as it goes on the interface (e.g. 172.26.6.1/16). If the host does not have the address, the tester adds it to the interface for the run with that prefix, which also gives the host a route to the subnet; it is removed afterwards.
-                  example: 10.0.1.1/24
-                upfIp:
-                  type: string
-                  example: 10.0.1.5
-                uePool:
-                  type: string
-                  example: 10.60.0.0/16
-        rates:
-          type: object
-          required: [n2, registration, pdu, deregistration, cpLoop]
-          properties:
-            n2:
-              $ref: '#/components/schemas/TesterN2Rate'
-            registration:
-              $ref: '#/components/schemas/TesterProcedureRate'
-            pdu:
-              $ref: '#/components/schemas/TesterProcedureRate'
-            deregistration:
-              $ref: '#/components/schemas/TesterProcedureRate'
-            cpLoop:
-              $ref: '#/components/schemas/TesterCpLoopRate'
-    TesterCpLoopRate:
-      type: object
-      description: Paces the control-plane loop - at most ratePerSec registrations start per second and at most maxInFlight UEs are in a cycle at once. A cycle registers, stays registered holdMs, then deregisters; each procedure is bounded by timeoutMs. No retries - a failed cycle is counted and the UE tries again later. Only checked when there are control-plane UEs.
-      required: [ratePerSec, maxInFlight, timeoutMs, holdMs]
-      properties:
-        ratePerSec:
-          type: integer
-          example: 50
-        maxInFlight:
-          type: integer
-          example: 200
-        timeoutMs:
-          type: integer
-          example: 10000
-        holdMs:
-          type: integer
-          description: 0..3600000
-          example: 1000
-    TesterTraffic:
-      type: object
-      description: Fixed-rate traffic of every established UE. ulPacketSize and dlPacketSize are the inner IP packet length each way.
-      required: [ulMbps, dlMbps, ulPacketSize, dlPacketSize, port, maxDurationMin, dlBatchMs, engine]
-      properties:
-        ulMbps:
-          type: number
-          description: Per UE; 0 disables uplink.
-          example: 1
-        dlMbps:
-          type: number
-          description: Per UE; 0 disables downlink.
-          example: 5
-        ulPacketSize:
-          type: integer
-          description: Uplink. 64..9000, and at most the N3 interface's MTU minus 44 (GTP-U and its headers) and the N6 interface's MTU; 1456 on a 1500 MTU network.
-          example: 1400
-        dlPacketSize:
-          type: integer
-          description: Downlink, with the same limits as ulPacketSize.
-          example: 1400
-        port:
-          type: integer
-          description: UDP port at the N6 sink and at the UEs.
-          example: 9200
-        maxDurationMin:
-          type: integer
-          description: Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
-          example: 0
-        dlBatchMs:
-          type: integer
-          description: Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
-          example: 1
-        engine:
+        mnc:
           type: string
-          enum: ['', auto, socket, afxdp]
-          description: How the data plane moves packets. socket = UDP sockets (also when empty). afxdp = AF_XDP on the N3 and N6 interfaces, skipping the kernel's IP/UDP/socket code (zero-copy when the driver supports it, else copy or generic mode). auto = AF_XDP when both interfaces are NICs and it starts, else sockets.
-          example: auto
-    TesterUeTemplate:
-      type: object
-      description: Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
-      required: [msinStart, key, opc, amf, sqn, integrity, ciphering, dnn, sst, sd]
-      properties:
-        msinStart:
+        msin:
           type: string
-          description: Decimal; incremented per UE, keeping its width.
-          example: '0000000001'
-        key:
+          description: 9 or 10 digits. The IMSI (mcc + mnc + msin) is unique among the UE profiles.
+        permanentKey:
           type: string
-          example: 8baf473f2f8fd09487cccbd7097c6862
-        opc:
+        opValue:
           type: string
-          example: 8e27b6af0e692e750f32667a3b14605d
+          description: OPc
         amf:
           type: string
-          example: '8000'
         sqn:
           type: string
-          example: '000000000023'
-        integrity:
-          type: string
-          enum: [nia0, nia1, nia2, nia3]
-        ciphering:
-          type: string
-          enum: [nea0, nea1, nea2, nea3]
         dnn:
           type: string
-          example: internet
         sst:
-          type: integer
-          example: 1
+          type: string
         sd:
           type: string
-          example: '010203'
-    TesterProcedureRate:
+        updatedAt:
+          type: string
+          format: date-time
+    DeployGnbListResponse:
       type: object
-      description: At most ratePerSec new attempts per second and at most maxInFlight at once; each attempt bounded by timeoutMs; a failed UE with retries left is requeued at the back.
-      required: [ratePerSec, maxInFlight, timeoutMs, retries]
+      required: [instances]
       properties:
-        ratePerSec:
-          type: integer
-          example: 50
-        maxInFlight:
-          type: integer
-          example: 200
-        timeoutMs:
-          type: integer
-          example: 10000
-        retries:
-          type: integer
-          example: 1
-    TesterN2Rate:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/GnbInstance'
+    GnbInstance:
       type: object
-      description: Paces the gNBs' N2 setup (SCTP association and NG Setup). A failed attempt with retries left goes to the back of the queue.
-      required: [timeoutMs, retries]
+      required: [instance, profileId, status, gnb]
       properties:
-        ratePerSec:
-          type: integer
-          description: At most this many gNBs start their N2 setup per second. 0 or absent is no limit.
-          example: 100
-        maxInFlight:
-          type: integer
-          description: At most this many gNBs are setting up at once, up to 1000. 0 or absent is 1000.
-          example: 100
-        timeoutMs:
-          type: integer
-          example: 5000
-        retries:
-          type: integer
-          example: 1
-    TesterFieldError:
+        instance:
+          type: string
+          description: The gNB target name, gnb-<profileId>; the log stream and UE deploys use it.
+          example: gnb-3f2a9c1e5b7d
+        profileId:
+          type: string
+        status:
+          type: string
+          example: running
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+        lastDeployed:
+          type: string
+          format: date-time
+        gnb:
+          $ref: '#/components/schemas/GnbDeployment'
+    DeployUeProfileRequest:
+      type: object
+      properties:
+        gnb:
+          type: string
+          description: The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+    ProfileCheckResult:
+      type: object
+      required: [conflicts]
+      properties:
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileConflict'
+    ProfileConflict:
       type: object
       required: [field, message]
       properties:
         field:
           type: string
-          example: network.n2.cidr
+          description: The JSON field name, e.g. gnbId, n2Ip, hostIp, name, msin.
         message:
           type: string
-    TesterGnbSpec:
+          example: gNB ID 000314 is used by profile Lab gNB
+        suggestion:
+          type: string
+          description: The next free value, when there is one.
+    ProfileBulkRequest:
       type: object
-      required: [index, name, gnbId, n2Ip, n3Ip, ueCount, cpUeCount, ueFirst, ueLast, firstSupi, lastSupi]
+      required: [profileId, count]
       properties:
-        cpUeCount:
-          type: integer
-          description: Of ueCount, how many are in the control-plane loop.
-        index:
-          type: integer
-        name:
+        profileId:
           type: string
-        gnbId:
-          type: string
-        n2Ip:
-          type: string
-        n3Ip:
-          type: string
-        ueCount:
-          type: integer
-        ueFirst:
-          type: integer
-          description: 1-based index of the first UE on this gNB; 0 when it has none.
-        ueLast:
-          type: integer
-        firstSupi:
-          type: string
-          description: SUPI of this gNB's first UE; empty when it has none.
-          example: imsi-208930000000001
-        lastSupi:
-          type: string
-    TesterPlan:
-      type: object
-      required: [gnbs, uesPerGnb, n2Prefix, n3Prefix]
-      properties:
-        gnbs:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterGnbSpec'
-        uesPerGnb:
-          type: integer
-        n2Prefix:
-          type: integer
-        n3Prefix:
-          type: integer
-    TesterValidateResponse:
-      type: object
-      required: [valid, errors]
-      properties:
-        valid:
-          type: boolean
-        errors:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterFieldError'
-        plan:
-          allOf:
-            - $ref: '#/components/schemas/TesterPlan'
-          nullable: true
-    TesterStartErrorResponse:
-      type: object
-      required: [message, errors]
-      properties:
-        message:
-          type: string
-        errors:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterFieldError'
-    TesterCauseCount:
-      type: object
-      required: [cause, count]
-      properties:
-        cause:
-          type: string
-          example: misc(4)
+          description: The source profile.
         count:
           type: integer
-          format: int64
-    TesterStageSnapshot:
+          minimum: 1
+          maximum: 500
+    HostInterface:
       type: object
-      description: One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
-      required: [name, expected, attempted, retries, inFlight, accepted, rejected, timedOut, failed, skipped, done, totalTimeMs, avgMs, p50Ms, p95Ms, p99Ms, maxMs, causes]
+      required: [name, addresses]
       properties:
         name:
           type: string
-        expected:
-          type: integer
-        attempted:
-          type: integer
-          format: int64
-        retries:
-          type: integer
-          format: int64
-        inFlight:
-          type: integer
-          format: int64
-        accepted:
-          type: integer
-          format: int64
-        rejected:
-          type: integer
-          format: int64
-        timedOut:
-          type: integer
-          format: int64
-        failed:
-          type: integer
-          format: int64
-        skipped:
-          type: integer
-          format: int64
-          description: Never attempted (gNB down, earlier stage failed, or the run was stopped first).
-        done:
-          type: boolean
-        totalTimeMs:
-          type: number
-        avgMs:
-          type: number
-        p50Ms:
-          type: number
-        p95Ms:
-          type: number
-        p99Ms:
-          type: number
-        maxMs:
-          type: number
-        causes:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterCauseCount'
-    TesterGnbStatus:
-      allOf:
-        - $ref: '#/components/schemas/TesterGnbSpec'
-        - type: object
-          required: [state, attempts, latencyMs, cause, registered, established]
-          properties:
-            state:
-              type: string
-              enum: [pending, connecting, up, failed, lost, closed]
-              description: lost = was up, then the AMF side dropped the association.
-            attempts:
-              type: integer
-            latencyMs:
-              type: number
-            cause:
-              type: string
-            registered:
-              type: integer
-            established:
-              type: integer
-    TesterCpuAllocation:
-      type: object
-      description: Linux CPU lists such as "0-3,8". The control plane (registration, PDU, the control-plane loop, the API) runs on cpCpus for a run; each data plane sender and reader keeps a thread on dpCpus, one of each per CPU. Empty = that side is not pinned.
-      required: [cpCpus, dpCpus]
-      properties:
-        cpCpus:
-          type: string
-          example: 0-3
-        dpCpus:
-          type: string
-          example: 24-47
-    TesterCpusErrorResponse:
-      type: object
-      required: [message, errors]
-      properties:
-        message:
-          type: string
-        errors:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterFieldError'
-    TesterSystemInfo:
-      type: object
-      required: [cpus, topology]
-      properties:
-        cpus:
-          $ref: '#/components/schemas/TesterCpuAllocation'
-        topology:
-          $ref: '#/components/schemas/TesterTopology'
-    TesterEntry:
-      type: object
-      required: [id, url, builtIn]
-      properties:
-        id:
-          type: string
-          description: '"default" for the tester in config.yaml.'
-        url:
-          type: string
-        builtIn:
-          type: boolean
-          description: The tester in config.yaml; it cannot be removed.
-    TesterAddRequest:
-      type: object
-      required: [url, apiToken]
-      properties:
-        url:
-          type: string
-          example: http://10.0.0.2:9100
-        apiToken:
-          type: string
-          description: The apiToken in that tester's tester.yaml.
-    TesterAdded:
-      allOf:
-        - $ref: '#/components/schemas/TesterEntry'
-        - type: object
-          required: [name]
-          properties:
-            name:
-              type: string
-              description: The name the tester reported.
-    TesterStatus:
-      type: object
-      required: [name, hostname, version, goVersion, kernel, pid, startedAt, uptimeSec, memory, cpu, capabilities]
-      properties:
-        name:
-          type: string
-          description: The tester's testerName (tester.yaml); its host name when that is empty.
-        hostname:
-          type: string
-        version:
-          type: string
-          description: VCS revision fru-tester was built from; empty when the build does not say.
-        goVersion:
-          type: string
-        kernel:
-          type: string
-          description: Kernel release of the tester host.
-        pid:
-          type: integer
-        startedAt:
-          type: string
-          format: date-time
-        uptimeSec:
-          type: integer
-          format: int64
-        memory:
-          type: object
-          description: Bytes.
-          required: [hostTotal, hostAvailable, processRss, goHeap, cgroupLimit, cgroupUsage]
-          properties:
-            hostTotal:
-              type: integer
-              format: int64
-            hostAvailable:
-              type: integer
-              format: int64
-            processRss:
-              type: integer
-              format: int64
-              description: fru-tester's resident memory.
-            goHeap:
-              type: integer
-              format: int64
-            cgroupLimit:
-              type: integer
-              format: int64
-              nullable: true
-              description: Memory limit of fru-tester's cgroup (its container); null when there is none.
-            cgroupUsage:
-              type: integer
-              format: int64
-              nullable: true
-              description: What the cgroup uses, page cache included; null when it cannot be read.
-        cpu:
-          type: object
-          required: [online, allowed, load1, load5, load15, goroutines]
-          properties:
-            online:
-              type: integer
-            allowed:
-              type: integer
-              description: CPUs fru-tester may use.
-            load1:
-              type: number
-            load5:
-              type: number
-            load15:
-              type: number
-            goroutines:
-              type: integer
-        capabilities:
-          type: object
-          required: [netAdmin, bpf, ipcLock, sctp]
-          properties:
-            netAdmin:
-              type: boolean
-              description: Needed to add the gNB IPs and the UE route.
-            bpf:
-              type: boolean
-              description: Needed by the AF_XDP engine (CAP_BPF, or CAP_SYS_ADMIN before Linux 5.8).
-            ipcLock:
-              type: boolean
-              description: Needed by the AF_XDP engine.
-            sctp:
-              type: boolean
-              description: The sctp kernel module is loaded.
-    TesterCpuLoad:
-      type: object
-      required: [intervalMs, cpus]
-      properties:
-        intervalMs:
-          type: integer
-          format: int64
-          description: How long the load was measured over.
-        cpus:
-          type: array
-          description: Every online CPU, by number.
-          items:
-            type: object
-            required: [cpu, busy]
-            properties:
-              cpu:
-                type: integer
-              busy:
-                type: number
-                description: Percent of the interval not idle.
-    TesterTopology:
-      type: object
-      required: [online, allowed, nodes, interfaces]
-      properties:
-        online:
-          type: string
-          description: CPUs the kernel runs.
-        allowed:
-          type: string
-          description: Of those, the CPUs fru-tester may use (in a container, its cpuset).
-        nodes:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterNumaNode'
-        interfaces:
-          type: array
-          description: Physical NICs only.
-          items:
-            $ref: '#/components/schemas/TesterNicLayout'
-    TesterNumaNode:
-      type: object
-      required: [node, cpus]
-      properties:
-        node:
-          type: integer
-        cpus:
-          type: string
-    TesterNicLayout:
-      type: object
-      required: [name, driver, numaNode, localCpus, queues, irqCpus]
-      properties:
-        name:
-          type: string
-        driver:
-          type: string
-        numaNode:
-          type: integer
-          description: -1 when the kernel does not say (e.g. a VM).
-        localCpus:
-          type: string
-          description: CPUs close to the NIC.
-        queues:
-          type: integer
-          description: Receive queues.
-        irqCpus:
-          type: string
-          description: CPUs the NIC's interrupts are delivered to; the kernel's receive work runs there.
-    TesterCpLoopSnapshot:
-      type: object
-      description: The control-plane test. registration and deregistration count every attempt of every cycle (expected is 0, a loop has no end); latencies are of accepted procedures.
-      required: [ues, state, durationSec, registered, cycles, registration, deregistration, cleanup, series]
-      properties:
-        ues:
-          type: integer
-        state:
-          type: string
-          enum: ['off', waiting, running, stopped]
-          description: off = no control-plane UEs; waiting = throughput UEs are still being set up.
-        startedAt:
-          type: string
-          format: date-time
-          nullable: true
-        durationSec:
-          type: number
-          description: How long the loop has run.
-        registered:
-          type: integer
-          description: Control-plane UEs registered right now.
-        cycles:
-          type: integer
-          description: Cycles whose registration and deregistration were both accepted.
-        registration:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        deregistration:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        cleanup:
-          allOf:
-            - $ref: '#/components/schemas/TesterStageSnapshot'
-          description: After Stop, the control-plane UEs still registered deregister (expected = every control-plane UE; the others are skipped). The throughput UEs' cleanup is the run snapshot's deregistration.
-        series:
-          type: array
-          description: Per-second rates from the loop's start, in at most 600 points (like the data plane's).
-          items:
-            $ref: '#/components/schemas/TesterCpPoint'
-    TesterCpPoint:
-      type: object
-      required: [t, regPerSec, deregPerSec, failPerSec]
-      properties:
-        t:
-          type: number
-          description: Seconds since the loop started.
-        regPerSec:
-          type: number
-        deregPerSec:
-          type: number
-        failPerSec:
-          type: number
-          description: Procedures that did not succeed.
-    TesterRunSnapshot:
-      type: object
-      required: [runId, profileName, state, error, n2, registration, pdu, deregistration, n2Release, stopReason, gnbs, gnbTotal, gnbOffset, gnbCounts, ues, failedUes, dataplane, cpLoop, cpus]
-      properties:
-        runId:
-          type: string
-        profileName:
-          type: string
-        state:
-          type: string
-          enum: [idle, configuring, n2, running, stopping, stopped, failed]
-        error:
-          type: string
-        startedAt:
-          type: string
-          format: date-time
-          nullable: true
-        stoppedAt:
-          type: string
-          format: date-time
-          nullable: true
-        n2:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        registration:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        pdu:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        deregistration:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        n2Release:
-          $ref: '#/components/schemas/TesterStageSnapshot'
-        stopReason:
-          type: string
-          description: Why the run stopped; empty while running.
-          enum: ['', user, maxDuration]
-        gnbs:
-          type: array
-          description: The gNBs asked for (gnbOffset, gnbLimit, gnbState); every gNB when no gnbLimit was given.
-          items:
-            $ref: '#/components/schemas/TesterGnbStatus'
-        gnbTotal:
-          type: integer
-          description: How many gNBs match gnbState (every gNB without it).
-        gnbOffset:
-          type: integer
-          description: Where gnbs starts within them.
-        gnbCounts:
-          type: object
-          description: Every gNB of the run counted by state.
-          additionalProperties:
-            type: integer
-        ues:
-          $ref: '#/components/schemas/TesterUeSummary'
-        failedUes:
-          type: array
-          description: The first 200 UEs that failed; ues.failed has the total.
-          items:
-            $ref: '#/components/schemas/TesterUeFailure'
-        dataplane:
-          $ref: '#/components/schemas/TesterDataplaneSnapshot'
-        cpus:
-          $ref: '#/components/schemas/TesterCpuAllocation'
-        cpLoop:
-          $ref: '#/components/schemas/TesterCpLoopSnapshot'
-        setup:
-          type: array
-          description: Registrations and PDU sessions per second from the start of the run until both stages are done, in at most 600 points (like the data plane's). Absent from testers older than this field.
-          items:
-            $ref: '#/components/schemas/TesterSetupPoint'
-    TesterSetupPoint:
-      type: object
-      required: [t, regPerSec, pduPerSec, failPerSec]
-      properties:
-        t:
-          type: number
-          description: Seconds since the run started.
-        regPerSec:
-          type: number
-          description: Registrations accepted.
-        pduPerSec:
-          type: number
-          description: PDU sessions established.
-        failPerSec:
-          type: number
-          description: Registrations and PDU sessions that finally failed.
-    TesterDataplaneSnapshot:
-      type: object
-      required: [engine, activeUes, ul, dl, gnbs, series]
-      properties:
-        engine:
-          type: string
-          description: 'How packets move, e.g. "socket", "socket (auto: docker-cn-ran is a bridge, not a NIC)" or "af_xdp (ens2f1 zero-copy, 8 queues)".'
-          example: af_xdp (ens2f1 zero-copy, 8 queues)
-        activeUes:
-          type: integer
-        ul:
-          $ref: '#/components/schemas/TesterTrafficDirection'
-        dl:
-          $ref: '#/components/schemas/TesterTrafficDirection'
-        gnbs:
-          type: array
-          description: Per gNB, same order as gnbs in the run snapshot.
-          items:
-            $ref: '#/components/schemas/TesterGnbTraffic'
-        series:
-          type: array
-          description: The whole run from its first second, in at most 600 points. A point covers 1 second until the run outgrows that, then 2, 4, 8 ... seconds (averaged).
-          items:
-            $ref: '#/components/schemas/TesterTrafficPoint'
-    TesterTrafficDirection:
-      type: object
-      description: Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
-      required: [txPackets, txBytes, rxPackets, rxBytes, txBps, rxBps, txPps, rxPps, lossRate, outOfOrder, sendErrors, misrouted, latency]
-      properties:
-        txPackets:
-          type: integer
-          format: int64
-        txBytes:
-          type: integer
-          format: int64
-        rxPackets:
-          type: integer
-          format: int64
-        rxBytes:
-          type: integer
-          format: int64
-        txBps:
-          type: number
-        rxBps:
-          type: number
-        txPps:
-          type: number
-        rxPps:
-          type: number
-        lossRate:
-          type: number
-          description: 1 - rx/tx so far.
-        outOfOrder:
-          type: integer
-          format: int64
-        sendErrors:
-          type: integer
-          format: int64
-        misrouted:
-          type: integer
-          format: int64
-          description: Downlink that arrived in another UE's tunnel or at another gNB. Always 0 for uplink.
-        latency:
-          $ref: '#/components/schemas/TesterLatency'
-    TesterLatency:
-      type: object
-      description: One-way latency in milliseconds (send and receive share the host clock).
-      required: [count, avgMs, p50Ms, p99Ms, maxMs]
-      properties:
-        count:
-          type: integer
-          format: int64
-        avgMs:
-          type: number
-        p50Ms:
-          type: number
-        p99Ms:
-          type: number
-        maxMs:
-          type: number
-    TesterGnbTraffic:
-      type: object
-      required: [ulTxBytes, ulRxBytes, dlTxBytes, dlRxBytes]
-      properties:
-        ulTxBytes:
-          type: integer
-          format: int64
-        ulRxBytes:
-          type: integer
-          format: int64
-        dlTxBytes:
-          type: integer
-          format: int64
-        dlRxBytes:
-          type: integer
-          format: int64
-    TesterTrafficPoint:
-      type: object
-      required: [t, ulTxBps, ulRxBps, dlTxBps, dlRxBps]
-      properties:
-        t:
-          type: number
-          description: Seconds since traffic started.
-        ulTxBps:
-          type: number
-        ulRxBps:
-          type: number
-        dlTxBps:
-          type: number
-        dlRxBps:
-          type: number
-    TesterUeSummary:
-      type: object
-      description: UEs per pipeline state; the fields add up to the UE count.
-      required: [pending, registering, registered, establishing, established, failed, skipped, cancelled, deregistering, deregistered]
-      properties:
-        pending:
-          type: integer
-        registering:
-          type: integer
-        registered:
-          type: integer
-        establishing:
-          type: integer
-        established:
-          type: integer
-        failed:
-          type: integer
-        skipped:
-          type: integer
-        cancelled:
-          type: integer
-        deregistering:
-          type: integer
-        deregistered:
-          type: integer
-    TesterRunReport:
-      type: object
-      required: [profile, snapshot]
-      properties:
-        profile:
-          $ref: '#/components/schemas/TesterProfile'
-        snapshot:
-          $ref: '#/components/schemas/TesterRunSnapshot'
-    TesterHistorySummary:
-      type: object
-      required: [id, testerId, testerName, name, runId, profileName, state, error, stopReason, gnbCount, ueCount, registered, registrationP95Ms, established, deregistered, ulTxBytes, ulRxBytes, ulLossRate, dlTxBytes, dlRxBytes, dlLossRate]
-      properties:
-        id:
-          type: string
-          description: Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester's runs; the run ID, "@" and the tester's id for another tester's.
-          example: 20261030-105502@6e465eabcfd7a7a9
-        testerId:
-          type: string
-          description: The tester that ran it ("default" for the one in config.yaml, and for runs stored before testers could be added).
-        testerName:
-          type: string
-          description: That tester's name when the run was stored; empty for runs stored before testers could be added.
-        name:
-          type: string
-          description: The name the user gave the run in the History page; empty shows the run ID.
-          example: baseline 1000 UE
-        runId:
-          type: string
-        profileName:
-          type: string
-        state:
-          type: string
-        error:
-          type: string
-        stopReason:
-          type: string
-        startedAt:
-          type: string
-          format: date-time
-          nullable: true
-        stoppedAt:
-          type: string
-          format: date-time
-          nullable: true
-        gnbCount:
-          type: integer
-        ueCount:
-          type: integer
-        registered:
-          type: integer
-          format: int64
-        registrationP95Ms:
-          type: number
-        established:
-          type: integer
-          format: int64
-        deregistered:
-          type: integer
-          format: int64
-        ulTxBytes:
-          type: integer
-          format: int64
-        ulRxBytes:
-          type: integer
-          format: int64
-        ulLossRate:
-          type: number
-        dlTxBytes:
-          type: integer
-          format: int64
-        dlRxBytes:
-          type: integer
-          format: int64
-        dlLossRate:
-          type: number
-    TesterInterface:
-      type: object
-      required: [name, kind, state, mtu, addresses]
-      properties:
-        name:
-          type: string
-          example: ens2f1
-        kind:
-          type: string
-          description: Link type, e.g. device (a NIC), bridge, veth, macvlan, vlan, bond.
-          example: device
-        state:
-          type: string
-          description: Operational state, e.g. up, down, unknown.
-          example: up
-        mtu:
-          type: integer
-          example: 1500
+          example: eth0
         addresses:
           type: array
-          description: IPv4 addresses with prefix length.
           items:
             type: string
-    TesterPingRequest:
-      type: object
-      required: [plane, profile]
-      properties:
-        plane:
-          type: string
-          enum: [n2, n3, n6]
-        profile:
-          $ref: '#/components/schemas/TesterProfile'
-    TesterPingResult:
-      type: object
-      required: [plane, interface, source, target, added, sent, received, rttMs, error]
-      properties:
-        plane:
-          type: string
-          enum: [n2, n3, n6]
-        interface:
-          type: string
-        source:
-          type: string
-          description: The address the test used, with its prefix length.
-          example: 10.0.1.100/24
-        target:
-          type: string
-          description: The AMF (N2), the UPF's N3 or the UPF's N6 address.
-        added:
-          type: boolean
-          description: The source was added to the interface for the test and removed again.
-        sent:
-          type: integer
-        received:
-          type: integer
-        rttMs:
-          type: array
-          items:
-            type: number
-        error:
-          type: string
-          description: Why the test could not run (e.g. the address could not be added) or a send error such as no route to host; empty otherwise.
-    TesterBenchSettings:
-      type: object
-      required: [packetSize, stepSeconds, gso]
-      properties:
-        packetSize:
-          type: integer
-          description: Inner IP packet bytes, 64..9000.
-          example: 1400
-        stepSeconds:
-          type: integer
-          description: Measuring time per sender count, 1..30.
-          example: 3
-        gso:
-          type: boolean
-          description: Send with UDP GSO, as runs do; off measures plain sendmmsg, as on a kernel without GSO.
-          example: true
-    TesterBenchStep:
-      type: object
-      required: [senders, pps, bps, sendErrors, gso]
-      properties:
-        senders:
-          type: integer
-        pps:
-          type: number
-        bps:
-          type: number
-          description: Inner IP bits per second.
-        sendErrors:
-          type: integer
-          format: int64
-        gso:
-          type: boolean
-          description: Whether the senders did use UDP GSO (false if the kernel refused it).
-    TesterBenchResult:
-      type: object
-      required: [state, error, cpus, kernel, settings, plannedSenders, steps]
-      properties:
-        state:
-          type: string
-          enum: [idle, running, done, failed]
-        error:
-          type: string
-        cpus:
-          type: integer
-        kernel:
-          type: string
-        settings:
-          $ref: '#/components/schemas/TesterBenchSettings'
-        plannedSenders:
-          type: array
-          items:
-            type: integer
-        steps:
-          type: array
-          items:
-            $ref: '#/components/schemas/TesterBenchStep'
-        startedAt:
-          type: string
-          format: date-time
-          nullable: true
-        finishedAt:
-          type: string
-          format: date-time
-          nullable: true
-    TesterUeFailure:
-      type: object
-      required: [supi, gnb, stage, cause, attempts]
-      properties:
-        supi:
-          type: string
-        gnb:
-          type: string
-        stage:
-          type: string
-          enum: [registration, pdu, deregistration]
-        cause:
-          type: string
-          example: 5gmm(62)
-        attempts:
-          type: integer
+          example: [192.168.1.20]

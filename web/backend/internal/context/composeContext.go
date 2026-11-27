@@ -9,10 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +24,7 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/cli/cli/command"
 	cliflags "github.com/docker/cli/cli/flags"
 	"github.com/docker/compose/v5/pkg/api"
@@ -50,7 +54,7 @@ type composeTarget struct {
 // template resolves which template to materialize for a deploy: the named
 // variant if the target has one by that name, otherwise the target's
 // default. An unknown/empty variant silently falls back to the default
-// rather than erroring, since most targets (gnb, and free5gc's own
+// rather than erroring, since free5gc's own
 // Down/Status/Logs calls) never pass one at all.
 func (t composeTarget) template(variant string) composeTemplate {
 	if variant != "" {
@@ -101,6 +105,11 @@ type composeContext struct {
 	networksMu    sync.Mutex
 	networksReady bool
 
+	// gnbDeployMu serializes profile gNB deploys: checking what a gNB may
+	// use, picking its ran-ue address and bringing it up (see
+	// LockGnbDeploys).
+	gnbDeployMu sync.Mutex
+
 	*logger.BackendLogger
 }
 
@@ -138,9 +147,9 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		BackendLogger: ie.BackendLogger,
 	}
 
-	// fru-lab also runs without a Docker daemon (in Kubernetes, to drive
-	// the throughput tester only): then the deploy pages fail with the
-	// daemon's error, and the networks are created on the next deploy.
+	// fru-lab still starts when the Docker daemon is not reachable: the
+	// deploy pages then fail with the daemon's error, and the networks are
+	// created on the next deploy.
 	if err := c.networks(context.Background()); err != nil {
 		c.CtxLog.Warnf("Docker is not reachable, deploying free5GC/gNB/UE will fail until it is: %v", err)
 	}
@@ -166,35 +175,6 @@ func defaultTargets() map[string]composeTarget {
 					templateFS:  free5gcUlclTemplateFS,
 					templateDir: "templates/free5gc-ulcl",
 				},
-				constant.FREE5GC_TEMPLATE_ULCL_2SLICE: {
-					templateFS:  free5gcUlcl2SliceTemplateFS,
-					templateDir: "templates/free5gc-ulcl-2slice",
-				},
-			},
-		},
-		constant.DEPLOY_TARGET_GNB: {
-			projectName: "frulab-gnb",
-			composeTemplate: composeTemplate{
-				templateFS:  gnbTemplateFS,
-				templateDir: "templates/gnb",
-			},
-		},
-		// gnb-slice1/gnb-slice2 are independent targets (own compose
-		// project, own container, own cn-ran/ran-ue IPs) rather than
-		// variants of gnb, since under FREE5GC_TEMPLATE_ULCL_2SLICE both
-		// need to be deployable at the same time.
-		constant.DEPLOY_TARGET_GNB_SLICE1: {
-			projectName: "frulab-gnb-slice1",
-			composeTemplate: composeTemplate{
-				templateFS:  gnbSlice1TemplateFS,
-				templateDir: "templates/gnb-slice1",
-			},
-		},
-		constant.DEPLOY_TARGET_GNB_SLICE2: {
-			projectName: "frulab-gnb-slice2",
-			composeTemplate: composeTemplate{
-				templateFS:  gnbSlice2TemplateFS,
-				templateDir: "templates/gnb-slice2",
 			},
 		},
 	}
@@ -266,6 +246,9 @@ func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
 // running). Only Up passes a real variant, since it's the only caller that
 // forces a fresh materialize on every call.
 func (c *composeContext) loadProject(ctx context.Context, target string, variant string, forceMaterialize bool) (*types.Project, error) {
+	if IsGnbInstance(target) {
+		return c.loadGnbInstanceProject(ctx, target)
+	}
 	t, ok := c.targets[target]
 	if !ok {
 		return nil, fmt.Errorf("unsupported deploy target: %s", target)
@@ -452,6 +435,10 @@ type ComposeStatusResult struct {
 }
 
 func (c *composeContext) Status(ctx context.Context, target string) (*ComposeStatusResult, error) {
+	// a profile gNB that is not deployed has no working dir; it is stopped
+	if IsGnbInstance(target) && !c.gnbInstanceMaterialized(target) {
+		return &ComposeStatusResult{Services: []model.ServiceStatus{}}, nil
+	}
 	project, err := c.loadProject(ctx, target, "", false)
 	if err != nil {
 		return nil, err
@@ -564,6 +551,10 @@ func mapServiceStatus(state, health string) string {
 func (c *composeContext) release() {
 	c.CtxLog.Infoln("Release composeContext...")
 
+	ctx, cancel := context.WithTimeout(context.Background(), teardownTimeout)
+	defer cancel()
+	c.teardown(ctx)
+
 	if err := c.dockerCli.Client().Close(); err != nil {
 		c.CtxLog.Errorf("Failed to close docker client: %v", err)
 	}
@@ -571,12 +562,120 @@ func (c *composeContext) release() {
 	c.CtxLog.Infoln("composeContext released")
 }
 
+// teardownTimeout bounds the whole shutdown teardown: every UE, gNB and
+// core container stopped, then the shared networks removed.
+const teardownTimeout = 2 * time.Minute
+
+// ueProjectPrefix starts every UE instance's compose project name (see
+// ueProjectName).
+const ueProjectPrefix = "frulab-ue-"
+
+// teardown runs on shutdown and removes everything fru-lab created on the
+// Docker host: the UE, gNB and core compose projects (in that order, the
+// one the backend enforces for single stops), then the shared networks and
+// their host bridge interfaces. A shared network cannot be removed while a
+// container is still attached, so the projects go first.
+func (c *composeContext) teardown(ctx context.Context) {
+	projects, err := c.deployedProjects(ctx)
+	if err != nil {
+		c.CtxLog.Warnf("Docker is not reachable, nothing to tear down: %v", err)
+		return
+	}
+
+	for _, name := range teardownOrder(projects, c.targets) {
+		c.CtxLog.Infof("Tearing down project %s", name)
+		if err := c.service.Down(ctx, name, api.DownOptions{RemoveOrphans: true}); err != nil {
+			c.CtxLog.Errorf("Failed to tear down project %s: %v", name, err)
+		}
+	}
+
+	c.removeSharedNetworks(ctx)
+}
+
+// deployedProjects lists the compose projects that have containers on the
+// Docker host, running or not.
+func (c *composeContext) deployedProjects(ctx context.Context) (map[string]bool, error) {
+	list, err := c.dockerCli.Client().ContainerList(ctx, dockerclient.ContainerListOptions{
+		All:     true,
+		Filters: dockerclient.Filters{}.Add("label", api.ProjectLabel),
+	})
+	if err != nil {
+		return nil, err
+	}
+	projects := map[string]bool{}
+	for _, item := range list.Items {
+		projects[item.Labels[api.ProjectLabel]] = true
+	}
+	return projects, nil
+}
+
+// legacyGnbProjects are the compose projects of the gNBs older fru-lab
+// versions deployed (the singleton gNB and the Two Slice gNBs); they are
+// still torn down if they are around.
+var legacyGnbProjects = []string{"frulab-gnb-slice1", "frulab-gnb-slice2", "frulab-gnb"}
+
+// teardownOrder picks fru-lab's own projects out of projects: UE instances
+// first, then the profile gNBs, any legacy gNBs, then the core.
+func teardownOrder(projects map[string]bool, targets map[string]composeTarget) []string {
+	var order []string
+	ues := make([]string, 0)
+	for name := range projects {
+		if strings.HasPrefix(name, ueProjectPrefix) {
+			ues = append(ues, name)
+		}
+	}
+	sort.Strings(ues)
+	order = append(order, ues...)
+	gnbs := make([]string, 0)
+	for name := range projects {
+		if gnbInstanceProject.MatchString(name) {
+			gnbs = append(gnbs, name)
+		}
+	}
+	sort.Strings(gnbs)
+	order = append(order, gnbs...)
+	for _, name := range append(append([]string{}, legacyGnbProjects...), targets[constant.DEPLOY_TARGET_FREE5GC].projectName) {
+		if projects[name] {
+			order = append(order, name)
+		}
+	}
+	return order
+}
+
+// removeSharedNetworks removes the shared docker networks; docker deletes
+// their bridge interfaces with them. A bridge interface that is somehow
+// left on the host (it is only visible when fru-lab runs on the host, not
+// in a container) is deleted too.
+func (c *composeContext) removeSharedNetworks(ctx context.Context) {
+	c.networksMu.Lock()
+	defer c.networksMu.Unlock()
+
+	apiClient := c.dockerCli.Client()
+	for _, n := range c.sharedNetworks {
+		if _, err := apiClient.NetworkRemove(ctx, n.name, dockerclient.NetworkRemoveOptions{}); err != nil {
+			if !cerrdefs.IsNotFound(err) {
+				c.CtxLog.Errorf("Failed to remove network %s: %v", n.name, err)
+			}
+		} else {
+			c.CtxLog.Infof("Removed shared network %s", n.name)
+		}
+
+		if _, err := net.InterfaceByName(n.bridgeName); err != nil {
+			continue
+		}
+		c.CtxLog.Infof("Bridge %s is still on the host, deleting it", n.bridgeName)
+		if out, err := exec.CommandContext(ctx, "ip", "link", "delete", n.bridgeName).CombinedOutput(); err != nil {
+			c.CtxLog.Errorf("Failed to delete bridge %s: %v: %s", n.bridgeName, err, strings.TrimSpace(string(out)))
+		}
+	}
+	c.networksReady = false
+}
+
 // UeInstanceConfig carries the subscriber-derived fields that get templated
 // into one UE instance's uecfg.yaml at deploy time. RanIp is the one
 // exception - it's not subscriber data, it's which gNB this UE should dial,
-// resolved by the processor layer from the subscriber's own Sd (see
-// Processor.resolveUeGnbTarget) since under FREE5GC_TEMPLATE_ULCL_2SLICE
-// more than one gNB can be up at once and only one of them is this UE's.
+// picked by the processor layer (requested, or by the UE's Sd) since
+// several gNBs can be up at once.
 type UeInstanceConfig struct {
 	Mcc          string
 	Mnc          string
@@ -589,10 +688,12 @@ type UeInstanceConfig struct {
 	Sst          string
 	Sd           string
 	RanIp        string
+	// the gNB target RanIp belongs to, recorded next to the instance
+	Gnb string
 }
 
-// ue deployments are multi-instance - one per subscriber - unlike free5gc/gnb
-// which are process-wide singletons, so they can't reuse c.targets (keyed
+// ue deployments are multi-instance - one per subscriber - unlike free5gc
+// which is a process-wide singleton, so they can't reuse c.targets (keyed
 // only by target name) or loadProject (which does a static, untemplated
 // file copy). Every ue instance gets its own working directory and compose
 // project name, keyed by instanceID (the subscriber's ueId).
@@ -602,7 +703,7 @@ func (c *composeContext) ueWorkingDir(instanceID string) string {
 }
 
 func (c *composeContext) ueProjectName(instanceID string) string {
-	return "frulab-ue-" + instanceID
+	return ueProjectPrefix + instanceID
 }
 
 // loadUeProject mirrors loadProject's materialize-then-load approach, but
@@ -714,7 +815,11 @@ func (c *composeContext) UpUe(ctx context.Context, instanceID string, cfg *UeIns
 		return err
 	}
 
-	c.CtxLog.Infof("Deploying ue instance %s (project %s)", instanceID, project.Name)
+	if err := os.WriteFile(filepath.Join(c.ueWorkingDir(instanceID), ueGnbFile), []byte(cfg.Gnb), 0644); err != nil {
+		return err
+	}
+
+	c.CtxLog.Infof("Deploying ue instance %s on %s (project %s)", instanceID, cfg.Gnb, project.Name)
 	return c.up(ctx, project)
 }
 
@@ -778,6 +883,19 @@ func (c *composeContext) ListUeInstances() ([]string, error) {
 	return instances, nil
 }
 
+// ueGnbFile holds the gNB target a UE instance was deployed onto.
+const ueGnbFile = "fru-lab-gnb"
+
+// UeGnb is the gNB target a UE instance was last deployed onto; "" for one
+// deployed before fru-lab recorded it.
+func (c *composeContext) UeGnb(instanceID string) string {
+	raw, err := os.ReadFile(filepath.Join(c.ueWorkingDir(instanceID), ueGnbFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
 func (c *composeContext) ueContainerName(instanceID string) string {
 	return "ue-" + instanceID
 }
@@ -788,10 +906,20 @@ func (c *composeContext) ueContainerName(instanceID string) string {
 // combined into one stream with no framing, so the caller can just copy
 // bytes straight to/from a websocket without any stdcopy demuxing.
 func (c *composeContext) AttachUeShell(ctx context.Context, instanceID string) (dockerclient.HijackedResponse, string, error) {
-	containerName := c.ueContainerName(instanceID)
+	return c.attachShell(ctx, c.ueContainerName(instanceID), "ue instance "+instanceID)
+}
+
+// AttachGnbShell is AttachUeShell for the gNB of profile profileID.
+func (c *composeContext) AttachGnbShell(ctx context.Context, profileID string) (dockerclient.HijackedResponse, string, error) {
+	target := GnbInstanceTarget(profileID)
+	return c.attachShell(ctx, target, target)
+}
+
+// attachShell execs an interactive /bin/sh with a TTY in container.
+func (c *composeContext) attachShell(ctx context.Context, container, what string) (dockerclient.HijackedResponse, string, error) {
 	apiClient := c.dockerCli.Client()
 
-	execCreated, err := apiClient.ExecCreate(ctx, containerName, dockerclient.ExecCreateOptions{
+	execCreated, err := apiClient.ExecCreate(ctx, container, dockerclient.ExecCreateOptions{
 		Cmd:          []string{"/bin/sh"},
 		AttachStdin:  true,
 		AttachStdout: true,
@@ -799,12 +927,12 @@ func (c *composeContext) AttachUeShell(ctx context.Context, instanceID string) (
 		TTY:          true,
 	})
 	if err != nil {
-		return dockerclient.HijackedResponse{}, "", fmt.Errorf("failed to create shell for ue instance %s: %v", instanceID, err)
+		return dockerclient.HijackedResponse{}, "", fmt.Errorf("failed to create shell for %s: %v", what, err)
 	}
 
 	attached, err := apiClient.ExecAttach(ctx, execCreated.ID, dockerclient.ExecAttachOptions{TTY: true})
 	if err != nil {
-		return dockerclient.HijackedResponse{}, "", fmt.Errorf("failed to attach shell for ue instance %s: %v", instanceID, err)
+		return dockerclient.HijackedResponse{}, "", fmt.Errorf("failed to attach shell for %s: %v", what, err)
 	}
 
 	return attached.HijackedResponse, execCreated.ID, nil

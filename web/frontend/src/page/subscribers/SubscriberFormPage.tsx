@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import {
@@ -65,7 +64,7 @@ export default function SubscriberFormPage() {
   const [bulkFailures, setBulkFailures] = useState<BulkFailure[]>([])
   const bulkIds = useMemo(() => (isBulk ? bulkUeIds(form.ueId, count) : null), [isBulk, form.ueId, count])
 
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const { addError, addSuccess } = useNotifications()
 
   const loadForEdit = useCallback(async () => {
     if (!editUeId || !editPlmnId) return
@@ -109,7 +108,7 @@ export default function SubscriberFormPage() {
       try {
         const failures = await createMany(bulkIds)
         if (failures.length === 0) {
-          navigate('/subscribers')
+          navigate('/core-network/subscribers')
           return
         }
         setBulkFailures(failures)
@@ -129,7 +128,7 @@ export default function SubscriberFormPage() {
         await webconsoleApi.postSubscriberByID(subscription.ueId, subscription.plmnID, subscription)
         addSuccess(`Created ${subscription.ueId}`)
       }
-      navigate('/subscribers')
+      navigate('/core-network/subscribers')
     } catch (error) {
       addError(extractWebconsoleErrorMessage(error, 'Failed to save subscriber'))
     } finally {
@@ -154,9 +153,9 @@ export default function SubscriberFormPage() {
 
   const title = isEditMode ? 'Edit subscriber' : isBulk ? `Add ${count} subscribers` : 'Add subscriber'
   const crumbs = [
-    { label: 'Subscribers', to: '/subscribers' },
+    { label: 'Subscribers', to: '/core-network/subscribers' },
     ...(isEditMode
-      ? [{ label: <span className="num">{editUeId}</span>, to: `/subscribers/${encodeURIComponent(editUeId!)}/${encodeURIComponent(editPlmnId!)}` }, { label: 'Edit' }]
+      ? [{ label: <span className="num">{editUeId}</span>, to: `/core-network/subscribers/${encodeURIComponent(editUeId!)}/${encodeURIComponent(editPlmnId!)}` }, { label: 'Edit' }]
       : [{ label: isBulk ? `New (${count})` : 'New' }]),
   ]
   const header = (
@@ -181,7 +180,7 @@ export default function SubscriberFormPage() {
         </section>
         {loadError && (
           <div>
-            <button type="button" className={styles.btn} onClick={() => navigate('/subscribers')}>Back to subscribers</button>
+            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')}>Back to subscribers</button>
           </div>
         )}
       </AppLayout>
@@ -191,7 +190,7 @@ export default function SubscriberFormPage() {
   return (
     <AppLayout
       crumbs={crumbs}
-      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+     
     >
       {header}
 
@@ -493,7 +492,7 @@ export default function SubscriberFormPage() {
           )}
 
           <div className={styles.actionsRow}>
-            <button type="button" className={styles.btn} onClick={() => navigate('/subscribers')} disabled={isSaving}>
+            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')} disabled={isSaving}>
               {bulkFailures.length > 0 ? 'Back to subscribers' : 'Cancel'}
             </button>
             <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={isSaving || (isBulk && typeof bulkIds === 'string')}>

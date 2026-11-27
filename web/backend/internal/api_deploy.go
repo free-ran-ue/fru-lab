@@ -38,58 +38,46 @@ func (b *backend) getDeployRoutes() util.Routes {
 			HandlerFunc: withLogging("DeployFree5gcLogs", b.DeployLog, b.handleDeployFree5gcLogs),
 		},
 		{
+			Name:        "DeployGnbList",
+			Method:      http.MethodGet,
+			Pattern:     "/deploy/gnbs",
+			HandlerFunc: withLogging("DeployGnbList", b.DeployLog, b.handleDeployGnbList),
+		},
+		{
 			Name:        "DeployGnbUp",
 			Method:      http.MethodPost,
-			Pattern:     "/deploy/gnb",
+			Pattern:     "/deploy/gnbs/:profileId",
 			HandlerFunc: withLogging("DeployGnbUp", b.DeployLog, b.handleDeployGnbUp),
 		},
 		{
 			Name:        "DeployGnbDown",
 			Method:      http.MethodDelete,
-			Pattern:     "/deploy/gnb",
+			Pattern:     "/deploy/gnbs/:profileId",
 			HandlerFunc: withLogging("DeployGnbDown", b.DeployLog, b.handleDeployGnbDown),
-		},
-		{
-			Name:        "DeployGnbStatus",
-			Method:      http.MethodGet,
-			Pattern:     "/deploy/gnb/status",
-			HandlerFunc: withLogging("DeployGnbStatus", b.DeployLog, b.handleDeployGnbStatus),
 		},
 		{
 			Name:        "DeployGnbLogs",
 			Method:      http.MethodGet,
-			Pattern:     "/deploy/gnb/logs",
+			Pattern:     "/deploy/gnbs/:profileId/logs",
 			HandlerFunc: withLogging("DeployGnbLogs", b.DeployLog, b.handleDeployGnbLogs),
-		},
-		{
-			Name:        "DeployGnbSliceUp",
-			Method:      http.MethodPost,
-			Pattern:     "/deploy/gnb-slice/:slice",
-			HandlerFunc: withLogging("DeployGnbSliceUp", b.DeployLog, b.handleDeployGnbSliceUp),
-		},
-		{
-			Name:        "DeployGnbSliceDown",
-			Method:      http.MethodDelete,
-			Pattern:     "/deploy/gnb-slice/:slice",
-			HandlerFunc: withLogging("DeployGnbSliceDown", b.DeployLog, b.handleDeployGnbSliceDown),
-		},
-		{
-			Name:        "DeployGnbSliceStatus",
-			Method:      http.MethodGet,
-			Pattern:     "/deploy/gnb-slice/:slice/status",
-			HandlerFunc: withLogging("DeployGnbSliceStatus", b.DeployLog, b.handleDeployGnbSliceStatus),
-		},
-		{
-			Name:        "DeployGnbSliceLogs",
-			Method:      http.MethodGet,
-			Pattern:     "/deploy/gnb-slice/:slice/logs",
-			HandlerFunc: withLogging("DeployGnbSliceLogs", b.DeployLog, b.handleDeployGnbSliceLogs),
 		},
 		{
 			Name:        "DeployUeList",
 			Method:      http.MethodGet,
 			Pattern:     "/deploy/ue",
 			HandlerFunc: withLogging("DeployUeList", b.DeployLog, b.handleDeployUeList),
+		},
+		{
+			Name:        "DeployUeProfileUp",
+			Method:      http.MethodPost,
+			Pattern:     "/deploy/ue-profiles/:profileId",
+			HandlerFunc: withLogging("DeployUeProfileUp", b.DeployLog, b.handleDeployUeProfileUp),
+		},
+		{
+			Name:        "HostInterfaceList",
+			Method:      http.MethodGet,
+			Pattern:     "/host/interfaces",
+			HandlerFunc: withLogging("HostInterfaceList", b.DeployLog, b.handleHostInterfaceList),
 		},
 		{
 			Name:        "DeployUeUp",
@@ -191,147 +179,64 @@ func (b *backend) handleDeployFree5gcStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (b *backend) handleDeployGnbUp(c *gin.Context) {
-	response, errDetail := b.Processor.DeployUp(c.Request.Context(), constant.DEPLOY_TARGET_GNB, "")
+func (b *backend) handleDeployGnbList(c *gin.Context) {
+	response, errDetail := b.Processor.DeployGnbList(c.Request.Context())
 	if errDetail != nil {
-		b.DeployLog.Warnf("Deploy up failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{
-			Message: errDetail.Detail,
-		})
+		b.DeployLog.Warnf("Deploy gnb list failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
 		return
 	}
+	c.JSON(http.StatusOK, response)
+}
 
+func (b *backend) handleDeployGnbUp(c *gin.Context) {
+	response, errDetail := b.Processor.DeployGnbProfileUp(c.Request.Context(), c.Param("profileId"))
+	if errDetail != nil {
+		b.DeployLog.Warnf("Deploy up failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
+		return
+	}
 	c.JSON(http.StatusOK, response)
 }
 
 func (b *backend) handleDeployGnbDown(c *gin.Context) {
-	response, errDetail := b.Processor.DeployDown(c.Request.Context(), constant.DEPLOY_TARGET_GNB)
+	response, errDetail := b.Processor.DeployGnbProfileDown(c.Request.Context(), c.Param("profileId"))
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy down failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{
-			Message: errDetail.Detail,
-		})
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
 		return
 	}
-
 	c.JSON(http.StatusOK, response)
 }
 
 func (b *backend) handleDeployGnbLogs(c *gin.Context) {
-	response, errDetail := b.Processor.DeployLogs(c.Request.Context(), constant.DEPLOY_TARGET_GNB, parseServiceQuery(c))
+	response, errDetail := b.Processor.DeployGnbProfileLogs(c.Request.Context(), c.Param("profileId"))
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy logs failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployLogs{
-			Target: constant.DEPLOY_TARGET_GNB,
-		})
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
 		return
 	}
-
 	c.JSON(http.StatusOK, response)
 }
 
-func (b *backend) handleDeployGnbStatus(c *gin.Context) {
-	response, errDetail := b.Processor.DeployStatus(c.Request.Context(), constant.DEPLOY_TARGET_GNB)
+func (b *backend) handleDeployUeProfileUp(c *gin.Context) {
+	var req model.RequestDeployUeProfile
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, model.ResponseDeployAction{Message: "Invalid request body"})
+		return
+	}
+	response, errDetail := b.Processor.DeployUeProfileUp(c.Request.Context(), c.Param("profileId"), req.Gnb)
 	if errDetail != nil {
-		b.DeployLog.Warnf("Deploy status failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployStatus{
-			Target: constant.DEPLOY_TARGET_GNB,
-			Status: "unhealthy",
-		})
+		b.DeployLog.Warnf("Deploy ue profile up failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
 		return
 	}
-
 	c.JSON(http.StatusOK, response)
 }
 
-// gnbSliceTarget maps the ":slice" path param ("slice1"/"slice2") to its
-// deploy target, or ("", false) for anything else.
-func gnbSliceTarget(slice string) (string, bool) {
-	switch slice {
-	case "slice1":
-		return constant.DEPLOY_TARGET_GNB_SLICE1, true
-	case "slice2":
-		return constant.DEPLOY_TARGET_GNB_SLICE2, true
-	default:
-		return "", false
-	}
-}
-
-func (b *backend) handleDeployGnbSliceUp(c *gin.Context) {
-	target, ok := gnbSliceTarget(c.Param("slice"))
-	if !ok {
-		c.JSON(http.StatusNotFound, model.ResponseDeployAction{Message: "Unknown gNB slice"})
-		return
-	}
-
-	response, errDetail := b.Processor.DeployUp(c.Request.Context(), target, "")
-	if errDetail != nil {
-		b.DeployLog.Warnf("Deploy up failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{
-			Message: errDetail.Detail,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
-func (b *backend) handleDeployGnbSliceDown(c *gin.Context) {
-	target, ok := gnbSliceTarget(c.Param("slice"))
-	if !ok {
-		c.JSON(http.StatusNotFound, model.ResponseDeployAction{Message: "Unknown gNB slice"})
-		return
-	}
-
-	response, errDetail := b.Processor.DeployDown(c.Request.Context(), target)
-	if errDetail != nil {
-		b.DeployLog.Warnf("Deploy down failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{
-			Message: errDetail.Detail,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
-func (b *backend) handleDeployGnbSliceStatus(c *gin.Context) {
-	target, ok := gnbSliceTarget(c.Param("slice"))
-	if !ok {
-		c.JSON(http.StatusNotFound, model.ResponseDeployStatus{Status: "unhealthy"})
-		return
-	}
-
-	response, errDetail := b.Processor.DeployStatus(c.Request.Context(), target)
-	if errDetail != nil {
-		b.DeployLog.Warnf("Deploy status failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployStatus{
-			Target: target,
-			Status: "unhealthy",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
-func (b *backend) handleDeployGnbSliceLogs(c *gin.Context) {
-	target, ok := gnbSliceTarget(c.Param("slice"))
-	if !ok {
-		c.JSON(http.StatusNotFound, model.ResponseDeployLogs{})
-		return
-	}
-
-	response, errDetail := b.Processor.DeployLogs(c.Request.Context(), target, parseServiceQuery(c))
-	if errDetail != nil {
-		b.DeployLog.Warnf("Deploy logs failed for %s: %s", c.ClientIP(), errDetail.Detail)
-		c.JSON(errDetail.HttpStatus, model.ResponseDeployLogs{
-			Target: target,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, response)
+func (b *backend) handleHostInterfaceList(c *gin.Context) {
+	list, errDetail := b.Processor.HostInterfaces()
+	respond(c, list, errDetail)
 }
 
 func (b *backend) handleDeployUeUp(c *gin.Context) {

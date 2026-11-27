@@ -1,5 +1,4 @@
-/* The v2 page frame in the v1 colours: sidebar, a 72px white header bar (as tall as the sidebar's brand row),
-   the content column (20px 24px 24px, 16px gaps) and a 26px status bar. */
+/* The workbench frame: activity bar, a 40px top bar, the view. */
 .shell {
   display: flex;
   min-height: 100vh;
@@ -14,25 +13,43 @@
   flex-direction: column;
 }
 
+.mainFill {
+  height: 100vh;
+  overflow: hidden;
+}
+
 .bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  min-height: 4.5rem;
-  padding: 0.375rem 1.5rem;
+  min-height: 2.5rem;
+  padding: 0 0.875rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
 .crumbs {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
+  min-width: 0;
   font-size: 0.8125rem;
   color: var(--muted);
-  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.product {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.slash {
+  color: var(--border-strong);
 }
 
 .crumbLink {
@@ -42,6 +59,7 @@
 
 .crumbLink:hover {
   color: var(--ink);
+  text-decoration: none;
 }
 
 .crumbCurrent {
@@ -51,68 +69,86 @@
 .barRight {
   margin-left: auto;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.875rem;
   font-size: 0.75rem;
-  color: var(--muted);
 }
+
+.pills {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  text-decoration: none;
+}
+
+.pill:hover {
+  border-color: var(--border-strong);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.pill b {
+  font-weight: 500;
+  color: var(--ink-2);
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill i,
+.live i {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+}
+
+.st_running { background: var(--ok); }
+.st_deploying { background: var(--warn); }
+.st_unhealthy { background: var(--bad); }
+.st_stopped { background: var(--idle); }
 
 .live {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
 }
 
-.liveDot,
-.offDot {
-  width: 0.4375rem;
-  height: 0.4375rem;
-  border-radius: 50%;
-  background: var(--ok);
-}
-
-.offDot {
-  background: var(--bad);
+.dim {
+  color: var(--muted);
 }
 
 .content {
   flex: 1 1 auto;
   width: 100%;
-  padding: 1.25rem 1.5rem 1.5rem;
+  padding: 1rem 1.25rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
   min-width: 0;
 }
 
-.status {
+.fill {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 1rem;
-  min-height: 1.625rem;
-  padding: 0 1.5rem;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 0.71875rem;
-  color: var(--muted);
+  flex-direction: column;
 }
 
-.statusRight {
-  margin-left: auto;
-}
-
-@media (max-width: 900px) {
-  .shell {
-    flex-direction: column;
-  }
-
-  .bar,
-  .content,
-  .status {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
+@media (max-width: 1100px) {
+  .pills, .dim { display: none; }
 }

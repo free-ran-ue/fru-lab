@@ -20,28 +20,6 @@ services:
       - /var/lib/frulab/deploy:/var/lib/frulab/deploy
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
-      # fru-tester runs on the host network; this name reaches the host
+      # free5GC's webconsole is published on the host; this name reaches it
       - "host.docker.internal:host-gateway"
 
-  fru-tester:
-    container_name: fru-tester
-    image: alonza0314/fru-tester:latest
-    command: ./fru-tester -c tester.yaml
-    # host network: gNB IPs are added to host interfaces and SCTP to the
-    # AMF leaves from them. NET_ADMIN is for adding/removing those IPs.
-    # The sctp kernel module must be loaded on the host (modprobe sctp).
-    network_mode: host
-    # teardown closes every SCTP association (up to 1 s each, in parallel)
-    # and removes the gNB IPs; give it time before docker sends SIGKILL
-    stop_grace_period: 60s
-    # BPF and IPC_LOCK are for the AF_XDP data plane engine: loading its XDP
-    # program, and pinning the memory its sockets share with the NIC.
-    # Without them a run on "auto" uses UDP sockets and says why.
-    cap_add:
-      - NET_ADMIN
-      - BPF
-      - IPC_LOCK
-    volumes:
-      - ./tester.yaml:/frutester/tester.yaml
-      # the Testers page's CPU allocation (systemFile in tester.yaml)
-      - ./frutester-data:/frutester/data

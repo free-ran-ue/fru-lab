@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import AppLayout from '../../components/layout/AppLayout'
 import Modal from '../../components/modal/modal'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import type { ImageInfo } from '../../api'
 import styles from './images-page.module.css'
+import { compareValues, nextSort, SortTh, type SortState } from '../../lab/sort'
 
 const GROUP_LABELS: Record<string, string> = {
   free5gc: 'free5GC core',
@@ -42,12 +42,16 @@ function formatSize(bytes?: number): string {
 type PendingAction = 'pull' | 'clear'
 
 export default function ImagesPage() {
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const { addError, addSuccess } = useNotifications()
   const [images, setImages] = useState<ImageInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [pending, setPending] = useState<Record<string, PendingAction>>({})
   const [confirmClearTarget, setConfirmClearTarget] = useState<ImageInfo | null>(null)
   const [confirmClearAll, setConfirmClearAll] = useState(false)
+  // one sort for every group's table
+  const [sort, setSort] = useState<SortState | null>(null)
+  const onSort = (k: string) => setSort((cur) => nextSort(cur, k))
+  const sortValue = (image: ImageInfo, k: string) => (k === 'name' ? image.name : k === 'status' ? (image.present ? 0 : 1) : k === 'size' ? (image.present ? image.size : undefined) : image.present ? image.createdAt : undefined)
 
   const refresh = useCallback(async () => {
     try {
@@ -168,7 +172,7 @@ export default function ImagesPage() {
   return (
     <AppLayout
       crumbs={[{ label: 'Images' }]}
-      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+     
     >
       <section className={styles.header}>
         <h1 className={styles.title}>Images</h1>
@@ -203,7 +207,8 @@ export default function ImagesPage() {
         <section className={styles.panel}><p className={styles.emptyState}>Loading images…</p></section>
       ) : (
         groups.map((group) => {
-          const groupImages = images.filter((image) => image.group === group)
+          const inGroup = images.filter((image) => image.group === group)
+          const groupImages = sort ? [...inGroup].sort((a, b) => compareValues(sortValue(a, sort.key), sortValue(b, sort.key), sort.dir)) : inGroup
           return (
             <section key={group} className={styles.panel}>
               <div className={styles.ph}>
@@ -216,10 +221,10 @@ export default function ImagesPage() {
                 <table className={styles.tbl}>
                   <thead>
                     <tr>
-                      <th>Image</th>
-                      <th>Status</th>
-                      <th className={styles.r}>Size</th>
-                      <th>Created</th>
+                      <SortTh k="name" sort={sort} onSort={onSort}>Image</SortTh>
+                      <SortTh k="status" sort={sort} onSort={onSort}>Status</SortTh>
+                      <SortTh k="size" sort={sort} onSort={onSort} className={styles.r}>Size</SortTh>
+                      <SortTh k="created" sort={sort} onSort={onSort}>Created</SortTh>
                       <th className={styles.right}>Actions</th>
                     </tr>
                   </thead>

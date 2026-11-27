@@ -1,0 +1,266 @@
+/* The topology: flat tiles on a faint grid, a status stripe on the left
+   edge, live links in green with small packets moving along them. */
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--canvas-bg);
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.panning .svg {
+  cursor: grabbing;
+}
+
+.grid {
+  stroke: var(--canvas-grid);
+  stroke-width: 1;
+}
+
+/* frames (the free5GC core) */
+.frame {
+  cursor: pointer;
+  outline: none;
+}
+
+.frameBody {
+  fill: color-mix(in srgb, var(--surface) 55%, transparent);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.frame:hover .frameBody,
+.frame:focus-visible .frameBody {
+  stroke: var(--muted);
+}
+
+.frame.on .frameBody {
+  stroke: var(--accent);
+  stroke-dasharray: none;
+  stroke-width: 1.5;
+}
+
+.frameLabel {
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.frameSub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+/* links */
+.link {
+  fill: none;
+  stroke: var(--link);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transition: stroke 0.15s ease, opacity 0.15s ease;
+}
+
+.linkLive {
+  stroke: color-mix(in srgb, var(--link-live) 70%, var(--link));
+}
+
+.linkDashed {
+  stroke-dasharray: 4 5;
+}
+
+.linkRadio {
+  stroke-width: 1.25;
+  stroke-dasharray: 1 5;
+}
+
+.radioWaves {
+  stroke-width: 1.25;
+  stroke-dasharray: none;
+}
+
+.linkHot {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.linkCold {
+  opacity: 0.3;
+}
+
+.packet {
+  fill: var(--link-live);
+}
+
+.packetCold {
+  opacity: 0.2;
+}
+
+.notes text {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  fill: var(--muted);
+  paint-order: stroke;
+  stroke: var(--canvas-bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.notes .noteHot {
+  fill: var(--accent-ink);
+}
+
+/* nodes */
+.node {
+  cursor: pointer;
+  outline: none;
+}
+
+.nodeBody {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  transition: stroke 0.12s ease;
+}
+
+.node:hover .nodeBody,
+.node:focus-visible .nodeBody {
+  stroke: var(--muted);
+}
+
+.node.on .nodeBody {
+  stroke: var(--accent);
+  stroke-width: 1.75;
+}
+
+.stripe {
+  stroke: none;
+}
+
+.nodeIcon {
+  color: var(--muted);
+}
+
+.node.on .nodeIcon,
+.st_running .nodeIcon {
+  color: var(--ink-2);
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.labelSm {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  fill: var(--ink);
+}
+
+.sub {
+  font-size: 11.5px;
+  fill: var(--muted);
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  fill: var(--muted);
+}
+
+.st_running .tag { fill: var(--ok-ink); }
+.st_unhealthy .tag { fill: var(--bad-ink); }
+
+.ghost {
+  opacity: 0.45;
+}
+
+.ghost:hover {
+  opacity: 0.8;
+}
+
+/* status colours (stripe, dot, UE squares) */
+.ring { stroke: none; }
+.ringRunning { fill: var(--ok); }
+.ringStopped { fill: var(--idle); }
+.ringUnhealthy { fill: var(--bad); }
+.ringDeploying { fill: var(--warn); animation: blink 1s ease-in-out infinite; }
+
+.ueDot { stroke: none; }
+
+@keyframes blink {
+  50% { opacity: 0.35; }
+}
+
+/* overlays */
+.overlay {
+  position: absolute;
+  top: 0.625rem;
+  left: 0.625rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.zoom {
+  position: absolute;
+  right: 0.625rem;
+  bottom: 0.625rem;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.zoom button {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.625rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.zoom button + button {
+  border-left: 1px solid var(--border);
+}
+
+.zoom button:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.hint {
+  position: absolute;
+  left: 0.625rem;
+  bottom: 0.625rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ringDeploying { animation: none; }
+}

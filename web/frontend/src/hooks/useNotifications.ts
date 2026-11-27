@@ -1,46 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useToast } from '../components/feedback/Feedback'
 
-interface NotificationItem {
-  id: string
-  message: string
-  timestamp: number
-  type: 'error' | 'success'
-}
-
+// useNotifications posts the page's messages to the app's toasts (top
+// right, gone after 5 s), so they outlive a page change.
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
-
-  const addNotification = useCallback((message: string, type: 'error' | 'success') => {
-    const id = Date.now().toString()
-    setNotifications(prev => [...prev, {
-      id,
-      message,
-      timestamp: Date.now(),
-      type
-    }])
-    return id
-  }, [])
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(notification => notification.id !== id))
-  }, [])
-
-  const addError = useCallback((message: string) => {
-    return addNotification(message, 'error')
-  }, [addNotification])
-
-  const addSuccess = useCallback((message: string) => {
-    return addNotification(message, 'success')
-  }, [addNotification])
-
-  const errors = notifications.filter(n => n.type === 'error')
-  const successes = notifications.filter(n => n.type === 'success')
-
-  return {
-    errors,
-    successes,
-    addError,
-    addSuccess,
-    removeNotification
-  }
+  const toast = useToast()
+  const addError = useCallback((message: string) => toast('error', message), [toast])
+  const addSuccess = useCallback((message: string) => toast('success', message), [toast])
+  const addInfo = useCallback((message: string) => toast('info', message), [toast])
+  return { addError, addSuccess, addInfo }
 }

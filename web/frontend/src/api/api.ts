@@ -23,6 +23,9 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+export interface DeployGnbListResponse {
+    'instances': Array<GnbInstance>;
+}
 export interface DeployLogsResponse {
     'target': string;
     'lines': Array<string>;
@@ -32,6 +35,7 @@ export interface DeployStatusResponse {
     'status': string;
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
+    'gnb'?: GnbDeployment;
 }
 export interface DeployUeListResponse {
     'instances'?: Array<DeployUeStatusResponse>;
@@ -39,6 +43,12 @@ export interface DeployUeListResponse {
 export interface DeployUeLogsResponse {
     'instance': string;
     'lines': Array<string>;
+}
+export interface DeployUeProfileRequest {
+    /**
+     * The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+     */
+    'gnb'?: string;
 }
 export interface DeployUeRequest {
     'mcc': string;
@@ -54,9 +64,96 @@ export interface DeployUeRequest {
 }
 export interface DeployUeStatusResponse {
     'instance': string;
+    /**
+     * The gNB target it was deployed onto (gnb-<profileId>); empty when unknown.
+     */
+    'gnb'?: string;
     'status': string;
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
+}
+export interface GnbDeployment {
+    'profileId'?: string;
+    'profileName': string;
+    'core': GnbDeploymentCoreEnum;
+    'amfIp': string;
+    'hostIp'?: string;
+    'hostInterface'?: string;
+    'gnbId'?: string;
+    'gnbName'?: string;
+    'sd'?: string;
+    /**
+     * Its N2/N3 address (cn-ran, or the host\'s address on an external core).
+     */
+    'n2Ip'?: string;
+    /**
+     * Where UEs dial it (ran-ue), picked by fru-lab; the host address on an external core.
+     */
+    'ranIp'?: string;
+}
+
+export const GnbDeploymentCoreEnum = {
+    Lab: 'lab',
+    External: 'external',
+} as const;
+
+export type GnbDeploymentCoreEnum = typeof GnbDeploymentCoreEnum[keyof typeof GnbDeploymentCoreEnum];
+
+export interface GnbInstance {
+    /**
+     * The gNB target name, gnb-<profileId>; the log stream and UE deploys use it.
+     */
+    'instance': string;
+    'profileId': string;
+    'status': string;
+    'services'?: Array<ServiceStatus>;
+    'lastDeployed'?: string;
+    'gnb': GnbDeployment;
+}
+export interface GnbProfile {
+    'id'?: string;
+    'name': string;
+    'gnbId': string;
+    'gnbName'?: string;
+    'mcc': string;
+    'mnc': string;
+    'tac': string;
+    'sst': string;
+    'sd'?: string;
+    /**
+     * lab dials the free5GC fru-lab deploys; external runs the gNB on the host network and dials amfIp / upfIp.
+     */
+    'core': GnbProfileCoreEnum;
+    'amfIp'?: string;
+    'amfPort'?: number;
+    'upfIp'?: string;
+    'upfPort'?: number;
+    /**
+     * Lab core only - the gNB\'s N2/N3 address on the lab\'s cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core\'s). Unique among the gNB profiles.
+     */
+    'n2Ip'?: string;
+    /**
+     * External core only - the host interface the gNB listens on (see /api/host/interfaces).
+     */
+    'hostInterface'?: string;
+    /**
+     * External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
+     */
+    'hostIp'?: string;
+    'logLevel'?: string;
+    'updatedAt'?: string;
+}
+
+export const GnbProfileCoreEnum = {
+    Lab: 'lab',
+    External: 'external',
+} as const;
+
+export type GnbProfileCoreEnum = typeof GnbProfileCoreEnum[keyof typeof GnbProfileCoreEnum];
+
+export interface HostInterface {
+    'name': string;
+    'addresses': Array<string>;
 }
 export interface ImageInfo {
     'key': string;
@@ -90,6 +187,30 @@ export interface LoginResponse {
 export interface MessageResponse {
     'message'?: string;
 }
+export interface ProfileBulkRequest {
+    /**
+     * The source profile.
+     */
+    'profileId': string;
+    'count': number;
+}
+export interface ProfileCheckResult {
+    'conflicts': Array<ProfileConflict>;
+}
+export interface ProfileConflict {
+    /**
+     * The JSON field name, e.g. gnbId, n2Ip, hostIp, name, msin.
+     */
+    'field': string;
+    'message': string;
+    /**
+     * The next free value, when there is one.
+     */
+    'suggestion'?: string;
+}
+export interface RenderedConfig {
+    'yaml': string;
+}
 export interface RequestDeployFree5gc {
     /**
      * Which free5gc compose template to deploy. Defaults to \"basic\" when omitted.
@@ -100,7 +221,6 @@ export interface RequestDeployFree5gc {
 export const RequestDeployFree5gcTemplateEnum = {
     Basic: 'basic',
     Ulcl: 'ulcl',
-    Ulcl2slice: 'ulcl-2slice',
 } as const;
 
 export type RequestDeployFree5gcTemplateEnum = typeof RequestDeployFree5gcTemplateEnum[keyof typeof RequestDeployFree5gcTemplateEnum];
@@ -109,893 +229,26 @@ export interface ServiceStatus {
     'name': string;
     'status': string;
 }
-export interface TesterAddRequest {
-    'url': string;
-    /**
-     * The apiToken in that tester\'s tester.yaml.
-     */
-    'apiToken': string;
-}
-export interface TesterAdded {
-    /**
-     * \"default\" for the tester in config.yaml.
-     */
-    'id': string;
-    'url': string;
-    /**
-     * The tester in config.yaml; it cannot be removed.
-     */
-    'builtIn': boolean;
-    /**
-     * The name the tester reported.
-     */
+export interface UeProfile {
+    'id'?: string;
     'name': string;
-}
-export interface TesterBenchResult {
-    'state': TesterBenchResultStateEnum;
-    'error': string;
-    'cpus': number;
-    'kernel': string;
-    'settings': TesterBenchSettings;
-    'plannedSenders': Array<number>;
-    'steps': Array<TesterBenchStep>;
-    'startedAt'?: string | null;
-    'finishedAt'?: string | null;
-}
-
-export const TesterBenchResultStateEnum = {
-    Idle: 'idle',
-    Running: 'running',
-    Done: 'done',
-    Failed: 'failed',
-} as const;
-
-export type TesterBenchResultStateEnum = typeof TesterBenchResultStateEnum[keyof typeof TesterBenchResultStateEnum];
-
-export interface TesterBenchSettings {
-    /**
-     * Inner IP packet bytes, 64..9000.
-     */
-    'packetSize': number;
-    /**
-     * Measuring time per sender count, 1..30.
-     */
-    'stepSeconds': number;
-    /**
-     * Send with UDP GSO, as runs do; off measures plain sendmmsg, as on a kernel without GSO.
-     */
-    'gso': boolean;
-}
-export interface TesterBenchStep {
-    'senders': number;
-    'pps': number;
-    /**
-     * Inner IP bits per second.
-     */
-    'bps': number;
-    'sendErrors': number;
-    /**
-     * Whether the senders did use UDP GSO (false if the kernel refused it).
-     */
-    'gso': boolean;
-}
-export interface TesterCauseCount {
-    'cause': string;
-    'count': number;
-}
-/**
- * Paces the control-plane loop - at most ratePerSec registrations start per second and at most maxInFlight UEs are in a cycle at once. A cycle registers, stays registered holdMs, then deregisters; each procedure is bounded by timeoutMs. No retries - a failed cycle is counted and the UE tries again later. Only checked when there are control-plane UEs.
- */
-export interface TesterCpLoopRate {
-    'ratePerSec': number;
-    'maxInFlight': number;
-    'timeoutMs': number;
-    /**
-     * 0..3600000
-     */
-    'holdMs': number;
-}
-/**
- * The control-plane test. registration and deregistration count every attempt of every cycle (expected is 0, a loop has no end); latencies are of accepted procedures.
- */
-export interface TesterCpLoopSnapshot {
-    'ues': number;
-    /**
-     * off = no control-plane UEs; waiting = throughput UEs are still being set up.
-     */
-    'state': TesterCpLoopSnapshotStateEnum;
-    'startedAt'?: string | null;
-    /**
-     * How long the loop has run.
-     */
-    'durationSec': number;
-    /**
-     * Control-plane UEs registered right now.
-     */
-    'registered': number;
-    /**
-     * Cycles whose registration and deregistration were both accepted.
-     */
-    'cycles': number;
-    'registration': TesterStageSnapshot;
-    'deregistration': TesterStageSnapshot;
-    /**
-     * After Stop, the control-plane UEs still registered deregister (expected = every control-plane UE; the others are skipped). The throughput UEs\' cleanup is the run snapshot\'s deregistration.
-     */
-    'cleanup': TesterStageSnapshot;
-    /**
-     * Per-second rates from the loop\'s start, in at most 600 points (like the data plane\'s).
-     */
-    'series': Array<TesterCpPoint>;
-}
-
-export const TesterCpLoopSnapshotStateEnum = {
-    Off: 'off',
-    Waiting: 'waiting',
-    Running: 'running',
-    Stopped: 'stopped',
-} as const;
-
-export type TesterCpLoopSnapshotStateEnum = typeof TesterCpLoopSnapshotStateEnum[keyof typeof TesterCpLoopSnapshotStateEnum];
-
-export interface TesterCpPoint {
-    /**
-     * Seconds since the loop started.
-     */
-    't': number;
-    'regPerSec': number;
-    'deregPerSec': number;
-    /**
-     * Procedures that did not succeed.
-     */
-    'failPerSec': number;
-}
-/**
- * Linux CPU lists such as \"0-3,8\". The control plane (registration, PDU, the control-plane loop, the API) runs on cpCpus for a run; each data plane sender and reader keeps a thread on dpCpus, one of each per CPU. Empty = that side is not pinned.
- */
-export interface TesterCpuAllocation {
-    'cpCpus': string;
-    'dpCpus': string;
-}
-export interface TesterCpuLoad {
-    /**
-     * How long the load was measured over.
-     */
-    'intervalMs': number;
-    /**
-     * Every online CPU, by number.
-     */
-    'cpus': Array<TesterCpuLoadCpusInner>;
-}
-export interface TesterCpuLoadCpusInner {
-    'cpu': number;
-    /**
-     * Percent of the interval not idle.
-     */
-    'busy': number;
-}
-export interface TesterCpusErrorResponse {
-    'message': string;
-    'errors': Array<TesterFieldError>;
-}
-export interface TesterDataplaneSnapshot {
-    /**
-     * How packets move, e.g. \"socket\", \"socket (auto: docker-cn-ran is a bridge, not a NIC)\" or \"af_xdp (ens2f1 zero-copy, 8 queues)\".
-     */
-    'engine': string;
-    'activeUes': number;
-    'ul': TesterTrafficDirection;
-    'dl': TesterTrafficDirection;
-    /**
-     * Per gNB, same order as gnbs in the run snapshot.
-     */
-    'gnbs': Array<TesterGnbTraffic>;
-    /**
-     * The whole run from its first second, in at most 600 points. A point covers 1 second until the run outgrows that, then 2, 4, 8 ... seconds (averaged).
-     */
-    'series': Array<TesterTrafficPoint>;
-}
-export interface TesterEntry {
-    /**
-     * \"default\" for the tester in config.yaml.
-     */
-    'id': string;
-    'url': string;
-    /**
-     * The tester in config.yaml; it cannot be removed.
-     */
-    'builtIn': boolean;
-}
-export interface TesterFieldError {
-    'field': string;
-    'message': string;
-}
-export interface TesterGnbSpec {
-    /**
-     * Of ueCount, how many are in the control-plane loop.
-     */
-    'cpUeCount': number;
-    'index': number;
-    'name': string;
-    'gnbId': string;
-    'n2Ip': string;
-    'n3Ip': string;
-    'ueCount': number;
-    /**
-     * 1-based index of the first UE on this gNB; 0 when it has none.
-     */
-    'ueFirst': number;
-    'ueLast': number;
-    /**
-     * SUPI of this gNB\'s first UE; empty when it has none.
-     */
-    'firstSupi': string;
-    'lastSupi': string;
-}
-export interface TesterGnbStatus {
-    /**
-     * Of ueCount, how many are in the control-plane loop.
-     */
-    'cpUeCount': number;
-    'index': number;
-    'name': string;
-    'gnbId': string;
-    'n2Ip': string;
-    'n3Ip': string;
-    'ueCount': number;
-    /**
-     * 1-based index of the first UE on this gNB; 0 when it has none.
-     */
-    'ueFirst': number;
-    'ueLast': number;
-    /**
-     * SUPI of this gNB\'s first UE; empty when it has none.
-     */
-    'firstSupi': string;
-    'lastSupi': string;
-    /**
-     * lost = was up, then the AMF side dropped the association.
-     */
-    'state': TesterGnbStatusStateEnum;
-    'attempts': number;
-    'latencyMs': number;
-    'cause': string;
-    'registered': number;
-    'established': number;
-}
-
-export const TesterGnbStatusStateEnum = {
-    Pending: 'pending',
-    Connecting: 'connecting',
-    Up: 'up',
-    Failed: 'failed',
-    Lost: 'lost',
-    Closed: 'closed',
-} as const;
-
-export type TesterGnbStatusStateEnum = typeof TesterGnbStatusStateEnum[keyof typeof TesterGnbStatusStateEnum];
-
-export interface TesterGnbTraffic {
-    'ulTxBytes': number;
-    'ulRxBytes': number;
-    'dlTxBytes': number;
-    'dlRxBytes': number;
-}
-export interface TesterHistoryDeleteRequest {
-    /**
-     * The runs\' ids from the history list (TesterHistorySummary.id).
-     */
-    'ids': Array<string>;
-}
-export interface TesterHistoryRenameRequest {
-    /**
-     * The new name, trimmed; empty goes back to showing the run ID.
-     */
-    'name': string;
-}
-export interface TesterHistorySummary {
-    /**
-     * Where the run is stored, for /api/tester/history/{runId}. The run ID for the default tester\'s runs; the run ID, \"@\" and the tester\'s id for another tester\'s.
-     */
-    'id': string;
-    /**
-     * The tester that ran it (\"default\" for the one in config.yaml, and for runs stored before testers could be added).
-     */
-    'testerId': string;
-    /**
-     * That tester\'s name when the run was stored; empty for runs stored before testers could be added.
-     */
-    'testerName': string;
-    /**
-     * The name the user gave the run in the History page; empty shows the run ID.
-     */
-    'name': string;
-    'runId': string;
-    'profileName': string;
-    'state': string;
-    'error': string;
-    'stopReason': string;
-    'startedAt'?: string | null;
-    'stoppedAt'?: string | null;
-    'gnbCount': number;
-    'ueCount': number;
-    'registered': number;
-    'registrationP95Ms': number;
-    'established': number;
-    'deregistered': number;
-    'ulTxBytes': number;
-    'ulRxBytes': number;
-    'ulLossRate': number;
-    'dlTxBytes': number;
-    'dlRxBytes': number;
-    'dlLossRate': number;
-}
-export interface TesterInterface {
-    'name': string;
-    /**
-     * Link type, e.g. device (a NIC), bridge, veth, macvlan, vlan, bond.
-     */
-    'kind': string;
-    /**
-     * Operational state, e.g. up, down, unknown.
-     */
-    'state': string;
-    'mtu': number;
-    /**
-     * IPv4 addresses with prefix length.
-     */
-    'addresses': Array<string>;
-}
-/**
- * One-way latency in milliseconds (send and receive share the host clock).
- */
-export interface TesterLatency {
-    'count': number;
-    'avgMs': number;
-    'p50Ms': number;
-    'p99Ms': number;
-    'maxMs': number;
-}
-/**
- * Paces the gNBs\' N2 setup (SCTP association and NG Setup). A failed attempt with retries left goes to the back of the queue.
- */
-export interface TesterN2Rate {
-    /**
-     * At most this many gNBs start their N2 setup per second. 0 or absent is no limit.
-     */
-    'ratePerSec'?: number;
-    /**
-     * At most this many gNBs are setting up at once, up to 1000. 0 or absent is 1000.
-     */
-    'maxInFlight'?: number;
-    'timeoutMs': number;
-    'retries': number;
-}
-export interface TesterNicLayout {
-    'name': string;
-    'driver': string;
-    /**
-     * -1 when the kernel does not say (e.g. a VM).
-     */
-    'numaNode': number;
-    /**
-     * CPUs close to the NIC.
-     */
-    'localCpus': string;
-    /**
-     * Receive queues.
-     */
-    'queues': number;
-    /**
-     * CPUs the NIC\'s interrupts are delivered to; the kernel\'s receive work runs there.
-     */
-    'irqCpus': string;
-}
-export interface TesterNumaNode {
-    'node': number;
-    'cpus': string;
-}
-export interface TesterPingRequest {
-    'plane': TesterPingRequestPlaneEnum;
-    'profile': TesterProfile;
-}
-
-export const TesterPingRequestPlaneEnum = {
-    N2: 'n2',
-    N3: 'n3',
-    N6: 'n6',
-} as const;
-
-export type TesterPingRequestPlaneEnum = typeof TesterPingRequestPlaneEnum[keyof typeof TesterPingRequestPlaneEnum];
-
-export interface TesterPingResult {
-    'plane': TesterPingResultPlaneEnum;
-    'interface': string;
-    /**
-     * The address the test used, with its prefix length.
-     */
-    'source': string;
-    /**
-     * The AMF (N2), the UPF\'s N3 or the UPF\'s N6 address.
-     */
-    'target': string;
-    /**
-     * The source was added to the interface for the test and removed again.
-     */
-    'added': boolean;
-    'sent': number;
-    'received': number;
-    'rttMs': Array<number>;
-    /**
-     * Why the test could not run (e.g. the address could not be added) or a send error such as no route to host; empty otherwise.
-     */
-    'error': string;
-}
-
-export const TesterPingResultPlaneEnum = {
-    N2: 'n2',
-    N3: 'n3',
-    N6: 'n6',
-} as const;
-
-export type TesterPingResultPlaneEnum = typeof TesterPingResultPlaneEnum[keyof typeof TesterPingResultPlaneEnum];
-
-export interface TesterPlan {
-    'gnbs': Array<TesterGnbSpec>;
-    'uesPerGnb': number;
-    'n2Prefix': number;
-    'n3Prefix': number;
-}
-/**
- * At most ratePerSec new attempts per second and at most maxInFlight at once; each attempt bounded by timeoutMs; a failed UE with retries left is requeued at the back.
- */
-export interface TesterProcedureRate {
-    'ratePerSec': number;
-    'maxInFlight': number;
-    'timeoutMs': number;
-    'retries': number;
-}
-export interface TesterProfile {
-    'name': string;
-    /**
-     * Which tester (GET /api/testers) runs this profile; absent means \"default\", the one in config.yaml. Only fru-lab reads it; leave it out of what is sent to a tester, which rejects fields it does not know.
-     */
-    'testerId'?: string;
-    'scale': TesterProfileScale;
-    'gnb': TesterProfileGnb;
-    'ue': TesterUeTemplate;
-    'traffic': TesterTraffic;
-    'network': TesterProfileNetwork;
-    'rates': TesterProfileRates;
-}
-export interface TesterProfileGnb {
-    /**
-     * 6 or 8 hex digits; incremented per gNB, keeping its width.
-     */
-    'gnbIdStart': string;
-    /**
-     * Must contain {i}, replaced by the 1-based gNB index.
-     */
-    'namePattern': string;
     'mcc': string;
     'mnc': string;
-    'tac': string;
-    'sst': number;
     /**
-     * Empty or 6 hex digits.
+     * 9 or 10 digits. The IMSI (mcc + mnc + msin) is unique among the UE profiles.
      */
-    'sd': string;
-}
-export interface TesterProfileNetwork {
-    'n2': TesterProfileNetworkN2;
-    'n3': TesterProfileNetworkN3;
-    'n6': TesterProfileNetworkN6;
-}
-export interface TesterProfileNetworkN2 {
-    'interface': string;
-    'cidr': string;
-    'startIp': string;
-    'amfIp': string;
-    'amfPort': number;
-}
-export interface TesterProfileNetworkN3 {
-    'interface': string;
-    'cidr': string;
-    'startIp': string;
-    'upfIp': string;
-    'upfPort': number;
-}
-/**
- * Data-network side. Uplink is addressed to the sink; downlink is sent from it to the UEs, whose pool is routed via upfIp for the run.
- */
-export interface TesterProfileNetworkN6 {
-    'interface': string;
+    'msin': string;
+    'permanentKey': string;
     /**
-     * The sink\'s address with its prefix length, as it goes on the interface (e.g. 172.26.6.1/16). If the host does not have the address, the tester adds it to the interface for the run with that prefix, which also gives the host a route to the subnet; it is removed afterwards.
+     * OPc
      */
-    'sinkIp': string;
-    'upfIp': string;
-    'uePool': string;
-}
-export interface TesterProfileRates {
-    'n2': TesterN2Rate;
-    'registration': TesterProcedureRate;
-    'pdu': TesterProcedureRate;
-    'deregistration': TesterProcedureRate;
-    'cpLoop': TesterCpLoopRate;
-}
-export interface TesterProfileScale {
-    'gnbCount': number;
-    'ueCount': number;
-    /**
-     * How many UEs, the first ones, establish a PDU session and carry traffic (0..ueCount). The rest are the control-plane test - they register and deregister in a loop (rates.cpLoop) once every throughput UE is done. fru-tester treats an absent value as ueCount.
-     */
-    'throughputUeCount': number;
-}
-export interface TesterRunReport {
-    'profile': TesterProfile;
-    'snapshot': TesterRunSnapshot;
-}
-export interface TesterRunSnapshot {
-    'runId': string;
-    'profileName': string;
-    'state': TesterRunSnapshotStateEnum;
-    'error': string;
-    'startedAt'?: string | null;
-    'stoppedAt'?: string | null;
-    'n2': TesterStageSnapshot;
-    'registration': TesterStageSnapshot;
-    'pdu': TesterStageSnapshot;
-    'deregistration': TesterStageSnapshot;
-    'n2Release': TesterStageSnapshot;
-    /**
-     * Why the run stopped; empty while running.
-     */
-    'stopReason': TesterRunSnapshotStopReasonEnum;
-    /**
-     * The gNBs asked for (gnbOffset, gnbLimit, gnbState); every gNB when no gnbLimit was given.
-     */
-    'gnbs': Array<TesterGnbStatus>;
-    /**
-     * How many gNBs match gnbState (every gNB without it).
-     */
-    'gnbTotal': number;
-    /**
-     * Where gnbs starts within them.
-     */
-    'gnbOffset': number;
-    /**
-     * Every gNB of the run counted by state.
-     */
-    'gnbCounts': { [key: string]: number; };
-    'ues': TesterUeSummary;
-    /**
-     * The first 200 UEs that failed; ues.failed has the total.
-     */
-    'failedUes': Array<TesterUeFailure>;
-    'dataplane': TesterDataplaneSnapshot;
-    'cpus': TesterCpuAllocation;
-    'cpLoop': TesterCpLoopSnapshot;
-    /**
-     * Registrations and PDU sessions per second from the start of the run until both stages are done, in at most 600 points (like the data plane\'s). Absent from testers older than this field.
-     */
-    'setup'?: Array<TesterSetupPoint>;
-}
-
-export const TesterRunSnapshotStateEnum = {
-    Idle: 'idle',
-    Configuring: 'configuring',
-    N2: 'n2',
-    Running: 'running',
-    Stopping: 'stopping',
-    Stopped: 'stopped',
-    Failed: 'failed',
-} as const;
-
-export type TesterRunSnapshotStateEnum = typeof TesterRunSnapshotStateEnum[keyof typeof TesterRunSnapshotStateEnum];
-export const TesterRunSnapshotStopReasonEnum = {
-    Empty: '',
-    User: 'user',
-    MaxDuration: 'maxDuration',
-} as const;
-
-export type TesterRunSnapshotStopReasonEnum = typeof TesterRunSnapshotStopReasonEnum[keyof typeof TesterRunSnapshotStopReasonEnum];
-
-export interface TesterSetupPoint {
-    /**
-     * Seconds since the run started.
-     */
-    't': number;
-    /**
-     * Registrations accepted.
-     */
-    'regPerSec': number;
-    /**
-     * PDU sessions established.
-     */
-    'pduPerSec': number;
-    /**
-     * Registrations and PDU sessions that finally failed.
-     */
-    'failPerSec': number;
-}
-/**
- * One stage card. Latencies are milliseconds over accepted items only; totalTimeMs is first start to last finish.
- */
-export interface TesterStageSnapshot {
-    'name': string;
-    'expected': number;
-    'attempted': number;
-    'retries': number;
-    'inFlight': number;
-    'accepted': number;
-    'rejected': number;
-    'timedOut': number;
-    'failed': number;
-    /**
-     * Never attempted (gNB down, earlier stage failed, or the run was stopped first).
-     */
-    'skipped': number;
-    'done': boolean;
-    'totalTimeMs': number;
-    'avgMs': number;
-    'p50Ms': number;
-    'p95Ms': number;
-    'p99Ms': number;
-    'maxMs': number;
-    'causes': Array<TesterCauseCount>;
-}
-export interface TesterStartErrorResponse {
-    'message': string;
-    'errors': Array<TesterFieldError>;
-}
-export interface TesterStatus {
-    /**
-     * The tester\'s testerName (tester.yaml); its host name when that is empty.
-     */
-    'name': string;
-    'hostname': string;
-    /**
-     * VCS revision fru-tester was built from; empty when the build does not say.
-     */
-    'version': string;
-    'goVersion': string;
-    /**
-     * Kernel release of the tester host.
-     */
-    'kernel': string;
-    'pid': number;
-    'startedAt': string;
-    'uptimeSec': number;
-    'memory': TesterStatusMemory;
-    'cpu': TesterStatusCpu;
-    'capabilities': TesterStatusCapabilities;
-}
-export interface TesterStatusCapabilities {
-    /**
-     * Needed to add the gNB IPs and the UE route.
-     */
-    'netAdmin': boolean;
-    /**
-     * Needed by the AF_XDP engine (CAP_BPF, or CAP_SYS_ADMIN before Linux 5.8).
-     */
-    'bpf': boolean;
-    /**
-     * Needed by the AF_XDP engine.
-     */
-    'ipcLock': boolean;
-    /**
-     * The sctp kernel module is loaded.
-     */
-    'sctp': boolean;
-}
-export interface TesterStatusCpu {
-    'online': number;
-    /**
-     * CPUs fru-tester may use.
-     */
-    'allowed': number;
-    'load1': number;
-    'load5': number;
-    'load15': number;
-    'goroutines': number;
-}
-/**
- * Bytes.
- */
-export interface TesterStatusMemory {
-    'hostTotal': number;
-    'hostAvailable': number;
-    /**
-     * fru-tester\'s resident memory.
-     */
-    'processRss': number;
-    'goHeap': number;
-    /**
-     * Memory limit of fru-tester\'s cgroup (its container); null when there is none.
-     */
-    'cgroupLimit': number | null;
-    /**
-     * What the cgroup uses, page cache included; null when it cannot be read.
-     */
-    'cgroupUsage': number | null;
-}
-export interface TesterStoredProfile {
-    'id': string;
-    'updatedAt': string;
-    'profile': TesterProfile;
-}
-export interface TesterSystemInfo {
-    'cpus': TesterCpuAllocation;
-    'topology': TesterTopology;
-}
-export interface TesterTopology {
-    /**
-     * CPUs the kernel runs.
-     */
-    'online': string;
-    /**
-     * Of those, the CPUs fru-tester may use (in a container, its cpuset).
-     */
-    'allowed': string;
-    'nodes': Array<TesterNumaNode>;
-    /**
-     * Physical NICs only.
-     */
-    'interfaces': Array<TesterNicLayout>;
-}
-/**
- * Fixed-rate traffic of every established UE. ulPacketSize and dlPacketSize are the inner IP packet length each way.
- */
-export interface TesterTraffic {
-    /**
-     * Per UE; 0 disables uplink.
-     */
-    'ulMbps': number;
-    /**
-     * Per UE; 0 disables downlink.
-     */
-    'dlMbps': number;
-    /**
-     * Uplink. 64..9000, and at most the N3 interface\'s MTU minus 44 (GTP-U and its headers) and the N6 interface\'s MTU; 1456 on a 1500 MTU network.
-     */
-    'ulPacketSize': number;
-    /**
-     * Downlink, with the same limits as ulPacketSize.
-     */
-    'dlPacketSize': number;
-    /**
-     * UDP port at the N6 sink and at the UEs.
-     */
-    'port': number;
-    /**
-     * Stop the run this many minutes after it started, exactly like pressing Stop. 0 = run until Stop.
-     */
-    'maxDurationMin': number;
-    /**
-     * Send each UE this many milliseconds of downlink in a row (0..10), so UDP GSO can send them in one piece. 0 = one packet per UE in turn. Uplink needs no grouping.
-     */
-    'dlBatchMs': number;
-    /**
-     * How the data plane moves packets. socket = UDP sockets (also when empty). afxdp = AF_XDP on the N3 and N6 interfaces, skipping the kernel\'s IP/UDP/socket code (zero-copy when the driver supports it, else copy or generic mode). auto = AF_XDP when both interfaces are NICs and it starts, else sockets.
-     */
-    'engine': TesterTrafficEngineEnum;
-}
-
-export const TesterTrafficEngineEnum = {
-    Empty: '',
-    Auto: 'auto',
-    Socket: 'socket',
-    Afxdp: 'afxdp',
-} as const;
-
-export type TesterTrafficEngineEnum = typeof TesterTrafficEngineEnum[keyof typeof TesterTrafficEngineEnum];
-
-/**
- * Tx is what the tester sent; Rx is what came back through the UPF. Bytes are inner IP packet bytes; rates are over the last second.
- */
-export interface TesterTrafficDirection {
-    'txPackets': number;
-    'txBytes': number;
-    'rxPackets': number;
-    'rxBytes': number;
-    'txBps': number;
-    'rxBps': number;
-    'txPps': number;
-    'rxPps': number;
-    /**
-     * 1 - rx/tx so far.
-     */
-    'lossRate': number;
-    'outOfOrder': number;
-    'sendErrors': number;
-    /**
-     * Downlink that arrived in another UE\'s tunnel or at another gNB. Always 0 for uplink.
-     */
-    'misrouted': number;
-    'latency': TesterLatency;
-}
-export interface TesterTrafficPoint {
-    /**
-     * Seconds since traffic started.
-     */
-    't': number;
-    'ulTxBps': number;
-    'ulRxBps': number;
-    'dlTxBps': number;
-    'dlRxBps': number;
-}
-export interface TesterUeFailure {
-    'supi': string;
-    'gnb': string;
-    'stage': TesterUeFailureStageEnum;
-    'cause': string;
-    'attempts': number;
-}
-
-export const TesterUeFailureStageEnum = {
-    Registration: 'registration',
-    Pdu: 'pdu',
-    Deregistration: 'deregistration',
-} as const;
-
-export type TesterUeFailureStageEnum = typeof TesterUeFailureStageEnum[keyof typeof TesterUeFailureStageEnum];
-
-/**
- * UEs per pipeline state; the fields add up to the UE count.
- */
-export interface TesterUeSummary {
-    'pending': number;
-    'registering': number;
-    'registered': number;
-    'establishing': number;
-    'established': number;
-    'failed': number;
-    'skipped': number;
-    'cancelled': number;
-    'deregistering': number;
-    'deregistered': number;
-}
-/**
- * Expanded once per UE. MCC/MNC come from the gNB template; MCC+MNC+MSIN must be 15 digits. Key/OPc/AMF/SQN must match the subscribers created in the core.
- */
-export interface TesterUeTemplate {
-    /**
-     * Decimal; incremented per UE, keeping its width.
-     */
-    'msinStart': string;
-    'key': string;
-    'opc': string;
+    'opValue': string;
     'amf': string;
     'sqn': string;
-    'integrity': TesterUeTemplateIntegrityEnum;
-    'ciphering': TesterUeTemplateCipheringEnum;
-    'dnn': string;
-    'sst': number;
-    'sd': string;
-}
-
-export const TesterUeTemplateIntegrityEnum = {
-    Nia0: 'nia0',
-    Nia1: 'nia1',
-    Nia2: 'nia2',
-    Nia3: 'nia3',
-} as const;
-
-export type TesterUeTemplateIntegrityEnum = typeof TesterUeTemplateIntegrityEnum[keyof typeof TesterUeTemplateIntegrityEnum];
-export const TesterUeTemplateCipheringEnum = {
-    Nea0: 'nea0',
-    Nea1: 'nea1',
-    Nea2: 'nea2',
-    Nea3: 'nea3',
-} as const;
-
-export type TesterUeTemplateCipheringEnum = typeof TesterUeTemplateCipheringEnum[keyof typeof TesterUeTemplateCipheringEnum];
-
-export interface TesterValidateResponse {
-    'valid': boolean;
-    'errors': Array<TesterFieldError>;
-    'plan'?: TesterPlan | null;
+    'dnn'?: string;
+    'sst': string;
+    'sd'?: string;
+    'updatedAt'?: string;
 }
 
 /**
@@ -1148,13 +401,17 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop gNB
+         * Fails with 409 while a UE deployed onto this gNB still runs.
+         * @summary Stop the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbDown: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb`;
+        deployGnbDown: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployGnbDown', 'profileId', profileId)
+            const localVarPath = `/api/deploy/gnbs/{profileId}`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1182,94 +439,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
-         * @summary Get gNB container logs
-         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+         * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+         * @summary List the gNBs deployed from gNB profiles
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbLogs: async (service?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb/logs`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            if (service !== undefined) {
-                localVarQueryParameter['service'] = service;
-            }
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceDown: async (slice: DeployGnbSliceDownSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceDown', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}`
-                .replace('{slice}', encodeURIComponent(String(slice)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s container logs
-         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceLogs: async (slice: DeployGnbSliceLogsSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceLogs', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}/logs`
-                .replace('{slice}', encodeURIComponent(String(slice)));
+        deployGnbList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/gnbs`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1298,16 +474,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary Get a gNB slice\'s deploy status
-         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @summary Get the logs of one profile gNB
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbSliceStatus: async (slice: DeployGnbSliceStatusSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceStatus', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}/status`
-                .replace('{slice}', encodeURIComponent(String(slice)));
+        deployGnbLogs: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployGnbLogs', 'profileId', profileId)
+            const localVarPath = `/api/deploy/gnbs/{profileId}/logs`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1335,85 +511,17 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-         * @summary Deploy a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * @summary Deploy the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbSliceUp: async (slice: DeployGnbSliceUpSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceUp', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}`
-                .replace('{slice}', encodeURIComponent(String(slice)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Get gNB deploy status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbStatus: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb/status`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-         * @summary Deploy gNB
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbUp: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb`;
+        deployGnbUp: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployGnbUp', 'profileId', profileId)
+            const localVarPath = `/api/deploy/gnbs/{profileId}`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1551,6 +659,47 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+         * @summary Deploy the UE of one UE profile
+         * @param {string} profileId 
+         * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeProfileUp: async (profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployUeProfileUp', 'profileId', profileId)
+            const localVarPath = `/api/deploy/ue-profiles/{profileId}`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deployUeProfileRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get a UE instance\'s deploy status
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -1625,6 +774,311 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(deployUeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+         * @summary Create several gnb profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileBulkCreate: async (profileBulkRequest: ProfileBulkRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileBulkRequest' is not null or undefined
+            assertParamExists('gnbProfileBulkCreate', 'profileBulkRequest', profileBulkRequest)
+            const localVarPath = `/api/profiles/gnb/bulk`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(profileBulkRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a gnb profile for conflicts with the saved ones
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCheck: async (gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileCheck', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb/check`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Save a new gNB profile
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCreate: async (gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileCreate', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Delete a gNB profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('gnbProfileDelete', 'id', id)
+            const localVarPath = `/api/profiles/gnb/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary List the saved gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/profiles/gnb`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Preview the config file a gNB profile deploys
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileRender: async (gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileRender', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb/render`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Update a gNB profile
+         * @param {string} id 
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileUpdate: async (id: string, gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('gnbProfileUpdate', 'id', id)
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileUpdate', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+         * @summary List the host\'s network interfaces
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        hostInterfaceList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/host/interfaces`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1806,50 +1260,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Forwarded to fru-tester. State is `idle` before the first bench.
-         * @summary Latest data plane bench
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+         * @summary Create several ue profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerBenchGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/bench`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
-         * @summary Start a data plane bench
-         * @param {TesterBenchSettings} testerBenchSettings 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerBenchStart: async (testerBenchSettings: TesterBenchSettings, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerBenchSettings' is not null or undefined
-            assertParamExists('testerBenchStart', 'testerBenchSettings', testerBenchSettings)
-            const localVarPath = `/api/tester/bench`;
+        ueProfileBulkCreate: async (profileBulkRequest: ProfileBulkRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileBulkRequest' is not null or undefined
+            assertParamExists('ueProfileBulkCreate', 'profileBulkRequest', profileBulkRequest)
+            const localVarPath = `/api/profiles/ue/bulk`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1871,7 +1291,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerBenchSettings, localVarRequestOptions, configuration)
+            localVarRequestOptions.data = serializeDataIfNeeded(profileBulkRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1879,58 +1299,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
-         * @summary One tester\'s latest data plane bench
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a ue profile for conflicts with the saved ones
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerByIdBenchGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdBenchGet', 'id', id)
-            const localVarPath = `/api/testers/{id}/bench`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
-         * @summary Start a data plane bench on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterBenchSettings} testerBenchSettings 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdBenchStart: async (id: string, testerBenchSettings: TesterBenchSettings, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdBenchStart', 'id', id)
-            // verify required parameter 'testerBenchSettings' is not null or undefined
-            assertParamExists('testerByIdBenchStart', 'testerBenchSettings', testerBenchSettings)
-            const localVarPath = `/api/testers/{id}/bench`
-                .replace('{id}', encodeURIComponent(String(id)));
+        ueProfileCheck: async (ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileCheck', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue/check`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1952,461 +1330,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerBenchSettings, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
-         * @summary How busy each CPU of one tester\'s host is
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdCpuLoad: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdCpuLoad', 'id', id)
-            const localVarPath = `/api/testers/{id}/system/cpuload`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
-         * @summary Set one tester\'s CPU allocation
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterCpuAllocation} testerCpuAllocation 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdCpusPut: async (id: string, testerCpuAllocation: TesterCpuAllocation, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdCpusPut', 'id', id)
-            // verify required parameter 'testerCpuAllocation' is not null or undefined
-            assertParamExists('testerByIdCpusPut', 'testerCpuAllocation', testerCpuAllocation)
-            const localVarPath = `/api/testers/{id}/system/cpus`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerCpuAllocation, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
-         * @summary One tester\'s network interfaces
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdNetworkInterfaces: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdNetworkInterfaces', 'id', id)
-            const localVarPath = `/api/testers/{id}/network/interfaces`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
-         * @summary Ping test from one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterPingRequest} testerPingRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdNetworkPing: async (id: string, testerPingRequest: TesterPingRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdNetworkPing', 'id', id)
-            // verify required parameter 'testerPingRequest' is not null or undefined
-            assertParamExists('testerByIdNetworkPing', 'testerPingRequest', testerPingRequest)
-            const localVarPath = `/api/testers/{id}/network/ping`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerPingRequest, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
-         * @summary Validate a profile on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdProfileValidate: async (id: string, testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdProfileValidate', 'id', id)
-            // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerByIdProfileValidate', 'testerProfile', testerProfile)
-            const localVarPath = `/api/testers/{id}/profile/validate`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-         * @summary One tester\'s run
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdRun: async (id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdRun', 'id', id)
-            const localVarPath = `/api/testers/{id}/run`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            if (gnbOffset !== undefined) {
-                localVarQueryParameter['gnbOffset'] = gnbOffset;
-            }
-
-            if (gnbLimit !== undefined) {
-                localVarQueryParameter['gnbLimit'] = gnbLimit;
-            }
-
-            if (gnbState !== undefined) {
-                localVarQueryParameter['gnbState'] = gnbState;
-            }
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-         * @summary Start a run on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdRunStart: async (id: string, testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdRunStart', 'id', id)
-            // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerByIdRunStart', 'testerProfile', testerProfile)
-            const localVarPath = `/api/testers/{id}/run`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
-         * @summary Stop the active run on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdRunStop: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdRunStop', 'id', id)
-            const localVarPath = `/api/testers/{id}/run/stop`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
-         * @summary One tester\'s host and process
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdStatus: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdStatus', 'id', id)
-            const localVarPath = `/api/testers/{id}/status`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
-         * @summary One tester\'s CPU allocation and layout
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdSystem: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerByIdSystem', 'id', id)
-            const localVarPath = `/api/testers/{id}/system`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
-         * @summary Delete finished runs from the history
-         * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryDelete: async (testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerHistoryDeleteRequest' is not null or undefined
-            assertParamExists('testerHistoryDelete', 'testerHistoryDeleteRequest', testerHistoryDeleteRequest)
-            const localVarPath = `/api/tester/history`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerHistoryDeleteRequest, localVarRequestOptions, configuration)
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -2415,202 +1339,15 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON)
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+         * @summary Save a new UE profile
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerHistoryGet: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'runId' is not null or undefined
-            assertParamExists('testerHistoryGet', 'runId', runId)
-            const localVarPath = `/api/tester/history/{runId}`
-                .replace('{runId}', encodeURIComponent(String(runId)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * fru-lab keeps the last 50 runs fru-tester finished.
-         * @summary Finished runs, newest first
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/history`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Rename a finished run
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-         * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryRename: async (runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'runId' is not null or undefined
-            assertParamExists('testerHistoryRename', 'runId', runId)
-            // verify required parameter 'testerHistoryRenameRequest' is not null or undefined
-            assertParamExists('testerHistoryRename', 'testerHistoryRenameRequest', testerHistoryRenameRequest)
-            const localVarPath = `/api/tester/history/{runId}`
-                .replace('{runId}', encodeURIComponent(String(runId)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'PATCH', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerHistoryRenameRequest, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
-         * @summary One finished run\'s report as a self-contained HTML page
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryReportHtml: async (runId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'runId' is not null or undefined
-            assertParamExists('testerHistoryReportHtml', 'runId', runId)
-            const localVarPath = `/api/tester/history/{runId}/report.html`
-                .replace('{runId}', encodeURIComponent(String(runId)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'text/html,application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
-         * @summary Interfaces on fru-tester\'s host
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerNetworkInterfaces: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/network/interfaces`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
-         * @summary Ping test of one network
-         * @param {TesterPingRequest} testerPingRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerNetworkPing: async (testerPingRequest: TesterPingRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerPingRequest' is not null or undefined
-            assertParamExists('testerNetworkPing', 'testerPingRequest', testerPingRequest)
-            const localVarPath = `/api/tester/network/ping`;
+        ueProfileCreate: async (ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileCreate', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2632,46 +1369,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerPingRequest, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
-         * @summary Save a new Throughput Tester profile
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileCreate: async (testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerProfileCreate', 'testerProfile', testerProfile)
-            const localVarPath = `/api/tester/profiles`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -2680,15 +1378,15 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary Delete a saved profile
+         * @summary Delete a UE profile
          * @param {string} id 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        ueProfileDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerProfileDelete', 'id', id)
-            const localVarPath = `/api/tester/profiles/{id}`
+            assertParamExists('ueProfileDelete', 'id', id)
+            const localVarPath = `/api/profiles/ue/{id}`
                 .replace('{id}', encodeURIComponent(String(id)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -2718,16 +1416,12 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary One saved profile
-         * @param {string} id 
+         * @summary List the saved UE profiles
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileGet: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerProfileGet', 'id', id)
-            const localVarPath = `/api/tester/profiles/{id}`
-                .replace('{id}', encodeURIComponent(String(id)));
+        ueProfileList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/profiles/ue`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2755,13 +1449,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Every saved profile, sorted by name.
-         * @summary List the saved Throughput Tester profiles
+         * 
+         * @summary Preview the config file a UE profile deploys
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/profiles`;
+        ueProfileRender: async (ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileRender', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue/render`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2769,7 +1466,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
                 baseOptions = configuration.baseOptions;
             }
 
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
@@ -2777,11 +1474,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
+            localVarHeaderParameter['Content-Type'] = 'application/json';
             localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -2789,19 +1488,19 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Same name rules as creating one; keeping its own name is fine.
-         * @summary Replace a saved profile
+         * 
+         * @summary Update a UE profile
          * @param {string} id 
-         * @param {TesterProfile} testerProfile 
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileUpdate: async (id: string, testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        ueProfileUpdate: async (id: string, ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'id' is not null or undefined
-            assertParamExists('testerProfileUpdate', 'id', id)
-            // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerProfileUpdate', 'testerProfile', testerProfile)
-            const localVarPath = `/api/tester/profiles/{id}`
+            assertParamExists('ueProfileUpdate', 'id', id)
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileUpdate', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue/{id}`
                 .replace('{id}', encodeURIComponent(String(id)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -2824,420 +1523,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
-         * @summary Validate a profile and preview the per-gNB plan
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileValidate: async (testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerProfileValidate', 'testerProfile', testerProfile)
-            const localVarPath = `/api/tester/profile/validate`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. State is `idle` before the first run.
-         * @summary Current run snapshot
-         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerRunGet: async (gnbOffset?: number, gnbLimit?: number, gnbState?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/run`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            if (gnbOffset !== undefined) {
-                localVarQueryParameter['gnbOffset'] = gnbOffset;
-            }
-
-            if (gnbLimit !== undefined) {
-                localVarQueryParameter['gnbLimit'] = gnbLimit;
-            }
-
-            if (gnbState !== undefined) {
-                localVarQueryParameter['gnbState'] = gnbState;
-            }
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. Only one run may be active at a time.
-         * @summary Start a run
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerRunStart: async (testerProfile: TesterProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerProfile' is not null or undefined
-            assertParamExists('testerRunStart', 'testerProfile', testerProfile)
-            const localVarPath = `/api/tester/run`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerProfile, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
-         * @summary Stop the active run
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerRunStop: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/run/stop`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
-         * @summary The tester host and process (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerStatusGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/status`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-         * @summary How busy each CPU of the tester host is (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerSystemCpuLoad: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/system/cpuload`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
-         * @summary Set the CPU allocation for the next runs
-         * @param {TesterCpuAllocation} testerCpuAllocation 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerSystemCpusPut: async (testerCpuAllocation: TesterCpuAllocation, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerCpuAllocation' is not null or undefined
-            assertParamExists('testerSystemCpusPut', 'testerCpuAllocation', testerCpuAllocation)
-            const localVarPath = `/api/tester/system/cpus`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerCpuAllocation, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-         * @summary The tester host\'s CPU allocation and layout (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerSystemGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/tester/system`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
-         * @summary Add a tester
-         * @param {TesterAddRequest} testerAddRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testersAdd: async (testerAddRequest: TesterAddRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'testerAddRequest' is not null or undefined
-            assertParamExists('testersAdd', 'testerAddRequest', testerAddRequest)
-            const localVarPath = `/api/testers`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(testerAddRequest, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
-         * @summary Remove an added tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testersDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'id' is not null or undefined
-            assertParamExists('testersDelete', 'id', id)
-            const localVarPath = `/api/testers/{id}`
-                .replace('{id}', encodeURIComponent(String(id)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
-         * @summary Every tester fru-lab can reach (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testersList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/testers`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -3304,102 +1590,52 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop gNB
+         * Fails with 409 while a UE deployed onto this gNB still runs.
+         * @summary Stop the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbDown(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbDown(options);
+        async deployGnbDown(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbDown(profileId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbDown']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
-         * @summary Get gNB container logs
-         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+         * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+         * @summary List the gNBs deployed from gNB profiles
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbLogs(service?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(service, options);
+        async deployGnbList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployGnbListResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get the logs of one profile gNB
+         * @param {string} profileId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbLogs(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(profileId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbLogs']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * @summary Deploy the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceDown(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceDown']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s container logs
-         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceLogs(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceLogs']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s deploy status
-         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceStatus(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceStatus']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-         * @summary Deploy a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceUp(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceUp']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get gNB deploy status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbStatus(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbStatus(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbStatus']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-         * @summary Deploy gNB
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbUp(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(options);
+        async deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(profileId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbUp']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -3443,6 +1679,20 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+         * @summary Deploy the UE of one UE profile
+         * @param {string} profileId 
+         * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeProfileUp(profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeProfileUp(profileId, deployUeProfileRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeProfileUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get a UE instance\'s deploy status
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -3467,6 +1717,109 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeUp(instance, deployUeRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+         * @summary Create several gnb profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<GnbProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileBulkCreate(profileBulkRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileBulkCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a gnb profile for conflicts with the saved ones
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileCheck(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ProfileCheckResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileCheck(gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileCheck']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Save a new gNB profile
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileCreate(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<GnbProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileCreate(gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Delete a gNB profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary List the saved gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<GnbProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Preview the config file a gNB profile deploys
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileRender(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RenderedConfig>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileRender(gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileRender']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Update a gNB profile
+         * @param {string} id 
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileUpdate(id: string, gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<GnbProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileUpdate(id, gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileUpdate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+         * @summary List the host\'s network interfaces
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async hostInterfaceList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<HostInterface>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.hostInterfaceList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.hostInterfaceList']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -3533,487 +1886,94 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Forwarded to fru-tester. State is `idle` before the first bench.
-         * @summary Latest data plane bench
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+         * @summary Create several ue profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerBenchGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterBenchResult>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerBenchGet(options);
+        async ueProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<UeProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileBulkCreate(profileBulkRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerBenchGet']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileBulkCreate']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
-         * @summary Start a data plane bench
-         * @param {TesterBenchSettings} testerBenchSettings 
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a ue profile for conflicts with the saved ones
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerBenchStart(testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterBenchResult>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerBenchStart(testerBenchSettings, options);
+        async ueProfileCheck(ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ProfileCheckResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileCheck(ueProfile, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerBenchStart']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
-         * @summary One tester\'s latest data plane bench
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdBenchGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterBenchResult>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdBenchGet(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdBenchGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
-         * @summary Start a data plane bench on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterBenchSettings} testerBenchSettings 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdBenchStart(id: string, testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterBenchResult>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdBenchStart(id, testerBenchSettings, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdBenchStart']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
-         * @summary How busy each CPU of one tester\'s host is
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdCpuLoad(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuLoad>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdCpuLoad(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdCpuLoad']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
-         * @summary Set one tester\'s CPU allocation
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterCpuAllocation} testerCpuAllocation 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdCpusPut(id: string, testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuAllocation>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdCpusPut(id, testerCpuAllocation, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdCpusPut']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
-         * @summary One tester\'s network interfaces
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdNetworkInterfaces(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterInterface>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdNetworkInterfaces(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdNetworkInterfaces']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
-         * @summary Ping test from one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterPingRequest} testerPingRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdNetworkPing(id: string, testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterPingResult>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdNetworkPing(id, testerPingRequest, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdNetworkPing']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
-         * @summary Validate a profile on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdProfileValidate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterValidateResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdProfileValidate(id, testerProfile, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdProfileValidate']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-         * @summary One tester\'s run
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdRun(id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRun(id, gnbOffset, gnbLimit, gnbState, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdRun']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-         * @summary Start a run on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdRunStart(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRunStart(id, testerProfile, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdRunStart']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
-         * @summary Stop the active run on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdRunStop(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdRunStop(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdRunStop']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
-         * @summary One tester\'s host and process
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdStatus(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStatus>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdStatus(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdStatus']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
-         * @summary One tester\'s CPU allocation and layout
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerByIdSystem(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterSystemInfo>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerByIdSystem(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerByIdSystem']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
-         * @summary Delete finished runs from the history
-         * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerHistoryDelete(testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryDelete(testerHistoryDeleteRequest, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryDelete']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileCheck']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON)
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+         * @summary Save a new UE profile
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerHistoryGet(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunReport>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryGet(runId, options);
+        async ueProfileCreate(ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UeProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileCreate(ueProfile, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * fru-lab keeps the last 50 runs fru-tester finished.
-         * @summary Finished runs, newest first
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerHistoryList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterHistorySummary>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryList(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryList']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileCreate']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
          * 
-         * @summary Rename a finished run
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-         * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerHistoryRename(runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterHistorySummary>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryRename(runId, testerHistoryRenameRequest, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryRename']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
-         * @summary One finished run\'s report as a self-contained HTML page
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerHistoryReportHtml(runId, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerHistoryReportHtml']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
-         * @summary Interfaces on fru-tester\'s host
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerNetworkInterfaces(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterInterface>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerNetworkInterfaces(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerNetworkInterfaces']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
-         * @summary Ping test of one network
-         * @param {TesterPingRequest} testerPingRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerNetworkPing(testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterPingResult>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerNetworkPing(testerPingRequest, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerNetworkPing']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
-         * @summary Save a new Throughput Tester profile
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerProfileCreate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStoredProfile>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileCreate(testerProfile, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileCreate']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Delete a saved profile
+         * @summary Delete a UE profile
          * @param {string} id 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerProfileDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileDelete(id, options);
+        async ueProfileDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileDelete(id, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileDelete']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileDelete']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
          * 
-         * @summary One saved profile
+         * @summary List the saved UE profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<UeProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Preview the config file a UE profile deploys
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileRender(ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RenderedConfig>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileRender(ueProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileRender']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Update a UE profile
          * @param {string} id 
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async testerProfileGet(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStoredProfile>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileGet(id, options);
+        async ueProfileUpdate(id: string, ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UeProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileUpdate(id, ueProfile, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Every saved profile, sorted by name.
-         * @summary List the saved Throughput Tester profiles
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerProfileList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterStoredProfile>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileList(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileList']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Same name rules as creating one; keeping its own name is fine.
-         * @summary Replace a saved profile
-         * @param {string} id 
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerProfileUpdate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStoredProfile>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileUpdate(id, testerProfile, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileUpdate']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
-         * @summary Validate a profile and preview the per-gNB plan
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerProfileValidate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterValidateResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerProfileValidate(testerProfile, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerProfileValidate']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. State is `idle` before the first run.
-         * @summary Current run snapshot
-         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerRunGet(gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerRunGet(gnbOffset, gnbLimit, gnbState, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerRunGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. Only one run may be active at a time.
-         * @summary Start a run
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerRunStart(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerRunStart(testerProfile, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerRunStart']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
-         * @summary Stop the active run
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerRunStop(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterRunSnapshot>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerRunStop(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerRunStop']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
-         * @summary The tester host and process (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerStatusGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterStatus>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerStatusGet(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerStatusGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-         * @summary How busy each CPU of the tester host is (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerSystemCpuLoad(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuLoad>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemCpuLoad(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemCpuLoad']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
-         * @summary Set the CPU allocation for the next runs
-         * @param {TesterCpuAllocation} testerCpuAllocation 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerSystemCpusPut(testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterCpuAllocation>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemCpusPut(testerCpuAllocation, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemCpusPut']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-         * @summary The tester host\'s CPU allocation and layout (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testerSystemGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterSystemInfo>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testerSystemGet(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testerSystemGet']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
-         * @summary Add a tester
-         * @param {TesterAddRequest} testerAddRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testersAdd(testerAddRequest: TesterAddRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TesterAdded>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testersAdd(testerAddRequest, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testersAdd']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
-         * @summary Remove an added tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testersDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testersDelete(id, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testersDelete']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
-         * @summary Every tester fru-lab can reach (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async testersList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<TesterEntry>>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.testersList(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.testersList']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileUpdate']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
     }
@@ -4064,81 +2024,43 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployFree5gcUp(requestDeployFree5gc, options).then((request) => request(axios, basePath));
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop gNB
+         * Fails with 409 while a UE deployed onto this gNB still runs.
+         * @summary Stop the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbDown(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbDown(options).then((request) => request(axios, basePath));
+        deployGnbDown(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbDown(profileId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+         * @summary List the gNBs deployed from gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbList(options?: RawAxiosRequestConfig): AxiosPromise<DeployGnbListResponse> {
+            return localVarFp.deployGnbList(options).then((request) => request(axios, basePath));
         },
         /**
          * 
-         * @summary Get gNB container logs
-         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+         * @summary Get the logs of one profile gNB
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbLogs(service?: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
-            return localVarFp.deployGnbLogs(service, options).then((request) => request(axios, basePath));
+        deployGnbLogs(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployGnbLogs(profileId, options).then((request) => request(axios, basePath));
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * @summary Deploy the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbSliceDown(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s container logs
-         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
-            return localVarFp.deployGnbSliceLogs(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s deploy status
-         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
-            return localVarFp.deployGnbSliceStatus(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-         * @summary Deploy a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbSliceUp(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get gNB deploy status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbStatus(options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
-            return localVarFp.deployGnbStatus(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-         * @summary Deploy gNB
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbUp(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbUp(options).then((request) => request(axios, basePath));
+        deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbUp(profileId, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -4170,6 +2092,17 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployUeLogs(instance, options).then((request) => request(axios, basePath));
         },
         /**
+         * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+         * @summary Deploy the UE of one UE profile
+         * @param {string} profileId 
+         * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeProfileUp(profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployUeProfileUp(profileId, deployUeProfileRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get a UE instance\'s deploy status
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -4189,6 +2122,85 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
             return localVarFp.deployUeUp(instance, deployUeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+         * @summary Create several gnb profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<GnbProfile>> {
+            return localVarFp.gnbProfileBulkCreate(profileBulkRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a gnb profile for conflicts with the saved ones
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCheck(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<ProfileCheckResult> {
+            return localVarFp.gnbProfileCheck(gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Save a new gNB profile
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCreate(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<GnbProfile> {
+            return localVarFp.gnbProfileCreate(gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Delete a gNB profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.gnbProfileDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary List the saved gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileList(options?: RawAxiosRequestConfig): AxiosPromise<Array<GnbProfile>> {
+            return localVarFp.gnbProfileList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Preview the config file a gNB profile deploys
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileRender(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<RenderedConfig> {
+            return localVarFp.gnbProfileRender(gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Update a gNB profile
+         * @param {string} id 
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileUpdate(id: string, gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<GnbProfile> {
+            return localVarFp.gnbProfileUpdate(id, gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+         * @summary List the host\'s network interfaces
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        hostInterfaceList(options?: RawAxiosRequestConfig): AxiosPromise<Array<HostInterface>> {
+            return localVarFp.hostInterfaceList(options).then((request) => request(axios, basePath));
         },
         /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
@@ -4239,377 +2251,74 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.logout(options).then((request) => request(axios, basePath));
         },
         /**
-         * Forwarded to fru-tester. State is `idle` before the first bench.
-         * @summary Latest data plane bench
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+         * @summary Create several ue profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerBenchGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterBenchResult> {
-            return localVarFp.testerBenchGet(options).then((request) => request(axios, basePath));
+        ueProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<UeProfile>> {
+            return localVarFp.ueProfileBulkCreate(profileBulkRequest, options).then((request) => request(axios, basePath));
         },
         /**
-         * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
-         * @summary Start a data plane bench
-         * @param {TesterBenchSettings} testerBenchSettings 
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a ue profile for conflicts with the saved ones
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerBenchStart(testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig): AxiosPromise<TesterBenchResult> {
-            return localVarFp.testerBenchStart(testerBenchSettings, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
-         * @summary One tester\'s latest data plane bench
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdBenchGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterBenchResult> {
-            return localVarFp.testerByIdBenchGet(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
-         * @summary Start a data plane bench on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterBenchSettings} testerBenchSettings 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdBenchStart(id: string, testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig): AxiosPromise<TesterBenchResult> {
-            return localVarFp.testerByIdBenchStart(id, testerBenchSettings, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
-         * @summary How busy each CPU of one tester\'s host is
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdCpuLoad(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuLoad> {
-            return localVarFp.testerByIdCpuLoad(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
-         * @summary Set one tester\'s CPU allocation
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterCpuAllocation} testerCpuAllocation 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdCpusPut(id: string, testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuAllocation> {
-            return localVarFp.testerByIdCpusPut(id, testerCpuAllocation, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
-         * @summary One tester\'s network interfaces
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdNetworkInterfaces(id: string, options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterInterface>> {
-            return localVarFp.testerByIdNetworkInterfaces(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
-         * @summary Ping test from one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterPingRequest} testerPingRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdNetworkPing(id: string, testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterPingResult> {
-            return localVarFp.testerByIdNetworkPing(id, testerPingRequest, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
-         * @summary Validate a profile on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdProfileValidate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterValidateResponse> {
-            return localVarFp.testerByIdProfileValidate(id, testerProfile, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-         * @summary One tester\'s run
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdRun(id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerByIdRun(id, gnbOffset, gnbLimit, gnbState, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-         * @summary Start a run on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdRunStart(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerByIdRunStart(id, testerProfile, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
-         * @summary Stop the active run on one tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdRunStop(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerByIdRunStop(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
-         * @summary One tester\'s host and process
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdStatus(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterStatus> {
-            return localVarFp.testerByIdStatus(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
-         * @summary One tester\'s CPU allocation and layout
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerByIdSystem(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterSystemInfo> {
-            return localVarFp.testerByIdSystem(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
-         * @summary Delete finished runs from the history
-         * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryDelete(testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.testerHistoryDelete(testerHistoryDeleteRequest, options).then((request) => request(axios, basePath));
+        ueProfileCheck(ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<ProfileCheckResult> {
+            return localVarFp.ueProfileCheck(ueProfile, options).then((request) => request(axios, basePath));
         },
         /**
          * 
-         * @summary One finished run\'s full report (JSON)
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+         * @summary Save a new UE profile
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerHistoryGet(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunReport> {
-            return localVarFp.testerHistoryGet(runId, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * fru-lab keeps the last 50 runs fru-tester finished.
-         * @summary Finished runs, newest first
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterHistorySummary>> {
-            return localVarFp.testerHistoryList(options).then((request) => request(axios, basePath));
+        ueProfileCreate(ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<UeProfile> {
+            return localVarFp.ueProfileCreate(ueProfile, options).then((request) => request(axios, basePath));
         },
         /**
          * 
-         * @summary Rename a finished run
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-         * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryRename(runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterHistorySummary> {
-            return localVarFp.testerHistoryRename(runId, testerHistoryRenameRequest, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
-         * @summary One finished run\'s report as a self-contained HTML page
-         * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.testerHistoryReportHtml(runId, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
-         * @summary Interfaces on fru-tester\'s host
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerNetworkInterfaces(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterInterface>> {
-            return localVarFp.testerNetworkInterfaces(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
-         * @summary Ping test of one network
-         * @param {TesterPingRequest} testerPingRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerNetworkPing(testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterPingResult> {
-            return localVarFp.testerNetworkPing(testerPingRequest, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
-         * @summary Save a new Throughput Tester profile
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileCreate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterStoredProfile> {
-            return localVarFp.testerProfileCreate(testerProfile, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Delete a saved profile
+         * @summary Delete a UE profile
          * @param {string} id 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.testerProfileDelete(id, options).then((request) => request(axios, basePath));
+        ueProfileDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.ueProfileDelete(id, options).then((request) => request(axios, basePath));
         },
         /**
          * 
-         * @summary One saved profile
+         * @summary List the saved UE profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileList(options?: RawAxiosRequestConfig): AxiosPromise<Array<UeProfile>> {
+            return localVarFp.ueProfileList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Preview the config file a UE profile deploys
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileRender(ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<RenderedConfig> {
+            return localVarFp.ueProfileRender(ueProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Update a UE profile
          * @param {string} id 
+         * @param {UeProfile} ueProfile 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        testerProfileGet(id: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterStoredProfile> {
-            return localVarFp.testerProfileGet(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Every saved profile, sorted by name.
-         * @summary List the saved Throughput Tester profiles
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterStoredProfile>> {
-            return localVarFp.testerProfileList(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Same name rules as creating one; keeping its own name is fine.
-         * @summary Replace a saved profile
-         * @param {string} id 
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileUpdate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterStoredProfile> {
-            return localVarFp.testerProfileUpdate(id, testerProfile, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
-         * @summary Validate a profile and preview the per-gNB plan
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerProfileValidate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterValidateResponse> {
-            return localVarFp.testerProfileValidate(testerProfile, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. State is `idle` before the first run.
-         * @summary Current run snapshot
-         * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-         * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-         * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerRunGet(gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerRunGet(gnbOffset, gnbLimit, gnbState, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. Only one run may be active at a time.
-         * @summary Start a run
-         * @param {TesterProfile} testerProfile 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerRunStart(testerProfile: TesterProfile, options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerRunStart(testerProfile, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
-         * @summary Stop the active run
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerRunStop(options?: RawAxiosRequestConfig): AxiosPromise<TesterRunSnapshot> {
-            return localVarFp.testerRunStop(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
-         * @summary The tester host and process (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerStatusGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterStatus> {
-            return localVarFp.testerStatusGet(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-         * @summary How busy each CPU of the tester host is (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerSystemCpuLoad(options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuLoad> {
-            return localVarFp.testerSystemCpuLoad(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
-         * @summary Set the CPU allocation for the next runs
-         * @param {TesterCpuAllocation} testerCpuAllocation 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerSystemCpusPut(testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig): AxiosPromise<TesterCpuAllocation> {
-            return localVarFp.testerSystemCpusPut(testerCpuAllocation, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-         * @summary The tester host\'s CPU allocation and layout (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testerSystemGet(options?: RawAxiosRequestConfig): AxiosPromise<TesterSystemInfo> {
-            return localVarFp.testerSystemGet(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
-         * @summary Add a tester
-         * @param {TesterAddRequest} testerAddRequest 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testersAdd(testerAddRequest: TesterAddRequest, options?: RawAxiosRequestConfig): AxiosPromise<TesterAdded> {
-            return localVarFp.testersAdd(testerAddRequest, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
-         * @summary Remove an added tester
-         * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testersDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.testersDelete(id, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
-         * @summary Every tester fru-lab can reach (Status page)
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        testersList(options?: RawAxiosRequestConfig): AxiosPromise<Array<TesterEntry>> {
-            return localVarFp.testersList(options).then((request) => request(axios, basePath));
+        ueProfileUpdate(id: string, ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<UeProfile> {
+            return localVarFp.ueProfileUpdate(id, ueProfile, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -4661,88 +2370,46 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-     * @summary Stop gNB
+     * Fails with 409 while a UE deployed onto this gNB still runs.
+     * @summary Stop the gNB of one gNB profile
+     * @param {string} profileId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbDown(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbDown(options).then((request) => request(this.axios, this.basePath));
+    public deployGnbDown(profileId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbDown(profileId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+     * @summary List the gNBs deployed from gNB profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbList(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
      * 
-     * @summary Get gNB container logs
-     * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+     * @summary Get the logs of one profile gNB
+     * @param {string} profileId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbLogs(service?: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbLogs(service, options).then((request) => request(this.axios, this.basePath));
+    public deployGnbLogs(profileId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbLogs(profileId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
-     * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-     * @summary Stop a gNB slice (ulcl-2slice only)
-     * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+     * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+     * @summary Deploy the gNB of one gNB profile
+     * @param {string} profileId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceDown(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get a gNB slice\'s container logs
-     * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceLogs(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get a gNB slice\'s deploy status
-     * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceStatus(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-     * @summary Deploy a gNB slice (ulcl-2slice only)
-     * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceUp(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get gNB deploy status
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbStatus(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbStatus(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-     * @summary Deploy gNB
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbUp(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbUp(options).then((request) => request(this.axios, this.basePath));
+    public deployGnbUp(profileId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbUp(profileId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -4778,6 +2445,18 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+     * @summary Deploy the UE of one UE profile
+     * @param {string} profileId 
+     * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeProfileUp(profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeProfileUp(profileId, deployUeProfileRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * 
      * @summary Get a UE instance\'s deploy status
      * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -4798,6 +2477,93 @@ export class DefaultApi extends BaseAPI {
      */
     public deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).deployUeUp(instance, deployUeRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+     * @summary Create several gnb profiles from one
+     * @param {ProfileBulkRequest} profileBulkRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileBulkCreate(profileBulkRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+     * @summary Check a gnb profile for conflicts with the saved ones
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileCheck(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileCheck(gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Save a new gNB profile
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileCreate(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileCreate(gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Delete a gNB profile
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary List the saved gNB profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Preview the config file a gNB profile deploys
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileRender(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileRender(gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Update a gNB profile
+     * @param {string} id 
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileUpdate(id: string, gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileUpdate(id, gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+     * @summary List the host\'s network interfaces
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public hostInterfaceList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).hostInterfaceList(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -4854,435 +2620,82 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Forwarded to fru-tester. State is `idle` before the first bench.
-     * @summary Latest data plane bench
+     * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+     * @summary Create several ue profiles from one
+     * @param {ProfileBulkRequest} profileBulkRequest 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerBenchGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerBenchGet(options).then((request) => request(this.axios, this.basePath));
+    public ueProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileBulkCreate(profileBulkRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
-     * Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
-     * @summary Start a data plane bench
-     * @param {TesterBenchSettings} testerBenchSettings 
+     * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+     * @summary Check a ue profile for conflicts with the saved ones
+     * @param {UeProfile} ueProfile 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerBenchStart(testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerBenchStart(testerBenchSettings, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
-     * @summary One tester\'s latest data plane bench
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdBenchGet(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdBenchGet(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
-     * @summary Start a data plane bench on one tester
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {TesterBenchSettings} testerBenchSettings 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdBenchStart(id: string, testerBenchSettings: TesterBenchSettings, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdBenchStart(id, testerBenchSettings, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
-     * @summary How busy each CPU of one tester\'s host is
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdCpuLoad(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdCpuLoad(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
-     * @summary Set one tester\'s CPU allocation
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {TesterCpuAllocation} testerCpuAllocation 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdCpusPut(id: string, testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdCpusPut(id, testerCpuAllocation, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
-     * @summary One tester\'s network interfaces
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdNetworkInterfaces(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdNetworkInterfaces(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
-     * @summary Ping test from one tester
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {TesterPingRequest} testerPingRequest 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdNetworkPing(id: string, testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdNetworkPing(id, testerPingRequest, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
-     * @summary Validate a profile on one tester
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {TesterProfile} testerProfile 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdProfileValidate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdProfileValidate(id, testerProfile, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-     * @summary One tester\'s run
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-     * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-     * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdRun(id: string, gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdRun(id, gnbOffset, gnbLimit, gnbState, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-     * @summary Start a run on one tester
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {TesterProfile} testerProfile 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdRunStart(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdRunStart(id, testerProfile, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
-     * @summary Stop the active run on one tester
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdRunStop(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdRunStop(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
-     * @summary One tester\'s host and process
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdStatus(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdStatus(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
-     * @summary One tester\'s CPU allocation and layout
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerByIdSystem(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerByIdSystem(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
-     * @summary Delete finished runs from the history
-     * @param {TesterHistoryDeleteRequest} testerHistoryDeleteRequest 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerHistoryDelete(testerHistoryDeleteRequest: TesterHistoryDeleteRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistoryDelete(testerHistoryDeleteRequest, options).then((request) => request(this.axios, this.basePath));
+    public ueProfileCheck(ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileCheck(ueProfile, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
      * 
-     * @summary One finished run\'s full report (JSON)
-     * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
+     * @summary Save a new UE profile
+     * @param {UeProfile} ueProfile 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerHistoryGet(runId: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistoryGet(runId, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * fru-lab keeps the last 50 runs fru-tester finished.
-     * @summary Finished runs, newest first
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerHistoryList(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistoryList(options).then((request) => request(this.axios, this.basePath));
+    public ueProfileCreate(ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileCreate(ueProfile, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
      * 
-     * @summary Rename a finished run
-     * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-     * @param {TesterHistoryRenameRequest} testerHistoryRenameRequest 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerHistoryRename(runId: string, testerHistoryRenameRequest: TesterHistoryRenameRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistoryRename(runId, testerHistoryRenameRequest, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
-     * @summary One finished run\'s report as a self-contained HTML page
-     * @param {string} runId The run\&#39;s id from the history list (TesterHistorySummary.id).
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerHistoryReportHtml(runId: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerHistoryReportHtml(runId, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
-     * @summary Interfaces on fru-tester\'s host
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerNetworkInterfaces(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerNetworkInterfaces(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
-     * @summary Ping test of one network
-     * @param {TesterPingRequest} testerPingRequest 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerNetworkPing(testerPingRequest: TesterPingRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerNetworkPing(testerPingRequest, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
-     * @summary Save a new Throughput Tester profile
-     * @param {TesterProfile} testerProfile 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerProfileCreate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileCreate(testerProfile, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Delete a saved profile
+     * @summary Delete a UE profile
      * @param {string} id 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerProfileDelete(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileDelete(id, options).then((request) => request(this.axios, this.basePath));
+    public ueProfileDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileDelete(id, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
      * 
-     * @summary One saved profile
+     * @summary List the saved UE profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Preview the config file a UE profile deploys
+     * @param {UeProfile} ueProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileRender(ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileRender(ueProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Update a UE profile
      * @param {string} id 
+     * @param {UeProfile} ueProfile 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public testerProfileGet(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileGet(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Every saved profile, sorted by name.
-     * @summary List the saved Throughput Tester profiles
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerProfileList(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileList(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Same name rules as creating one; keeping its own name is fine.
-     * @summary Replace a saved profile
-     * @param {string} id 
-     * @param {TesterProfile} testerProfile 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerProfileUpdate(id: string, testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileUpdate(id, testerProfile, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
-     * @summary Validate a profile and preview the per-gNB plan
-     * @param {TesterProfile} testerProfile 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerProfileValidate(testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerProfileValidate(testerProfile, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. State is `idle` before the first run.
-     * @summary Current run snapshot
-     * @param {number} [gnbOffset] Where the page of gNBs starts, counted within those gnbState keeps.
-     * @param {number} [gnbLimit] How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message.
-     * @param {string} [gnbState] Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerRunGet(gnbOffset?: number, gnbLimit?: number, gnbState?: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerRunGet(gnbOffset, gnbLimit, gnbState, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. Only one run may be active at a time.
-     * @summary Start a run
-     * @param {TesterProfile} testerProfile 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerRunStart(testerProfile: TesterProfile, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerRunStart(testerProfile, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
-     * @summary Stop the active run
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerRunStop(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerRunStop(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
-     * @summary The tester host and process (Status page)
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerStatusGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerStatusGet(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-     * @summary How busy each CPU of the tester host is (Status page)
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerSystemCpuLoad(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerSystemCpuLoad(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
-     * @summary Set the CPU allocation for the next runs
-     * @param {TesterCpuAllocation} testerCpuAllocation 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerSystemCpusPut(testerCpuAllocation: TesterCpuAllocation, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerSystemCpusPut(testerCpuAllocation, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-     * @summary The tester host\'s CPU allocation and layout (Status page)
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testerSystemGet(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testerSystemGet(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
-     * @summary Add a tester
-     * @param {TesterAddRequest} testerAddRequest 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testersAdd(testerAddRequest: TesterAddRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testersAdd(testerAddRequest, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
-     * @summary Remove an added tester
-     * @param {string} id A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testersDelete(id: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testersDelete(id, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
-     * @summary Every tester fru-lab can reach (Status page)
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public testersList(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).testersList(options).then((request) => request(this.axios, this.basePath));
+    public ueProfileUpdate(id: string, ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileUpdate(id, ueProfile, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
-export const DeployGnbSliceDownSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceDownSliceEnum = typeof DeployGnbSliceDownSliceEnum[keyof typeof DeployGnbSliceDownSliceEnum];
-export const DeployGnbSliceLogsSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceLogsSliceEnum = typeof DeployGnbSliceLogsSliceEnum[keyof typeof DeployGnbSliceLogsSliceEnum];
-export const DeployGnbSliceStatusSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceStatusSliceEnum = typeof DeployGnbSliceStatusSliceEnum[keyof typeof DeployGnbSliceStatusSliceEnum];
-export const DeployGnbSliceUpSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceUpSliceEnum = typeof DeployGnbSliceUpSliceEnum[keyof typeof DeployGnbSliceUpSliceEnum];
 
 

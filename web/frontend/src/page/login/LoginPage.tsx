@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { api, extractErrorMessage } from '../../apiClient'
 import { useNavigate } from 'react-router-dom'
@@ -10,8 +9,8 @@ import styles from './login-page.module.css'
 // FEATURES are the brand panel's three lines under the banner.
 const FEATURES = [
   { title: 'Deploy a 5G lab', text: 'free5GC, gNB and UEs on Docker in one click.' },
-  { title: 'Load-test any core', text: 'Tens of thousands of UEs and line-rate GTP-U.' },
-  { title: 'Keep the evidence', text: "Every run's report, per tester, ready to compare." },
+  { title: 'Manage subscribers', text: 'Add, edit and bulk-create UEs through the free5GC webconsole.' },
+  { title: 'Watch it run', text: 'Live status, container logs and a terminal into every UE.' },
 ]
 
 export default function LoginPage() {
@@ -20,7 +19,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const { addError, addSuccess } = useNotifications()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -42,11 +41,6 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page}>
-      <NotificationContainer
-        errors={errors}
-        successes={successes}
-        onClose={removeNotification}
-      />
 
       <section className={styles.brandPanel} aria-label="fru-lab">
         <img
@@ -67,7 +61,7 @@ export default function LoginPage() {
       <main className={styles.formPanel}>
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.brand}>
-            <LogoMark size={36} />
+            <LogoMark size={54} />
             <span className={styles.wordmark}>fru-<span className={styles.wordmarkLab}>lab</span></span>
           </div>
 

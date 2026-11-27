@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
 import Modal from '../../components/modal/modal'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
+import { SortTh, useSort } from '../../lab/sort'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import type { Subscriber } from '../../webconsoleApi'
 import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
@@ -37,10 +37,10 @@ export default function SubscribersPage() {
   function startAdd() {
     if (!isCountValid) return
     setIsAskingCount(false)
-    navigate(`/subscribers/new?count=${parsedCount}`)
+    navigate(`/core-network/subscribers/new?count=${parsedCount}`)
   }
 
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const { addError, addSuccess } = useNotifications()
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
@@ -77,7 +77,13 @@ export default function SubscribersPage() {
   const plmns = useMemo(() => Array.from(new Set(subscribers.map((s) => s.plmnID))).sort(), [subscribers])
   const isFiltered = Boolean(search.trim() || plmn)
 
-  const shown = pageOf(filteredSubscribers, page, pageSize)
+  // a header click re-sorts every matching subscriber, then pages
+  const { sorted: sortedSubscribers, sort, toggle: toggleSort } = useSort(filteredSubscribers, {
+    ueId: (s) => s.ueId,
+    plmn: (s) => s.plmnID,
+    gpsi: (s) => s.gpsi,
+  })
+  const shown = pageOf(sortedSubscribers, page, pageSize)
   const keyOf = (s: Subscriber) => `${s.ueId}|${s.plmnID}`
   const selectedSubscribers = subscribers.filter((s) => selected.has(keyOf(s)))
   // the header checkbox selects every subscriber matching the search, on
@@ -140,8 +146,9 @@ export default function SubscribersPage() {
   return (
     <AppLayout
       crumbs={[{ label: 'Subscribers' }]}
-      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+     
     >
+
       <section className={styles.header}>
         <h1 className={styles.title}>Subscribers</h1>
         <span className={styles.subtitle}>free5GC UDR via WebConsole</span>
@@ -157,7 +164,7 @@ export default function SubscribersPage() {
             </>
           )}
           <button type="button" className={styles.btn} onClick={() => { setUeCount('2'); setIsAskingCount(true) }}>Add in bulk</button>
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/subscribers/new')}>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/core-network/subscribers/new')}>
             Add subscriber
           </button>
         </div>
@@ -216,9 +223,9 @@ export default function SubscribersPage() {
                       disabled={isBulkDeleting}
                     />
                   </th>
-                  <th>UE ID</th>
-                  <th>PLMN</th>
-                  <th>GPSI</th>
+                  <SortTh k="ueId" sort={sort} onSort={toggleSort}>UE ID</SortTh>
+                  <SortTh k="plmn" sort={sort} onSort={toggleSort}>PLMN</SortTh>
+                  <SortTh k="gpsi" sort={sort} onSort={toggleSort}>GPSI</SortTh>
                   <th className={styles.right}>Actions</th>
                 </tr>
               </thead>
@@ -244,7 +251,7 @@ export default function SubscribersPage() {
                         <button
                           type="button"
                           className={styles.lnk}
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
+                          onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
                         >
                           View
                         </button>
@@ -252,7 +259,7 @@ export default function SubscribersPage() {
                         <button
                           type="button"
                           className={styles.lnk}
-                          onClick={() => navigate(`/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
+                          onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
                         >
                           Edit
                         </button>

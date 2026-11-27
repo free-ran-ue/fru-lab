@@ -14,7 +14,7 @@ jobs:
       matrix:
         go: [ '1.26.11' ]
         # each Go module has its own go.mod and .golangci.yaml
-        module: [ web/backend, tester ]
+        module: [ web/backend ]
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5

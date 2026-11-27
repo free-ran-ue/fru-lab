@@ -1,0 +1,61 @@
+/* A list on the left, its detail on the right, with a draggable divider. */
+.split {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.left,
+.right {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.left {
+  background: var(--bg);
+}
+
+.right {
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.divider {
+  position: relative;
+  z-index: 2;
+  width: 0;
+  cursor: col-resize;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+}
+
+.divider:hover::after,
+.dragging .divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .split { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: auto auto; }
+  .divider { display: none; }
+  .right { border-left: 0; border-top: 1px solid var(--border); }
+}

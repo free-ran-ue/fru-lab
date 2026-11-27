@@ -59,7 +59,7 @@ func newTestCompose(t *testing.T, fake *fakeCompose) *composeContext {
 }
 
 func TestUpPublishesTheWebconsoleOnTheConfiguredPortOnly(t *testing.T) {
-	for _, variant := range []string{constant.FREE5GC_TEMPLATE_BASIC, constant.FREE5GC_TEMPLATE_ULCL, constant.FREE5GC_TEMPLATE_ULCL_2SLICE} {
+	for _, variant := range []string{constant.FREE5GC_TEMPLATE_BASIC, constant.FREE5GC_TEMPLATE_ULCL} {
 		fake := &fakeCompose{}
 		c := newTestCompose(t, fake)
 		if err := c.Up(context.Background(), constant.DEPLOY_TARGET_FREE5GC, variant); err != nil {
@@ -102,14 +102,14 @@ func TestUpTimeoutTakesTheStackDown(t *testing.T) {
 	c := newTestCompose(t, fake)
 	c.deployTimeout = 50 * time.Millisecond
 	start := time.Now()
-	err := c.Up(context.Background(), constant.DEPLOY_TARGET_GNB, "")
+	err := c.Up(context.Background(), constant.DEPLOY_TARGET_FREE5GC, constant.FREE5GC_TEMPLATE_BASIC)
 	if err == nil || !strings.Contains(err.Error(), "did not finish within 50ms") {
 		t.Fatalf("error %v; want a timeout", err)
 	}
 	if time.Since(start) > 5*time.Second {
 		t.Fatal("Up did not give up at the timeout")
 	}
-	if len(fake.downs) != 1 || fake.downs[0] != "frulab-gnb" {
+	if len(fake.downs) != 1 || fake.downs[0] != "frulab-free5gc" {
 		t.Fatalf("downs %v", fake.downs)
 	}
 	if fake.downCtx != nil {
@@ -128,5 +128,33 @@ func TestUeUpFailureTakesTheInstanceDown(t *testing.T) {
 	}
 	if len(fake.downs) != 1 {
 		t.Fatalf("downs %v", fake.downs)
+	}
+}
+
+// Shutdown tears down UE instances first, then the profile gNBs, the gNBs
+// older versions deployed, then the core, and leaves projects that are not fru-lab's
+// alone.
+func TestTeardownOrder(t *testing.T) {
+	projects := map[string]bool{
+		"frulab-free5gc":          true,
+		"frulab-gnb":              true,
+		"frulab-gnb-slice2":       true,
+		"frulab-gnb-slice1":       true,
+		"frulab-gnb-bbbbbbbbbbbb": true,
+		"frulab-gnb-aaaaaaaaaaaa": true,
+		"frulab-gnb-nothex":       true,
+		"frulab-ue-imsi-2":        true,
+		"frulab-ue-imsi-1":        true,
+		"someone-else":            true,
+	}
+	got := teardownOrder(projects, defaultTargets())
+	want := []string{
+		"frulab-ue-imsi-1", "frulab-ue-imsi-2",
+		"frulab-gnb-aaaaaaaaaaaa", "frulab-gnb-bbbbbbbbbbbb",
+		"frulab-gnb-slice1", "frulab-gnb-slice2", "frulab-gnb",
+		"frulab-free5gc",
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v; want %v", got, want)
 	}
 }

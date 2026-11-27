@@ -1,0 +1,33 @@
+/* Sortable column headers. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.btn:hover {
+  color: var(--ink);
+}
+
+.btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.arrow {
+  font-size: 0.625em;
+  opacity: 0.35;
+}
+
+.on {
+  color: var(--accent);
+  opacity: 1;
+}

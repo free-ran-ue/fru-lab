@@ -17,7 +17,6 @@ type BackendLogger struct {
 	CtxLog    loggergoModel.LoggerInterface
 	DbLog     loggergoModel.LoggerInterface
 	DeployLog loggergoModel.LoggerInterface
-	TesterLog loggergoModel.LoggerInterface
 }
 
 func NewBackendLogger(level loggergoUtil.LogLevelString, filePath string, debugMode bool) *BackendLogger {
@@ -35,6 +34,5 @@ func NewBackendLogger(level loggergoUtil.LogLevelString, filePath string, debugM
 		CtxLog:    logger.WithTags(CTX_LOG),
 		DbLog:     logger.WithTags(DB_LOG),
 		DeployLog: logger.WithTags(DEPLOY_LOG),
-		TesterLog: logger.WithTags(TESTER_LOG),
 	}
 }

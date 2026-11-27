@@ -6,11 +6,8 @@
   color: var(--ink);
 }
 
-/* Left: brand panel with the logo banner and three feature lines.
-   Its tint (#F1F0FB in the prototype) sits between --accent-soft and
-   --surface-sunken, so it is a local value. */
+/* Left: brand panel with the logo banner and three feature lines. */
 .brandPanel {
-  --login-brand-bg: #F1F0FB;
   flex: 999 1 35rem;
   min-width: 0;
   display: flex;
@@ -18,7 +15,7 @@
   justify-content: center;
   padding: 3rem 2.5rem;
   gap: 2rem;
-  background: var(--login-brand-bg);
+  background: var(--surface-muted);
 }
 
 .banner {
@@ -88,7 +85,7 @@
 }
 
 .wordmarkLab {
-  color: var(--brand-3);
+  color: var(--brand-2);
 }
 
 .headerBlock {

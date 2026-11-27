@@ -1,0 +1,326 @@
+/* The console: a dark panel under the topology with tabs. */
+.console {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--chrome);
+  color: var(--chrome-text);
+  border-top: 1px solid var(--border);
+}
+
+.resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 2;
+}
+
+.resize:hover,
+.resizing {
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: 2rem;
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--chrome-muted);
+  font: inherit;
+  font-size: 0.71875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--chrome-strong);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--chrome-strong);
+  border-bottom-color: var(--accent);
+}
+
+.count {
+  min-width: 1.125rem;
+  padding: 0 0.3125rem;
+  border-radius: 999px;
+  background: var(--chrome-active);
+  color: var(--chrome-text);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.countBad {
+  background: color-mix(in srgb, var(--bad) 35%, var(--chrome-active));
+}
+
+.barTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.5rem;
+}
+
+.iconBtn {
+  display: grid;
+  place-items: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--chrome-hover);
+  color: var(--chrome-strong);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* toolbars inside tabs */
+.tools {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border-bottom: 1px solid var(--chrome-border);
+  font-size: 0.75rem;
+  color: var(--chrome-muted);
+}
+
+.ctl {
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-sm);
+  background: var(--chrome-hover);
+  color: var(--chrome-strong);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.ctl:focus {
+  outline: 1px solid var(--accent);
+}
+
+.ctlBtn {
+  composes: ctl;
+  cursor: pointer;
+}
+
+.ctlBtn:hover:not(:disabled) {
+  background: var(--chrome-active);
+}
+
+.ctlBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ctlPrimary {
+  composes: ctl;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+
+.ctlPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  cursor: pointer;
+}
+
+.status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.ok { color: var(--log-info); }
+.bad { color: var(--log-err); }
+
+/* log lines */
+.lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.25rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  line-height: 1.55;
+  user-select: text;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 6.25rem 6rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.line:hover {
+  background: var(--chrome-hover);
+}
+
+.ts { color: var(--log-ts); }
+.src { color: var(--chrome-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lvInfo { color: var(--chrome-text); }
+.lvWarn { color: var(--log-warn); }
+.lvErr { color: var(--log-err); }
+.lvDebug { color: var(--chrome-muted); }
+
+.mark {
+  background: color-mix(in srgb, var(--log-warn) 35%, transparent);
+  color: var(--chrome-strong);
+}
+
+.empty {
+  margin: auto;
+  padding: 1.5rem;
+  font-size: 0.78125rem;
+  color: var(--chrome-muted);
+  text-align: center;
+}
+
+/* events */
+.event {
+  display: grid;
+  grid-template-columns: 6.25rem 0.75rem 11rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.1875rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.event:hover {
+  background: var(--chrome-hover);
+}
+
+.eventOn {
+  background: var(--chrome-active);
+}
+
+.lvl {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.lvl_ok { background: var(--ok); }
+.lvl_info { background: var(--chrome-muted); }
+.lvl_warn { background: var(--warn); }
+.lvl_error { background: var(--bad); }
+
+.node {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chrome-accent);
+}
+
+/* terminal and tests */
+.term {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.375rem 0.5rem;
+}
+
+.split {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+.out {
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.history {
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid var(--chrome-border);
+}
+
+.hist {
+  display: block;
+  width: 100%;
+  padding: 0.4375rem 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--chrome-border);
+  background: transparent;
+  color: var(--chrome-text);
+  font: inherit;
+  font-size: 0.71875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hist:hover {
+  background: var(--chrome-hover);
+}
+
+.hist b {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--chrome-strong);
+}
+
+.pass { color: var(--log-info); }
+.fail { color: var(--log-err); }

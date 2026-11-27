@@ -1,85 +1,117 @@
 import type { ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { useTheme } from '../../theme'
 import styles from './sidebar.module.css'
-
-function navItemClassName({ isActive }: { isActive: boolean }): string {
-  return `${styles.navItem} ${isActive ? styles.navItemActive : ''}`
-}
 
 // The cube from the fru-lab logo.
 export function LogoMark({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" strokeLinejoin="round" strokeWidth={1.2} aria-hidden="true">
-      <path d="M12 2.4L20.6 7 12 11.6 3.4 7z" fill="var(--brand-1)" stroke="var(--brand-1)" />
-      <path d="M3 8.6l8.2 4.6V22L3 17.4z" fill="var(--brand-2)" stroke="var(--brand-2)" />
-      <path d="M12.8 13.2L21 8.6v8.8L12.8 22z" fill="var(--brand-3)" stroke="var(--brand-3)" />
+      <path d="M12 2.4L20.6 7 12 11.6 3.4 7z" fill="var(--cube-top)" stroke="var(--cube-top)" />
+      <path d="M3 8.6l8.2 4.6V22L3 17.4z" fill="var(--cube-left)" stroke="var(--cube-left)" />
+      <path d="M12.8 13.2L21 8.6v8.8L12.8 22z" fill="var(--cube-right)" stroke="var(--cube-right)" />
     </svg>
   )
 }
 
-// Icon is a 16px line icon in the nav's text colour.
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg className={styles.icon} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={styles.icon} width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {children}
     </svg>
   )
 }
 
 const ICONS = {
-  dashboard: <Icon><path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z" /></Icon>,
-  subscribers: <Icon><circle cx="8" cy="5.5" r="2.5" /><path d="M3 13.5c.8-2.4 2.7-3.5 5-3.5s4.2 1.1 5 3.5" /></Icon>,
-  logs: <Icon><path d="M3 4h10M3 8h10M3 12h6" /></Icon>,
+  overview: <Icon><path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z" /></Icon>,
+  core: <Icon><rect x="2.5" y="2.5" width="11" height="4" rx="1" /><rect x="2.5" y="9.5" width="11" height="4" rx="1" /><path d="M5 4.5h.01M5 11.5h.01" /></Icon>,
+  ran: <Icon><path d="M8 7v7M5.5 14h5M8 7l-2.5 7M8 7l2.5 7" /><path d="M5.2 4.2a4 4 0 0 1 5.6 0M3.4 2.4a6.5 6.5 0 0 1 9.2 0" /></Icon>,
+  ue: <Icon><rect x="4.5" y="1.5" width="7" height="13" rx="1.5" /><path d="M7 12h2" /></Icon>,
   images: <Icon><path d="M8 2.5l5.5 3-5.5 3-5.5-3zM2.5 8.5l5.5 3 5.5-3M2.5 11l5.5 3 5.5-3" /></Icon>,
-  testers: <Icon><rect x="2.5" y="3" width="11" height="4" rx="1" /><rect x="2.5" y="9" width="11" height="4" rx="1" /><path d="M5 5h.01M5 11h.01" /></Icon>,
-  setup: <Icon><path d="M2.5 4.5h11M2.5 11.5h11" /><circle cx="6" cy="4.5" r="1.6" fill="var(--chrome)" /><circle cx="10" cy="11.5" r="1.6" fill="var(--chrome)" /></Icon>,
-  profiles: <Icon><path d="M4 2.5h5l3 3v8H4zM9 2.5v3h3" /></Icon>,
-  runs: <Icon><path d="M1.5 8h2.5l2-4.5 3 9 2-4.5h3.5" /></Icon>,
-  history: <Icon><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.2l2 1.3" /></Icon>,
-  bench: <Icon><path d="M2.5 11.5a5.5 5.5 0 1 1 11 0M8 11.5l2.5-3.5" /></Icon>,
+  sun: <Icon><circle cx="8" cy="8" r="2.75" /><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" /></Icon>,
+  moon: <Icon><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" /></Icon>,
   logout: <Icon><path d="M6 2.5H3v11h3M10 5l3 3-3 3M13 8H6" /></Icon>,
 }
 
+interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean; children?: { to: string; label: string; end?: boolean }[] }
+
+const ITEMS: NavItem[] = [
+  {
+    to: '/', label: 'Overview', icon: ICONS.overview, end: true,
+    children: [{ to: '/', label: 'Topology', end: true }, { to: '/events', label: 'Events' }, { to: '/logs', label: 'Logs' }],
+  },
+  {
+    to: '/core-network', label: 'Core Network (free5GC)', icon: ICONS.core,
+    children: [{ to: '/core-network', label: 'Network functions', end: true }, { to: '/core-network/subscribers', label: 'Subscribers' }],
+  },
+  { to: '/free-ran', label: 'free-ran (gNB)', icon: ICONS.ran },
+  { to: '/free-ue', label: 'free-ue (UE)', icon: ICONS.ue },
+]
+
+const TOOLS: NavItem[] = [
+  { to: '/images', label: 'Images', icon: ICONS.images },
+]
+
+const cls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.active : ''}`
+const parentCls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.parentActive : ''}`
+const subCls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${styles.sub} ${isActive ? styles.active : ''}`
+
 interface SidebarProps {
-  // runs in progress, shown on Runs; null or 0 shows nothing
-  activeRuns?: number | null
   onLogout?: () => void
 }
 
-// Sidebar is the v2 navigation: the brand row, two groups of icon links,
-// and Log out at the bottom.
-export default function Sidebar({ activeRuns = null, onLogout }: SidebarProps) {
+// Item is one view; a view with sub-pages lists them under it.
+function Item({ to, label, icon, end, children }: NavItem) {
+  const { pathname } = useLocation()
+  // a view with sub-pages is lit while any of them is open
+  const inGroup = children?.some((c) => (c.end ? pathname === c.to : pathname.startsWith(c.to)))
   return (
-    <aside className={styles.sidebar}>
-      <Link to="/" className={styles.brand} aria-label="fru-lab: go to the dashboard">
-        <LogoMark size={38} />
-        <span className={styles.wordmark}>fru-<span className={styles.wordmarkLab}>lab</span></span>
-      </Link>
-
-      <p className={styles.navGroup}>Core network</p>
-      <nav className={styles.nav} aria-label="Core network">
-        <NavLink to="/" end className={navItemClassName}>{ICONS.dashboard}Dashboard</NavLink>
-        <NavLink to="/subscribers" className={navItemClassName}>{ICONS.subscribers}Subscribers</NavLink>
-        <NavLink to="/logs" className={navItemClassName}>{ICONS.logs}Logs</NavLink>
-        <NavLink to="/images" className={navItemClassName}>{ICONS.images}Images</NavLink>
-      </nav>
-
-      <p className={styles.navGroup}>Load testing</p>
-      <nav className={styles.nav} aria-label="Load testing">
-        <NavLink to="/tester/status" className={navItemClassName}>{ICONS.testers}Testers</NavLink>
-        <NavLink to="/tester" end className={navItemClassName}>{ICONS.setup}Setup</NavLink>
-        <NavLink to="/tester/profiles" className={navItemClassName}>{ICONS.profiles}Profiles</NavLink>
-        <NavLink to="/tester/run" className={navItemClassName}>
-          {ICONS.runs}Runs
-          {activeRuns ? <span className={styles.badge} aria-label={`${activeRuns} in progress`}>{activeRuns}</span> : null}
+    <>
+      <NavLink to={children ? children[0].to : to} end={end} className={children ? () => parentCls({ isActive: Boolean(inGroup) }) : cls} title={label}>
+        {icon}
+        <span className={styles.label}>{label}</span>
+      </NavLink>
+      {children?.map((c) => (
+        <NavLink key={c.to} to={c.to} end={c.end} className={subCls} title={`${label} · ${c.label}`}>
+          <span className={styles.label}>{c.label}</span>
         </NavLink>
-        <NavLink to="/tester/history" className={navItemClassName}>{ICONS.history}History</NavLink>
-        <NavLink to="/tester/bench" className={navItemClassName}>{ICONS.bench}Bench</NavLink>
-      </nav>
+      ))}
+    </>
+  )
+}
 
-      {onLogout && (
-        <button type="button" className={styles.logout} onClick={onLogout}>{ICONS.logout}Log out</button>
-      )}
+// Sidebar is the workbench's navigation: the views, the tools, and the
+// theme and log-out buttons at the bottom, each an icon with its label.
+// Below 700px it collapses to icons only.
+export default function Sidebar({ onLogout }: SidebarProps) {
+  const [theme, toggleTheme] = useTheme()
+  const themeLabel = theme === 'dark' ? 'Light theme' : 'Dark theme'
+  return (
+    <aside className={styles.bar} aria-label="Views">
+      <Link to="/" className={styles.brand} aria-label="fru-lab overview">
+        <LogoMark size={27} />
+        <span className={styles.brandName}>fru-lab</span>
+      </Link>
+      <nav className={styles.group} aria-label="Lab">
+        <span className={styles.heading}>Lab</span>
+        {ITEMS.map((i) => <Item key={i.to} {...i} />)}
+      </nav>
+      <nav className={styles.group} aria-label="Tools">
+        <span className={styles.heading}>Tools</span>
+        {TOOLS.map((i) => <Item key={i.to} {...i} />)}
+      </nav>
+      <div className={styles.foot}>
+        <button type="button" className={styles.item} onClick={toggleTheme} title={themeLabel}>
+          {theme === 'dark' ? ICONS.sun : ICONS.moon}
+          <span className={styles.label}>{themeLabel}</span>
+        </button>
+        {onLogout && (
+          <button type="button" className={styles.item} onClick={onLogout} title="Log out">
+            {ICONS.logout}
+            <span className={styles.label}>Log out</span>
+          </button>
+        )}
+      </div>
     </aside>
   )
 }

@@ -1,0 +1,281 @@
+/* Profile editors in the inspector: a profile list, a compact form, the
+   rendered config file, and an action bar. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.section {
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.sectionTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* profile list */
+.pills {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.pill {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pill:last-child {
+  border-bottom: 0;
+}
+
+.pill:hover {
+  background: var(--surface-muted);
+}
+
+.pill[aria-pressed="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.pill b {
+  font-size: 0.78125rem;
+  font-weight: 600;
+}
+
+.pill span {
+  grid-column: 1;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.pillNew {
+  color: var(--accent-ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.inUse {
+  grid-column: 2 !important;
+  grid-row: 1 / span 2;
+  color: var(--ok-ink) !important;
+}
+
+/* form */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.625rem;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.field label {
+  font-size: 0.71875rem;
+  color: var(--muted);
+}
+
+.input {
+  width: 100%;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.input:disabled {
+  color: var(--muted);
+}
+
+.inputBad {
+  border-color: var(--bad);
+}
+
+.fieldHint {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.banner {
+  margin: 0 0 0.625rem;
+  padding: 0.4375rem 0.625rem;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+}
+
+.bannerWarn {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.range {
+  font-family: var(--font-mono);
+  font-size: 0.71875rem;
+  color: var(--ink-2);
+}
+
+/* rendered config */
+.preview {
+  margin: 0;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-sm);
+  background: var(--chrome);
+  color: var(--chrome-text);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.yKey { color: var(--chrome-accent); }
+.yStr { color: var(--log-warn); }
+.yCmt { color: var(--chrome-muted); }
+.yChanged { background: color-mix(in srgb, var(--chrome-accent) 20%, transparent); }
+
+.previewErr {
+  margin: 0;
+  padding: 0.4375rem 0.625rem;
+  border-left: 2px solid var(--bad);
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+  font-size: 0.75rem;
+}
+
+/* action bar */
+.actions {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.progress {
+  flex: 1 1 100%;
+  height: 3px;
+  overflow: hidden;
+  background: var(--surface-muted);
+}
+
+.progress i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  transition: width 0.3s ease;
+}
+
+/* a unique field clashing with another saved profile */
+.conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--bad-ink);
+}
+
+.useBtn {
+  padding: 0 0.375rem;
+  height: 1.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.useBtn:hover {
+  border-color: var(--accent);
+}
+
+/* read-only value in the form (e.g. the only address of an interface) */
+.readonly {
+  display: flex;
+  align-items: center;
+  height: 1.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
+
+/* bulk create in a list head */
+.bulk {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bulk input {
+  width: 4.5rem;
+}
+
+/* Save / Discard, at the top of the Config tab, under the detail header */
+.saveBar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.saveState {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}

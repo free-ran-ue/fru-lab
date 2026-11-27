@@ -8,61 +8,36 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**deployFree5gcLogs**](#deployfree5gclogs) | **GET** /api/deploy/free5gc/logs | Get free5GC container logs|
 |[**deployFree5gcStatus**](#deployfree5gcstatus) | **GET** /api/deploy/free5gc/status | Get free5GC deploy status|
 |[**deployFree5gcUp**](#deployfree5gcup) | **POST** /api/deploy/free5gc | Deploy free5GC|
-|[**deployGnbDown**](#deploygnbdown) | **DELETE** /api/deploy/gnb | Stop gNB|
-|[**deployGnbLogs**](#deploygnblogs) | **GET** /api/deploy/gnb/logs | Get gNB container logs|
-|[**deployGnbSliceDown**](#deploygnbslicedown) | **DELETE** /api/deploy/gnb-slice/{slice} | Stop a gNB slice (ulcl-2slice only)|
-|[**deployGnbSliceLogs**](#deploygnbslicelogs) | **GET** /api/deploy/gnb-slice/{slice}/logs | Get a gNB slice\&#39;s container logs|
-|[**deployGnbSliceStatus**](#deploygnbslicestatus) | **GET** /api/deploy/gnb-slice/{slice}/status | Get a gNB slice\&#39;s deploy status|
-|[**deployGnbSliceUp**](#deploygnbsliceup) | **POST** /api/deploy/gnb-slice/{slice} | Deploy a gNB slice (ulcl-2slice only)|
-|[**deployGnbStatus**](#deploygnbstatus) | **GET** /api/deploy/gnb/status | Get gNB deploy status|
-|[**deployGnbUp**](#deploygnbup) | **POST** /api/deploy/gnb | Deploy gNB|
+|[**deployGnbDown**](#deploygnbdown) | **DELETE** /api/deploy/gnbs/{profileId} | Stop the gNB of one gNB profile|
+|[**deployGnbList**](#deploygnblist) | **GET** /api/deploy/gnbs | List the gNBs deployed from gNB profiles|
+|[**deployGnbLogs**](#deploygnblogs) | **GET** /api/deploy/gnbs/{profileId}/logs | Get the logs of one profile gNB|
+|[**deployGnbUp**](#deploygnbup) | **POST** /api/deploy/gnbs/{profileId} | Deploy the gNB of one gNB profile|
 |[**deployUeDown**](#deployuedown) | **DELETE** /api/deploy/ue/{instance} | Stop a UE instance|
 |[**deployUeList**](#deployuelist) | **GET** /api/deploy/ue | List all deployed UE instances|
 |[**deployUeLogs**](#deployuelogs) | **GET** /api/deploy/ue/{instance}/logs | Get a UE instance\&#39;s container logs|
+|[**deployUeProfileUp**](#deployueprofileup) | **POST** /api/deploy/ue-profiles/{profileId} | Deploy the UE of one UE profile|
 |[**deployUeStatus**](#deployuestatus) | **GET** /api/deploy/ue/{instance}/status | Get a UE instance\&#39;s deploy status|
 |[**deployUeUp**](#deployueup) | **POST** /api/deploy/ue/{instance} | Deploy a UE instance for one subscriber|
+|[**gnbProfileBulkCreate**](#gnbprofilebulkcreate) | **POST** /api/profiles/gnb/bulk | Create several gnb profiles from one|
+|[**gnbProfileCheck**](#gnbprofilecheck) | **POST** /api/profiles/gnb/check | Check a gnb profile for conflicts with the saved ones|
+|[**gnbProfileCreate**](#gnbprofilecreate) | **POST** /api/profiles/gnb | Save a new gNB profile|
+|[**gnbProfileDelete**](#gnbprofiledelete) | **DELETE** /api/profiles/gnb/{id} | Delete a gNB profile|
+|[**gnbProfileList**](#gnbprofilelist) | **GET** /api/profiles/gnb | List the saved gNB profiles|
+|[**gnbProfileRender**](#gnbprofilerender) | **POST** /api/profiles/gnb/render | Preview the config file a gNB profile deploys|
+|[**gnbProfileUpdate**](#gnbprofileupdate) | **PUT** /api/profiles/gnb/{id} | Update a gNB profile|
+|[**hostInterfaceList**](#hostinterfacelist) | **GET** /api/host/interfaces | List the host\&#39;s network interfaces|
 |[**imageList**](#imagelist) | **GET** /api/images | List the images this app deploys|
 |[**imagePull**](#imagepull) | **POST** /api/images/{key}/pull | Pull an image|
 |[**imageRemove**](#imageremove) | **DELETE** /api/images/{key} | Clear a locally cached image|
 |[**login**](#login) | **POST** /api/login | Login|
 |[**logout**](#logout) | **POST** /api/logout | Logout|
-|[**testerBenchGet**](#testerbenchget) | **GET** /api/tester/bench | Latest data plane bench|
-|[**testerBenchStart**](#testerbenchstart) | **POST** /api/tester/bench | Start a data plane bench|
-|[**testerByIdBenchGet**](#testerbyidbenchget) | **GET** /api/testers/{id}/bench | One tester\&#39;s latest data plane bench|
-|[**testerByIdBenchStart**](#testerbyidbenchstart) | **POST** /api/testers/{id}/bench | Start a data plane bench on one tester|
-|[**testerByIdCpuLoad**](#testerbyidcpuload) | **GET** /api/testers/{id}/system/cpuload | How busy each CPU of one tester\&#39;s host is|
-|[**testerByIdCpusPut**](#testerbyidcpusput) | **PUT** /api/testers/{id}/system/cpus | Set one tester\&#39;s CPU allocation|
-|[**testerByIdNetworkInterfaces**](#testerbyidnetworkinterfaces) | **GET** /api/testers/{id}/network/interfaces | One tester\&#39;s network interfaces|
-|[**testerByIdNetworkPing**](#testerbyidnetworkping) | **POST** /api/testers/{id}/network/ping | Ping test from one tester|
-|[**testerByIdProfileValidate**](#testerbyidprofilevalidate) | **POST** /api/testers/{id}/profile/validate | Validate a profile on one tester|
-|[**testerByIdRun**](#testerbyidrun) | **GET** /api/testers/{id}/run | One tester\&#39;s run|
-|[**testerByIdRunStart**](#testerbyidrunstart) | **POST** /api/testers/{id}/run | Start a run on one tester|
-|[**testerByIdRunStop**](#testerbyidrunstop) | **POST** /api/testers/{id}/run/stop | Stop the active run on one tester|
-|[**testerByIdStatus**](#testerbyidstatus) | **GET** /api/testers/{id}/status | One tester\&#39;s host and process|
-|[**testerByIdSystem**](#testerbyidsystem) | **GET** /api/testers/{id}/system | One tester\&#39;s CPU allocation and layout|
-|[**testerHistoryDelete**](#testerhistorydelete) | **DELETE** /api/tester/history | Delete finished runs from the history|
-|[**testerHistoryGet**](#testerhistoryget) | **GET** /api/tester/history/{runId} | One finished run\&#39;s full report (JSON)|
-|[**testerHistoryList**](#testerhistorylist) | **GET** /api/tester/history | Finished runs, newest first|
-|[**testerHistoryRename**](#testerhistoryrename) | **PATCH** /api/tester/history/{runId} | Rename a finished run|
-|[**testerHistoryReportHtml**](#testerhistoryreporthtml) | **GET** /api/tester/history/{runId}/report.html | One finished run\&#39;s report as a self-contained HTML page|
-|[**testerNetworkInterfaces**](#testernetworkinterfaces) | **GET** /api/tester/network/interfaces | Interfaces on fru-tester\&#39;s host|
-|[**testerNetworkPing**](#testernetworkping) | **POST** /api/tester/network/ping | Ping test of one network|
-|[**testerProfileCreate**](#testerprofilecreate) | **POST** /api/tester/profiles | Save a new Throughput Tester profile|
-|[**testerProfileDelete**](#testerprofiledelete) | **DELETE** /api/tester/profiles/{id} | Delete a saved profile|
-|[**testerProfileGet**](#testerprofileget) | **GET** /api/tester/profiles/{id} | One saved profile|
-|[**testerProfileList**](#testerprofilelist) | **GET** /api/tester/profiles | List the saved Throughput Tester profiles|
-|[**testerProfileUpdate**](#testerprofileupdate) | **PUT** /api/tester/profiles/{id} | Replace a saved profile|
-|[**testerProfileValidate**](#testerprofilevalidate) | **POST** /api/tester/profile/validate | Validate a profile and preview the per-gNB plan|
-|[**testerRunGet**](#testerrunget) | **GET** /api/tester/run | Current run snapshot|
-|[**testerRunStart**](#testerrunstart) | **POST** /api/tester/run | Start a run|
-|[**testerRunStop**](#testerrunstop) | **POST** /api/tester/run/stop | Stop the active run|
-|[**testerStatusGet**](#testerstatusget) | **GET** /api/tester/status | The tester host and process (Status page)|
-|[**testerSystemCpuLoad**](#testersystemcpuload) | **GET** /api/tester/system/cpuload | How busy each CPU of the tester host is (Status page)|
-|[**testerSystemCpusPut**](#testersystemcpusput) | **PUT** /api/tester/system/cpus | Set the CPU allocation for the next runs|
-|[**testerSystemGet**](#testersystemget) | **GET** /api/tester/system | The tester host\&#39;s CPU allocation and layout (Status page)|
-|[**testersAdd**](#testersadd) | **POST** /api/testers | Add a tester|
-|[**testersDelete**](#testersdelete) | **DELETE** /api/testers/{id} | Remove an added tester|
-|[**testersList**](#testerslist) | **GET** /api/testers | Every tester fru-lab can reach (Status page)|
+|[**ueProfileBulkCreate**](#ueprofilebulkcreate) | **POST** /api/profiles/ue/bulk | Create several ue profiles from one|
+|[**ueProfileCheck**](#ueprofilecheck) | **POST** /api/profiles/ue/check | Check a ue profile for conflicts with the saved ones|
+|[**ueProfileCreate**](#ueprofilecreate) | **POST** /api/profiles/ue | Save a new UE profile|
+|[**ueProfileDelete**](#ueprofiledelete) | **DELETE** /api/profiles/ue/{id} | Delete a UE profile|
+|[**ueProfileList**](#ueprofilelist) | **GET** /api/profiles/ue | List the saved UE profiles|
+|[**ueProfileRender**](#ueprofilerender) | **POST** /api/profiles/ue/render | Preview the config file a UE profile deploys|
+|[**ueProfileUpdate**](#ueprofileupdate) | **PUT** /api/profiles/ue/{id} | Update a UE profile|
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()
@@ -266,7 +241,7 @@ const { status, data } = await apiInstance.deployFree5gcUp(
 # **deployGnbDown**
 > MessageResponse deployGnbDown()
 
-Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+Fails with 409 while a UE deployed onto this gNB still runs.
 
 ### Example
 
@@ -279,11 +254,18 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployGnbDown();
+let profileId: string; // (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbDown(
+    profileId
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **profileId** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
@@ -304,8 +286,54 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+|**409** | Conflict - a UE on this gNB still runs |  -  |
 |**401** | Unauthorized |  -  |
-|**409** | Conflict - a UE instance is still running |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deployGnbList**
+> DeployGnbListResponse deployGnbList()
+
+One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.deployGnbList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**DeployGnbListResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -325,10 +353,10 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let service: string; //Filter logs down to one compose service (NF), e.g. \"amf\". Omit for every service in the project. (optional) (default to undefined)
+let profileId: string; // (default to undefined)
 
 const { status, data } = await apiInstance.deployGnbLogs(
-    service
+    profileId
 );
 ```
 
@@ -336,273 +364,12 @@ const { status, data } = await apiInstance.deployGnbLogs(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **service** | [**string**] | Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project. | (optional) defaults to undefined|
+| **profileId** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
 
 **DeployLogsResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceDown**
-> MessageResponse deployGnbSliceDown()
-
-Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceDown(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**MessageResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**409** | Conflict - a UE instance is still running |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceLogs**
-> DeployLogsResponse deployGnbSliceLogs()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceLogs(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**DeployLogsResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceStatus**
-> DeployStatusResponse deployGnbSliceStatus()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceStatus(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**DeployStatusResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceUp**
-> MessageResponse deployGnbSliceUp()
-
-Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceUp(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**MessageResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**409** | Conflict - the core network isn\&#39;t running yet |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbStatus**
-> DeployStatusResponse deployGnbStatus()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.deployGnbStatus();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**DeployStatusResponse**
 
 ### Authorization
 
@@ -626,7 +393,7 @@ This endpoint does not have any parameters.
 # **deployGnbUp**
 > MessageResponse deployGnbUp()
 
-Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
 
 ### Example
 
@@ -639,11 +406,18 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployGnbUp();
+let profileId: string; // (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbUp(
+    profileId
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **profileId** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
@@ -664,8 +438,9 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+|**404** | No such gNB profile |  -  |
+|**409** | Conflict |  -  |
 |**401** | Unauthorized |  -  |
-|**409** | Conflict - the core network isn\&#39;t running yet |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -819,6 +594,65 @@ const { status, data } = await apiInstance.deployUeLogs(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **deployUeProfileUp**
+> MessageResponse deployUeProfileUp()
+
+Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    DeployUeProfileRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let profileId: string; // (default to undefined)
+let deployUeProfileRequest: DeployUeProfileRequest; // (optional)
+
+const { status, data } = await apiInstance.deployUeProfileUp(
+    profileId,
+    deployUeProfileRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **deployUeProfileRequest** | **DeployUeProfileRequest**|  | |
+| **profileId** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No such UE profile |  -  |
+|**409** | Conflict |  -  |
+|**401** | Unauthorized |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **deployUeStatus**
 > DeployUeStatusResponse deployUeStatus()
 
@@ -926,6 +760,414 @@ const { status, data } = await apiInstance.deployUeUp(
 |**400** | Bad Request |  -  |
 |**401** | Unauthorized |  -  |
 |**409** | Conflict - gNB isn\&#39;t running yet |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileBulkCreate**
+> Array<GnbProfile> gnbProfileBulkCreate(profileBulkRequest)
+
+Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    ProfileBulkRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let profileBulkRequest: ProfileBulkRequest; //
+
+const { status, data } = await apiInstance.gnbProfileBulkCreate(
+    profileBulkRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **profileBulkRequest** | **ProfileBulkRequest**|  | |
+
+
+### Return type
+
+**Array<GnbProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The created profiles |  -  |
+|**400** | Bad Request |  -  |
+|**404** | No such source profile |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileCheck**
+> ProfileCheckResult gnbProfileCheck(gnbProfile)
+
+The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileCheck(
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+
+
+### Return type
+
+**ProfileCheckResult**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request - a field is malformed |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileCreate**
+> GnbProfile gnbProfileCreate(gnbProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileCreate(
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+
+
+### Return type
+
+**GnbProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The saved profile, with its id |  -  |
+|**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileDelete**
+> MessageResponse gnbProfileDelete()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.gnbProfileDelete(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileList**
+> Array<GnbProfile> gnbProfileList()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.gnbProfileList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<GnbProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileRender**
+> RenderedConfig gnbProfileRender(gnbProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileRender(
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+
+
+### Return type
+
+**RenderedConfig**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileUpdate**
+> GnbProfile gnbProfileUpdate(gnbProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileUpdate(
+    id,
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**GnbProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
+|**404** | Not Found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **hostInterfaceList**
+> Array<HostInterface> hostInterfaceList()
+
+The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.hostInterfaceList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<HostInterface>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -1181,54 +1423,10 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerBenchGet**
-> TesterBenchResult testerBenchGet()
+# **ueProfileBulkCreate**
+> Array<UeProfile> ueProfileBulkCreate(profileBulkRequest)
 
-Forwarded to fru-tester. State is `idle` before the first bench.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerBenchGet();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**TesterBenchResult**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerBenchStart**
-> TesterBenchResult testerBenchStart(testerBenchSettings)
-
-Measures how fast this host\'s fru-tester can send, over loopback with no core network, with 1, 2, 4 … senders up to one per CPU. Not while a run is active.
+Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
 
 ### Example
 
@@ -1236,16 +1434,16 @@ Measures how fast this host\'s fru-tester can send, over loopback with no core n
 import {
     DefaultApi,
     Configuration,
-    TesterBenchSettings
+    ProfileBulkRequest
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let testerBenchSettings: TesterBenchSettings; //
+let profileBulkRequest: ProfileBulkRequest; //
 
-const { status, data } = await apiInstance.testerBenchStart(
-    testerBenchSettings
+const { status, data } = await apiInstance.ueProfileBulkCreate(
+    profileBulkRequest
 );
 ```
 
@@ -1253,12 +1451,12 @@ const { status, data } = await apiInstance.testerBenchStart(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **testerBenchSettings** | **TesterBenchSettings**|  | |
+| **profileBulkRequest** | **ProfileBulkRequest**|  | |
 
 
 ### Return type
 
-**TesterBenchResult**
+**Array<UeProfile>**
 
 ### Authorization
 
@@ -1273,69 +1471,16 @@ const { status, data } = await apiInstance.testerBenchStart(
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-|**202** | Bench started |  -  |
-|**400** | Invalid settings |  -  |
-|**409** | A bench or a run is already running |  -  |
+|**200** | The created profiles |  -  |
+|**400** | Bad Request |  -  |
+|**404** | No such source profile |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerByIdBenchGet**
-> TesterBenchResult testerByIdBenchGet()
+# **ueProfileCheck**
+> ProfileCheckResult ueProfileCheck(ueProfile)
 
-Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. State is `idle` before the first bench.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdBenchGet(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterBenchResult**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdBenchStart**
-> TesterBenchResult testerByIdBenchStart(testerBenchSettings)
-
-Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester in config.yaml. Not while a run is active on that tester.
+The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
 
 ### Example
 
@@ -1343,18 +1488,16 @@ Forwarded to that tester\'s /api/bench, like /api/tester/bench is to the tester 
 import {
     DefaultApi,
     Configuration,
-    TesterBenchSettings
+    UeProfile
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-let testerBenchSettings: TesterBenchSettings; //
+let ueProfile: UeProfile; //
 
-const { status, data } = await apiInstance.testerByIdBenchStart(
-    id,
-    testerBenchSettings
+const { status, data } = await apiInstance.ueProfileCheck(
+    ueProfile
 );
 ```
 
@@ -1362,125 +1505,12 @@ const { status, data } = await apiInstance.testerByIdBenchStart(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **testerBenchSettings** | **TesterBenchSettings**|  | |
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+| **ueProfile** | **UeProfile**|  | |
 
 
 ### Return type
 
-**TesterBenchResult**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**202** | Bench started |  -  |
-|**400** | Invalid settings |  -  |
-|**404** | No tester with that id |  -  |
-|**409** | A bench or a run is already running on that tester |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdCpuLoad**
-> TesterCpuLoad testerByIdCpuLoad()
-
-Forwarded to that tester\'s /api/system/cpuload, like /api/tester/system/cpuload is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdCpuLoad(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterCpuLoad**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdCpusPut**
-> TesterCpuAllocation testerByIdCpusPut(testerCpuAllocation)
-
-Forwarded to that tester\'s /api/system/cpus, like /api/tester/system/cpus is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterCpuAllocation
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-let testerCpuAllocation: TesterCpuAllocation; //
-
-const { status, data } = await apiInstance.testerByIdCpusPut(
-    id,
-    testerCpuAllocation
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerCpuAllocation** | **TesterCpuAllocation**|  | |
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterCpuAllocation**
+**ProfileCheckResult**
 
 ### Authorization
 
@@ -1496,68 +1526,13 @@ const { status, data } = await apiInstance.testerByIdCpusPut(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+|**400** | Bad Request - a field is malformed |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerByIdNetworkInterfaces**
-> Array<TesterInterface> testerByIdNetworkInterfaces()
+# **ueProfileCreate**
+> UeProfile ueProfileCreate(ueProfile)
 
-Forwarded to that tester\'s /api/network/interfaces, like /api/tester/network/interfaces is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdNetworkInterfaces(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**Array<TesterInterface>**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdNetworkPing**
-> TesterPingResult testerByIdNetworkPing(testerPingRequest)
-
-Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is to the tester in config.yaml.
 
 ### Example
 
@@ -1565,18 +1540,16 @@ Forwarded to that tester\'s /api/network/ping, like /api/tester/network/ping is 
 import {
     DefaultApi,
     Configuration,
-    TesterPingRequest
+    UeProfile
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-let testerPingRequest: TesterPingRequest; //
+let ueProfile: UeProfile; //
 
-const { status, data } = await apiInstance.testerByIdNetworkPing(
-    id,
-    testerPingRequest
+const { status, data } = await apiInstance.ueProfileCreate(
+    ueProfile
 );
 ```
 
@@ -1584,13 +1557,12 @@ const { status, data } = await apiInstance.testerByIdNetworkPing(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **testerPingRequest** | **TesterPingRequest**|  | |
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
+| **ueProfile** | **UeProfile**|  | |
 
 
 ### Return type
 
-**TesterPingResult**
+**UeProfile**
 
 ### Authorization
 
@@ -1605,764 +1577,14 @@ const { status, data } = await apiInstance.testerByIdNetworkPing(
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**400** | Invalid profile |  -  |
-|**409** | A run is active |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
+|**200** | The saved profile, with its id |  -  |
+|**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerByIdProfileValidate**
-> TesterValidateResponse testerByIdProfileValidate(testerProfile)
-
-Forwarded to that tester\'s /api/profile/validate, like /api/tester/profile/validate is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterProfile
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-let testerProfile: TesterProfile; //
-
-const { status, data } = await apiInstance.testerByIdProfileValidate(
-    id,
-    testerProfile
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerProfile** | **TesterProfile**|  | |
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterValidateResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdRun**
-> TesterRunSnapshot testerByIdRun()
-
-Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-let gnbOffset: number; //Where the page of gNBs starts, counted within those gnbState keeps. (optional) (default to undefined)
-let gnbLimit: number; //How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\"gnbOffset\", \"gnbLimit\", \"gnbState\"} as a text message. (optional) (default to undefined)
-let gnbState: string; //Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. (optional) (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdRun(
-    id,
-    gnbOffset,
-    gnbLimit,
-    gnbState
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-| **gnbOffset** | [**number**] | Where the page of gNBs starts, counted within those gnbState keeps. | (optional) defaults to undefined|
-| **gnbLimit** | [**number**] | How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message. | (optional) defaults to undefined|
-| **gnbState** | [**string**] | Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. | (optional) defaults to undefined|
-
-
-### Return type
-
-**TesterRunSnapshot**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdRunStart**
-> TesterRunSnapshot testerByIdRunStart(testerProfile)
-
-Forwarded to that tester\'s /api/run, like /api/tester/run is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterProfile
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-let testerProfile: TesterProfile; //
-
-const { status, data } = await apiInstance.testerByIdRunStart(
-    id,
-    testerProfile
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerProfile** | **TesterProfile**|  | |
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterRunSnapshot**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**202** | Started |  -  |
-|**400** | Invalid profile |  -  |
-|**409** | A run or a bench is already running |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdRunStop**
-> TesterRunSnapshot testerByIdRunStop()
-
-Forwarded to that tester\'s /api/run/stop, like /api/tester/run/stop is to the tester in config.yaml. The run\'s live stream is GET /api/testers/{id}/run/stream?token=<JWT> (WebSocket).
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdRunStop(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterRunSnapshot**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**202** | Stop requested |  -  |
-|**409** | No active run |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdStatus**
-> TesterStatus testerByIdStatus()
-
-Forwarded to that tester\'s /api/status, like /api/tester/status is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdStatus(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterStatus**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerByIdSystem**
-> TesterSystemInfo testerByIdSystem()
-
-Forwarded to that tester\'s /api/system, like /api/tester/system is to the tester in config.yaml.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testerByIdSystem(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**TesterSystemInfo**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No tester with that id |  -  |
-|**502** | The tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerHistoryDelete**
-> MessageResponse testerHistoryDelete(testerHistoryDeleteRequest)
-
-fru-lab remembers the deleted runs, so a tester that still keeps one does not bring it back.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterHistoryDeleteRequest
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerHistoryDeleteRequest: TesterHistoryDeleteRequest; //
-
-const { status, data } = await apiInstance.testerHistoryDelete(
-    testerHistoryDeleteRequest
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerHistoryDeleteRequest** | **TesterHistoryDeleteRequest**|  | |
-
-
-### Return type
-
-**MessageResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Deleted |  -  |
-|**400** | No run listed |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerHistoryGet**
-> TesterRunReport testerHistoryGet()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let runId: string; //The run\'s id from the history list (TesterHistorySummary.id). (default to undefined)
-
-const { status, data } = await apiInstance.testerHistoryGet(
-    runId
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **runId** | [**string**] | The run\&#39;s id from the history list (TesterHistorySummary.id). | defaults to undefined|
-
-
-### Return type
-
-**TesterRunReport**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | The profile the run used and its final snapshot |  -  |
-|**404** | No such run |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerHistoryList**
-> Array<TesterHistorySummary> testerHistoryList()
-
-fru-lab keeps the last 50 runs fru-tester finished.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerHistoryList();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**Array<TesterHistorySummary>**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerHistoryRename**
-> TesterHistorySummary testerHistoryRename(testerHistoryRenameRequest)
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterHistoryRenameRequest
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let runId: string; //The run\'s id from the history list (TesterHistorySummary.id). (default to undefined)
-let testerHistoryRenameRequest: TesterHistoryRenameRequest; //
-
-const { status, data } = await apiInstance.testerHistoryRename(
-    runId,
-    testerHistoryRenameRequest
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerHistoryRenameRequest** | **TesterHistoryRenameRequest**|  | |
-| **runId** | [**string**] | The run\&#39;s id from the history list (TesterHistorySummary.id). | defaults to undefined|
-
-
-### Return type
-
-**TesterHistorySummary**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | The run\&#39;s updated history row |  -  |
-|**400** | No name, or a name longer than 80 characters |  -  |
-|**404** | No such run |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerHistoryReportHtml**
-> string testerHistoryReportHtml()
-
-Summary, throughput charts, control plane and data plane statistics, per-gNB and failed-UE tables and the profile used. Opens offline; the raw report JSON is embedded.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let runId: string; //The run\'s id from the history list (TesterHistorySummary.id). (default to undefined)
-
-const { status, data } = await apiInstance.testerHistoryReportHtml(
-    runId
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **runId** | [**string**] | The run\&#39;s id from the history list (TesterHistorySummary.id). | defaults to undefined|
-
-
-### Return type
-
-**string**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: text/html, application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | The HTML report |  -  |
-|**404** | No such run |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerNetworkInterfaces**
-> Array<TesterInterface> testerNetworkInterfaces()
-
-Forwarded to fru-tester. Every link on the host where fru-tester runs, for the Setup page\'s interface menus.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerNetworkInterfaces();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**Array<TesterInterface>**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**502** | fru-tester is unreachable |  -  |
-|**503** | backend.tester.url is not configured |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerNetworkPing**
-> TesterPingResult testerNetworkPing(testerPingRequest)
-
-Forwarded to fru-tester. Puts the address a run would add for that network on its interface (the first gNB IP with the CIDR\'s prefix for N2 and N3, the sink for N6) unless the host has it, pings the AMF, the UPF\'s N3 or the UPF\'s N6 three times, and removes the address again. Only that network\'s fields are checked. Not while a run is active.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterPingRequest
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerPingRequest: TesterPingRequest; //
-
-const { status, data } = await apiInstance.testerNetworkPing(
-    testerPingRequest
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerPingRequest** | **TesterPingRequest**|  | |
-
-
-### Return type
-
-**TesterPingResult**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Test done; received may be 0 |  -  |
-|**400** | That network\&#39;s settings are wrong (errors lists the fields), or an unknown plane |  -  |
-|**409** | A run or another ping test is active |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerProfileCreate**
-> TesterStoredProfile testerProfileCreate(testerProfile)
-
-Stores the profile as-is under a new ID. Its name is required and must not match another profile\'s (ignoring case and surrounding spaces). Field validation is done by POST /api/tester/profile/validate, not here.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterProfile
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerProfile: TesterProfile; //
-
-const { status, data } = await apiInstance.testerProfileCreate(
-    testerProfile
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerProfile** | **TesterProfile**|  | |
-
-
-### Return type
-
-**TesterStoredProfile**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**201** | Created |  -  |
-|**400** | Body is not a JSON object, or the name is empty |  -  |
-|**409** | Another profile already has this name |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerProfileDelete**
-> MessageResponse testerProfileDelete()
+# **ueProfileDelete**
+> MessageResponse ueProfileDelete()
 
 
 ### Example
@@ -2378,7 +1600,7 @@ const apiInstance = new DefaultApi(configuration);
 
 let id: string; // (default to undefined)
 
-const { status, data } = await apiInstance.testerProfileDelete(
+const { status, data } = await apiInstance.ueProfileDelete(
     id
 );
 ```
@@ -2408,12 +1630,11 @@ const { status, data } = await apiInstance.testerProfileDelete(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
-|**404** | No such profile |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerProfileGet**
-> TesterStoredProfile testerProfileGet()
+# **ueProfileList**
+> Array<UeProfile> ueProfileList()
 
 
 ### Example
@@ -2427,59 +1648,7 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let id: string; // (default to undefined)
-
-const { status, data } = await apiInstance.testerProfileGet(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] |  | defaults to undefined|
-
-
-### Return type
-
-**TesterStoredProfile**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**404** | No such profile |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerProfileList**
-> Array<TesterStoredProfile> testerProfileList()
-
-Every saved profile, sorted by name.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerProfileList();
+const { status, data } = await apiInstance.ueProfileList();
 ```
 
 ### Parameters
@@ -2488,7 +1657,7 @@ This endpoint does not have any parameters.
 
 ### Return type
 
-**Array<TesterStoredProfile>**
+**Array<UeProfile>**
 
 ### Authorization
 
@@ -2504,14 +1673,12 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **testerProfileUpdate**
-> TesterStoredProfile testerProfileUpdate(testerProfile)
+# **ueProfileRender**
+> RenderedConfig ueProfileRender(ueProfile)
 
-Same name rules as creating one; keeping its own name is fine.
 
 ### Example
 
@@ -2519,18 +1686,70 @@ Same name rules as creating one; keeping its own name is fine.
 import {
     DefaultApi,
     Configuration,
-    TesterProfile
+    UeProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let ueProfile: UeProfile; //
+
+const { status, data } = await apiInstance.ueProfileRender(
+    ueProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **ueProfile** | **UeProfile**|  | |
+
+
+### Return type
+
+**RenderedConfig**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileUpdate**
+> UeProfile ueProfileUpdate(ueProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    UeProfile
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
 let id: string; // (default to undefined)
-let testerProfile: TesterProfile; //
+let ueProfile: UeProfile; //
 
-const { status, data } = await apiInstance.testerProfileUpdate(
+const { status, data } = await apiInstance.ueProfileUpdate(
     id,
-    testerProfile
+    ueProfile
 );
 ```
 
@@ -2538,13 +1757,13 @@ const { status, data } = await apiInstance.testerProfileUpdate(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **testerProfile** | **TesterProfile**|  | |
+| **ueProfile** | **UeProfile**|  | |
 | **id** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
 
-**TesterStoredProfile**
+**UeProfile**
 
 ### Authorization
 
@@ -2560,560 +1779,9 @@ const { status, data } = await apiInstance.testerProfileUpdate(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
-|**400** | Body is not a JSON object, or the name is empty |  -  |
-|**404** | No such profile |  -  |
-|**409** | Another profile already has this name |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerProfileValidate**
-> TesterValidateResponse testerProfileValidate(testerProfile)
-
-Forwarded to fru-tester. Always 200 for a well-formed body; `valid` says whether the profile can start a run.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterProfile
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerProfile: TesterProfile; //
-
-const { status, data } = await apiInstance.testerProfileValidate(
-    testerProfile
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerProfile** | **TesterProfile**|  | |
-
-
-### Return type
-
-**TesterValidateResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**502** | fru-tester is unreachable |  -  |
-|**503** | backend.tester.url is not configured |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerRunGet**
-> TesterRunSnapshot testerRunGet()
-
-Forwarded to fru-tester. State is `idle` before the first run.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let gnbOffset: number; //Where the page of gNBs starts, counted within those gnbState keeps. (optional) (default to undefined)
-let gnbLimit: number; //How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\"gnbOffset\", \"gnbLimit\", \"gnbState\"} as a text message. (optional) (default to undefined)
-let gnbState: string; //Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. (optional) (default to undefined)
-
-const { status, data } = await apiInstance.testerRunGet(
-    gnbOffset,
-    gnbLimit,
-    gnbState
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **gnbOffset** | [**number**] | Where the page of gNBs starts, counted within those gnbState keeps. | (optional) defaults to undefined|
-| **gnbLimit** | [**number**] | How many gNBs to list (0–1000); absent lists every gNB. The run stream takes the same three parameters, and its client changes page by sending {\&quot;gnbOffset\&quot;, \&quot;gnbLimit\&quot;, \&quot;gnbState\&quot;} as a text message. | (optional) defaults to undefined|
-| **gnbState** | [**string**] | Comma-separated gNB states to list (pending, connecting, up, failed, lost, closed); absent lists every state. | (optional) defaults to undefined|
-
-
-### Return type
-
-**TesterRunSnapshot**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**502** | fru-tester is unreachable |  -  |
-|**503** | backend.tester.url is not configured |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerRunStart**
-> TesterRunSnapshot testerRunStart(testerProfile)
-
-Forwarded to fru-tester. Only one run may be active at a time.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterProfile
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerProfile: TesterProfile; //
-
-const { status, data } = await apiInstance.testerRunStart(
-    testerProfile
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerProfile** | **TesterProfile**|  | |
-
-
-### Return type
-
-**TesterRunSnapshot**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**202** | Run started |  -  |
-|**400** | Profile is invalid |  -  |
-|**409** | A run is already active |  -  |
-|**502** | fru-tester is unreachable |  -  |
-|**503** | backend.tester.url is not configured |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerRunStop**
-> TesterRunSnapshot testerRunStop()
-
-Stops the traffic, deregisters every registered UE, closes every N2 association and removes what fru-tester added. During that cleanup (`stopping`), a second call skips the deregistrations still pending. Returns at once; watch the stream for `stopped`.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerRunStop();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**TesterRunSnapshot**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**202** | Stop requested |  -  |
-|**409** | No active run |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerStatusGet**
-> TesterStatus testerStatusGet()
-
-Forwarded to fru-tester. Host name, build, uptime, memory (host, process, and the cgroup limit when fru-tester runs in a container), load average and the capabilities a run needs. A 502 means fru-lab could not reach fru-tester.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerStatusGet();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**TesterStatus**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**502** | fru-tester is unreachable or rejected fru-lab\&#39;s API token |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerSystemCpuLoad**
-> TesterCpuLoad testerSystemCpuLoad()
-
-Forwarded to fru-tester, which reads /proc/stat. The whole host\'s load per CPU, kernel time included, over the interval since the previous read (at least half a second; readers polling together share one measurement). Readable during a run.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerSystemCpuLoad();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**TesterCpuLoad**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerSystemCpusPut**
-> TesterCpuAllocation testerSystemCpusPut(testerCpuAllocation)
-
-Forwarded to fru-tester, which keeps it in a file on its host. Empty lists leave that side unpinned. Refused while a run is active - the allocation is fixed before a run.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterCpuAllocation
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerCpuAllocation: TesterCpuAllocation; //
-
-const { status, data } = await apiInstance.testerSystemCpusPut(
-    testerCpuAllocation
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerCpuAllocation** | **TesterCpuAllocation**|  | |
-
-
-### Return type
-
-**TesterCpuAllocation**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Stored, in canonical form |  -  |
-|**400** | Invalid; errors name the field |  -  |
-|**409** | A run is active |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testerSystemGet**
-> TesterSystemInfo testerSystemGet()
-
-Forwarded to fru-tester. cpus is what the next run uses; topology helps choose it.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testerSystemGet();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**TesterSystemInfo**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testersAdd**
-> TesterAdded testersAdd(testerAddRequest)
-
-fru-lab first asks the tester for its /api/status with the token; it is kept only if it answers.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration,
-    TesterAddRequest
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let testerAddRequest: TesterAddRequest; //
-
-const { status, data } = await apiInstance.testersAdd(
-    testerAddRequest
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **testerAddRequest** | **TesterAddRequest**|  | |
-
-
-### Return type
-
-**TesterAdded**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**201** | Added |  -  |
-|**400** | Not added; the message says why (unreachable, wrong token, already listed) |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testersDelete**
-> MessageResponse testersDelete()
-
-Only fru-lab forgets it; the tester keeps running. The tester in config.yaml cannot be removed (409).
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let id: string; //A tester from GET /api/testers; \"default\" is the one in config.yaml. (default to undefined)
-
-const { status, data } = await apiInstance.testersDelete(
-    id
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **id** | [**string**] | A tester from GET /api/testers; \&quot;default\&quot; is the one in config.yaml. | defaults to undefined|
-
-
-### Return type
-
-**MessageResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | Removed |  -  |
-|**404** | No tester with that id |  -  |
-|**409** | The tester in config.yaml |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **testersList**
-> Array<TesterEntry> testersList()
-
-The tester in config.yaml (backend.tester, id \"default\", builtIn) first, then the ones added here. API tokens are never returned; each tester\'s name comes from its own status.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.testersList();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**Array<TesterEntry>**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
+|**404** | Not Found |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
