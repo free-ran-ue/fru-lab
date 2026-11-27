@@ -138,9 +138,9 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		BackendLogger: ie.BackendLogger,
 	}
 
-	// fru-lab also runs without a Docker daemon (in Kubernetes, to drive
-	// the throughput tester only): then the deploy pages fail with the
-	// daemon's error, and the networks are created on the next deploy.
+	// fru-lab still starts when the Docker daemon is not reachable: the
+	// deploy pages then fail with the daemon's error, and the networks are
+	// created on the next deploy.
 	if err := c.networks(context.Background()); err != nil {
 		c.CtxLog.Warnf("Docker is not reachable, deploying free5GC/gNB/UE will fail until it is: %v", err)
 	}

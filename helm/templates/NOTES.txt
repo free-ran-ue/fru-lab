@@ -10,16 +10,3 @@ Web console: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "fr
 {{- end }}
 Login: {{ .Values.frulab.username }} / (frulab.password)
 
-{{- if .Values.tester.enabled }}
-{{- if eq .Values.tester.network.mode "macvlan" }}
-
-fru-tester has macvlan interfaces n2, n3 and n6 on
-  {{ .Values.tester.network.macvlan.interfaces.n2.master }}, {{ .Values.tester.network.macvlan.interfaces.n3.master }}, {{ .Values.tester.network.macvlan.interfaces.n6.master }}.
-Use n2 / n3 / n6 as the interface names in tester profiles.
-Check them with:
-  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "tester.name" . }} -- cat /proc/net/dev
-{{- else }}
-
-fru-tester runs on the node's network: profiles name the node's interfaces.
-{{- end }}
-{{- end }}

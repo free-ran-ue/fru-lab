@@ -6,13 +6,6 @@ import SubscriberFormPage from './page/subscribers/SubscriberFormPage'
 import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
 import LogsPage from './page/logs/LogsPage'
 import ImagesPage from './page/images/ImagesPage'
-import TesterSetupPage from './page/tester/TesterSetupPage'
-import TesterRunDetailPage from './page/tester/TesterRunPage'
-import TesterRunsPage from './page/tester/TesterRunsPage'
-import TesterHistoryPage from './page/tester/TesterHistoryPage'
-import TesterProfilesPage from './page/tester/TesterProfilesPage'
-import TesterStatusPage, { TesterDetailPage } from './page/tester/TesterStatusPage'
-import TesterBenchPage from './page/tester/TesterBenchPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -83,72 +76,7 @@ export default function App() {
           </RequireAuth>
         )}
       />
-      <Route
-        path="/tester"
-        element={(
-          <RequireAuth>
-            <TesterSetupPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/tester/profiles"
-        element={(
-          <RequireAuth>
-            <TesterProfilesPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/tester/run"
-        element={(
-          <RequireAuth>
-            <TesterRunsPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/tester/run/:testerId"
-        element={(
-          <RequireAuth>
-            <TesterRunDetailPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/tester/history"
-        element={(
-          <RequireAuth>
-            <TesterHistoryPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/tester/status"
-        element={(
-          <RequireAuth>
-            <TesterStatusPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/tester/status/:testerId"
-        element={(
-          <RequireAuth>
-            <TesterDetailPage />
-          </RequireAuth>
-        )}
-      />
       {/* the Status page replaced the System page */}
-      <Route path="/tester/system" element={<Navigate to="/tester/status" replace />} />
-      <Route
-        path="/tester/bench"
-        element={(
-          <RequireAuth>
-            <TesterBenchPage />
-          </RequireAuth>
-        )}
-      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

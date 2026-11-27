@@ -2,12 +2,9 @@
 
 ![frulab](./docs/images/frulab-logo.png)
 
-Deploy and monitor the free5GC core network and the free-ran-ue gNB / UE simulator, and load-test a 5G core with the Throughput Tester.
+fru-lab is a GUI-driven 5G deployment simulator. From the browser it deploys the free5GC core network and the free-ran-ue gNB / UE simulator as containers on the host's Docker daemon (one UE container per subscriber), manages subscribers through the free5GC webconsole, and shows status, logs, images and a terminal into every UE.
 
-fru-lab has two parts:
-
-- **fru-lab**, the web console (Go backend + React frontend). It deploys free5GC, the gNB and one UE container per subscriber on the host's Docker daemon, manages subscribers through the free5GC webconsole, and shows logs and images.
-- **fru-tester**, the Throughput Tester. It simulates gNBs and tens of thousands of UEs against any 5G core (N2 setup, registration, PDU sessions) and drives GTP-U traffic through it. fru-lab's "Load testing" pages talk to one or more fru-testers over their API.
+It is a Go backend and a React frontend in one binary.
 
 ## Develop Environment
 
@@ -22,40 +19,23 @@ fru-lab has two parts:
 
 | Type | Command |
 | - | - |
-| Make all (backend, frontend, tester) | `make` |
+| Make all (backend, frontend) | `make` |
 | Backend | `make backend` |
 | Frontend | `make frontend` |
-| Tester | `make tester` |
 | Run | `make run` |
-| Run tester | `make run-tester` |
 | Test | `make test` |
 | Tidy | `make tidy` |
 | Lint | `make lint` |
 | Clean | `make clean` |
 | Generate frontend openapi | `make openapi` |
 | Generate frontend openapi for free5GC webconsole | `make openapi-webconsole` |
-| Docker images (fru-lab and fru-tester) | `make docker` |
+| Docker image | `make docker` |
 
-`make run` starts fru-lab with `./config.yaml` on port `8888`. `make run-tester` loads the `sctp` kernel module and starts fru-tester with `./tester.yaml` under `sudo` (it needs root to add gNB IPs and open SCTP).
-
-## Throughput Tester
-
-fru-tester is built with `make tester` and started with `make run-tester`. fru-lab finds it through `backend.tester` in `config.yaml`:
-
-```yaml
-tester:
-  # fru-tester API (see tester.yaml). Leave url empty to disable the pages.
-  url: "http://127.0.0.1:9100"
-  apiToken: "frulab-tester"
-```
-
-`apiToken` must match `apiToken` in `tester.yaml`. More testers can be added from the Testers page.
-
-See the [fru-lab guide](docs/guide.html) (Chinese) for setting up testers, running tests and reading the results.
+`make run` starts fru-lab with `./config.yaml` on port `8888`. Deploying free5GC/gNB/UE needs Docker on the host, reachable by the user running fru-lab.
 
 ## Install - Docker Compose
 
-The compose file runs two containers: `fru-lab` and `fru-tester`. fru-lab deploys free5GC/gNB/UE by talking to the host's Docker daemon, so its container needs the host's Docker socket mounted in, on top of the usual config/db volumes. fru-tester runs on the host network.
+The compose file runs the `fru-lab` container. fru-lab deploys free5GC/gNB/UE by talking to the host's Docker daemon, so its container needs the host's Docker socket mounted in, on top of the usual config/db volumes.
 
 1. Download the compose files
 
@@ -75,23 +55,15 @@ The compose file runs two containers: `fru-lab` and `fru-tester`. fru-lab deploy
 
     For other settings, make sure the change is reflected in `docker-compose.yaml` too. In particular, `deploy.workDir` has to stay the exact same path on the host and inside the container (see the comment on that volume in `docker-compose.yaml`) - fru-lab hands that path to the host's Docker daemon when it deploys free5GC/gNB/UE, so it has to resolve to the same place on both sides.
 
-    fru-tester's settings are in `tester.yaml`. Its `apiToken` must match `backend.tester.apiToken` in `config.yaml`.
-
-3. Load SCTP on the host (fru-tester needs it)
-
-    ```bash
-    sudo modprobe sctp
-    ```
-
-4. Up the compose
+3. Up the compose
 
     ```bash
     docker compose up -d
     ```
 
-    Open `http://<host IP>:8888`. The default db is stored at `/var/lib/frulab/db` and deploy state at `/var/lib/frulab/deploy`, both mounted in the compose file. fru-tester keeps its CPU allocation in `./frutester-data`.
+    Open `http://<host IP>:8888`. The default db is stored at `/var/lib/frulab/db` and deploy state at `/var/lib/frulab/deploy`, both mounted in the compose file.
 
-5. Down the compose
+4. Down the compose
 
     ```bash
     docker compose down
@@ -99,11 +71,11 @@ The compose file runs two containers: `fru-lab` and `fru-tester`. fru-lab deploy
 
 ## Install - Helm
 
-The chart in `helm/` deploys fru-lab and fru-tester to Kubernetes. See [helm/README.md](helm/README.md).
+The chart in `helm/` deploys fru-lab to Kubernetes. See [helm/README.md](helm/README.md).
 
 ## Guide
 
-[docs/guide.html](docs/guide.html) is the full user guide (in Chinese; open the file in a browser): deploying the core, subscribers, gNB and UEs, logs and images, and the Throughput Tester from the first run to tuning and troubleshooting.
+[docs/guide.html](docs/guide.html) is the full user guide (in Chinese; open the file in a browser): deploying the core, subscribers, gNB and UEs, logs and images.
 
 ## TODO
 

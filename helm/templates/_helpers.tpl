@@ -6,26 +6,10 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end }}
 
 {{- define "frulab.name" -}}{{ .Release.Name }}-frulab{{- end }}
-{{- define "tester.name" -}}{{ .Release.Name }}-tester{{- end }}
 
 {{- define "frulab.selector" -}}
 app.kubernetes.io/name: frulab
 app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{- define "tester.selector" -}}
-app.kubernetes.io/name: fru-tester
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/* NAD name of one tester interface: (dict "root" $ "if" "n2") */}}
-{{- define "tester.nad" -}}
-{{- $i := index .root.Values.tester.network.macvlan.interfaces .if -}}
-{{- if and (not .root.Values.tester.network.macvlan.create) $i.name -}}
-{{ $i.name }}
-{{- else -}}
-{{ .root.Release.Name }}-{{ .if }}
-{{- end -}}
 {{- end }}
 
 {{/* a data volume: (dict "name" "db" "p" .Values.x.persistence "claim" "...") */}}

@@ -27,10 +27,5 @@ backend:
 
   frontendFilePath: "frontend"
 
-  tester:
-    # fru-tester runs on the host network (see docker-compose.yaml)
-    url: "http://host.docker.internal:9100"
-    apiToken: "frulab-tester"
-
 logger:
   level: "info"

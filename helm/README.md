@@ -1,60 +1,24 @@
 # fru-lab Helm chart
 
-Deploys the fru-lab web console and the fru-tester throughput tester into
-Kubernetes.
+Deploys the fru-lab web console into Kubernetes.
 
 ```bash
 cd helm
-helm install frulab .                     # defaults: see values.yaml
-helm install frulab . -f my-values.yaml   # your masters, node, CPUs
+helm install frulab . --set frulab.docker.enabled=true --set frulab.docker.webconsoleHost=<node IP>
+helm install frulab . -f my-values.yaml
 ```
 
 Browse to `http://<node IP>:30888` (login `admin` / `frulab`).
 
-## Before installing
+## Docker
 
-- **Multus** with the `macvlan` CNI plugin (the default network mode creates
-  `NetworkAttachmentDefinition`s; without the CRD the install fails).
-  On MicroK8s: `microk8s enable multus`.
-- **SCTP** on the tester's node: `modprobe sctp`.
-- The macvlan masters (`dummy-n2`, `dummy-n3`, `dummy-n6` by default) exist
-  on that node, and the tester pod is pinned there with `tester.nodeSelector`.
-
-## Networking
-
-`tester.network.mode: macvlan` (default) gives the tester pod interfaces
-`n2`, `n3` and `n6`, macvlan links on the masters in
-`tester.network.macvlan.interfaces`. A 5GC whose pods are macvlan links on the
-same masters in bridge mode reaches them directly; a pod on the node's own
-network could not, since a macvlan master cannot talk to its children.
-
-- Profiles use `n2`, `n3` and `n6` as their interface names.
-- The NADs have no IPAM: fru-tester adds each run's gNB IPs and sink IP itself
-  and removes them afterwards. Keep the profiles' gNB ranges out of the 5GC's
-  IPAM ranges.
-- On macvlan the data plane uses UDP sockets. AF_XDP needs a NIC (for
-  example an SR-IOV VF) in the pod.
-- To use NADs that already exist, set `tester.network.macvlan.create: false`
-  and each interface's `name` (`name` or `namespace/name`).
-
-`tester.network.mode: host` runs the tester on the node's network like
-docker-compose; profiles then name the node's interfaces.
-
-## CPUs
-
-The Testers page offers the CPUs the pod may use. For exclusive data plane
-CPUs, run the kubelet with the static CPU manager policy and give the tester
-Guaranteed QoS (equal integer cpu requests and limits in `tester.resources`).
+fru-lab deploys free5GC, the gNB and the UEs as containers on a Docker
+daemon. `frulab.docker.enabled: true` mounts the node's Docker socket and
+needs `frulab.docker.webconsoleHost` (the node's IP). Pin the pod to that node
+with `frulab.nodeSelector`. With it off (the default) the console starts but
+the deploy pages fail.
 
 ## Data
 
-`frulab.persistence.type` (fru-lab's database) and `tester.persistence.type`
-(the tester's CPU allocation) are each `hostPath` (default, under
-`/var/lib/frulab`), `pvc` or `emptyDir`.
-PVCs are kept on `helm uninstall`.
-
-## free5GC deploy pages
-
-fru-lab's own free5GC/gNB/UE deploy pages need a Docker daemon. They are off
-by default; `frulab.docker.enabled: true` mounts the node's Docker socket and
-needs `frulab.docker.webconsoleHost` (the node's IP).
+`frulab.persistence.type` (fru-lab's database) is `hostPath` (default,
+`/var/lib/frulab/db`), `pvc` or `emptyDir`. PVCs are kept on `helm uninstall`.

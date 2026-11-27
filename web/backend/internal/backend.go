@@ -39,13 +39,6 @@ type backend struct {
 
 	// webconsoleProxy serves free5GC's webconsole under /api/webconsole.
 	webconsoleProxy *httputil.ReverseProxy
-	// testerProxy is nil when backend.tester.url is not configured.
-	testerProxy *httputil.ReverseProxy
-	// testers is every tester, for the Status page.
-	testers *testerRegistry
-	// testerHistory copies every tester's finished runs into the DB.
-	testerHistory     *testerHistoryWatcher
-	stopTesterHistory context.CancelFunc
 
 	processor.Processor
 
@@ -106,27 +99,6 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 	}
 	b.webconsoleProxy = webconsoleProxy
 
-	if config.Backend.Tester.URL != "" {
-		proxy, err := newTesterProxy(config.Backend.Tester.URL, config.Backend.Tester.ApiToken)
-		if err != nil {
-			logger.BckLog.Errorf("Invalid tester config: %v", err)
-			return nil
-		}
-		b.testerProxy = proxy
-	} else {
-		logger.BckLog.Warnln("backend.tester.url is empty; Throughput Tester routes will answer 503")
-	}
-
-	testers, err := newTesterRegistry(config.Backend.Tester.URL, config.Backend.Tester.ApiToken, flCtx)
-	if err != nil {
-		logger.BckLog.Errorf("Failed to load the testers: %v", err)
-		return nil
-	}
-	b.testers = testers
-	b.testerHistory = &testerHistoryWatcher{
-		testers: testers, client: &http.Client{Timeout: 10 * time.Second}, store: flCtx, log: logger.TesterLog,
-	}
-
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
 
 	b.router = util.NewGinRouter("", nil)
@@ -173,22 +145,12 @@ func (b *backend) Start() {
 	}()
 	time.Sleep(500 * time.Millisecond)
 
-	if b.testerHistory != nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		b.stopTesterHistory = cancel
-		go b.testerHistory.run(ctx)
-	}
-
 	b.BckLog.Infof("Backend server started on port: %d", b.port)
 }
 
 func (b *backend) Stop() {
 	fmt.Println()
 	b.BckLog.Infoln("Stopping backend server...")
-
-	if b.stopTesterHistory != nil {
-		b.stopTesterHistory()
-	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
@@ -217,11 +179,7 @@ func addServices(router *gin.Engine, b *backend) {
 	// a browser can't set an Authorization header on a WS handshake), so it
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
-	addRoutes(authGroup, b.getTesterRoutes())
-	addRoutes(authGroup, b.getTestersRoutes())
-	addTesterHistoryRoutes(authGroup, b.Processor.FlContext)
 	authGroup.Any("/webconsole/*path", func(c *gin.Context) { b.webconsoleProxy.ServeHTTP(c.Writer, c.Request) })
-	addRoutes(apiGroup, b.getTesterStreamRoutes())
 }
 
 func addRoutes(group *gin.RouterGroup, routes util.Routes) {

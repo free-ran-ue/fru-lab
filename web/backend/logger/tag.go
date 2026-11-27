@@ -9,5 +9,4 @@ const (
 	CTX_LOG    = "CTX"
 	DB_LOG     = "DB"
 	DEPLOY_LOG = "DEPLOY"
-	TESTER_LOG = "TESTER"
 )

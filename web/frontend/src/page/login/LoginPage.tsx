@@ -10,8 +10,8 @@ import styles from './login-page.module.css'
 // FEATURES are the brand panel's three lines under the banner.
 const FEATURES = [
   { title: 'Deploy a 5G lab', text: 'free5GC, gNB and UEs on Docker in one click.' },
-  { title: 'Load-test any core', text: 'Tens of thousands of UEs and line-rate GTP-U.' },
-  { title: 'Keep the evidence', text: "Every run's report, per tester, ready to compare." },
+  { title: 'Manage subscribers', text: 'Add, edit and bulk-create UEs through the free5GC webconsole.' },
+  { title: 'Watch it run', text: 'Live status, container logs and a terminal into every UE.' },
 ]
 
 export default function LoginPage() {

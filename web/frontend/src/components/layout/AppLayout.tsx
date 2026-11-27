@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Sidebar from '../sidebar/Sidebar'
-import { useActiveRuns } from './useActiveRuns'
+import { useApiLive } from './useApiLive'
 import styles from './layout.module.css'
 
 export interface Crumb {
@@ -10,8 +10,8 @@ export interface Crumb {
 }
 
 interface AppLayoutProps {
-  // the page's breadcrumb, outermost first; the section ("Core network" /
-  // "Load testing") is added in front from the URL
+  // the page's breadcrumb, outermost first; the section ("Core network")
+  // is added in front
   crumbs: Crumb[]
   // tags after the breadcrumb, e.g. "UNSAVED"
   crumbExtra?: ReactNode
@@ -37,12 +37,10 @@ function useUtcClock(): string {
 // content column and a status bar at the bottom.
 export default function AppLayout({ crumbs, crumbExtra, headerActions, overlay, children }: AppLayoutProps) {
   const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const { count, live } = useActiveRuns()
+  const live = useApiLive()
   const clock = useUtcClock()
   const user = localStorage.getItem('username') || 'admin'
-  const section = pathname.startsWith('/tester') ? 'Load testing' : 'Core network'
-  const trail: Crumb[] = [{ label: section }, ...crumbs]
+  const trail: Crumb[] = [{ label: 'Core network' }, ...crumbs]
 
   function handleLogout() {
     localStorage.removeItem('token')
@@ -53,7 +51,7 @@ export default function AppLayout({ crumbs, crumbExtra, headerActions, overlay, 
   return (
     <div className={styles.shell}>
       {overlay}
-      <Sidebar activeRuns={count} onLogout={handleLogout} />
+      <Sidebar onLogout={handleLogout} />
       <main className={styles.main}>
         <header className={styles.bar}>
           <nav aria-label="Breadcrumb" className={styles.crumbs}>
@@ -83,7 +81,6 @@ export default function AppLayout({ crumbs, crumbExtra, headerActions, overlay, 
         <div className={styles.content}>{children}</div>
         <footer className={styles.status}>
           <span>{live ? 'api: connected' : 'api: not answering'} · polled every 5 s</span>
-          <span>{count === null ? 'runs: —' : `runs in progress: ${count}`}</span>
           <span className={styles.statusRight}>fru-lab</span>
         </footer>
       </main>
