@@ -23,7 +23,7 @@ type ResponseDeployStatus struct {
 	Status       string          `json:"status"`
 	Services     []ServiceStatus `json:"services,omitempty"`
 	LastDeployed *time.Time      `json:"lastDeployed,omitempty"`
-	// Gnb is the profile the gNB was last deployed with (gnb target only)
+	// Gnb is what a gNB target was deployed with, when known
 	Gnb *GnbDeployment `json:"gnb,omitempty"`
 }
 
@@ -46,10 +46,21 @@ type RequestDeployUe struct {
 	Dnn          string `json:"dnn" binding:"required"`
 	Sst          string `json:"sst" binding:"required"`
 	Sd           string `json:"sd"`
+	// the gNB target to attach to (gnb-<profileId>); empty picks a
+	// running gNB serving Sd
+	Gnb string `json:"gnb,omitempty"`
+}
+
+// RequestDeployUeProfile picks the gNB a UE profile's UE attaches to;
+// empty (or no body) lets fru-lab pick.
+type RequestDeployUeProfile struct {
+	Gnb string `json:"gnb"`
 }
 
 type ResponseDeployUeStatus struct {
-	Instance     string          `json:"instance"`
+	Instance string `json:"instance"`
+	// the gNB target it was deployed onto; empty when unknown
+	Gnb          string          `json:"gnb,omitempty"`
 	Status       string          `json:"status"`
 	Services     []ServiceStatus `json:"services,omitempty"`
 	LastDeployed *time.Time      `json:"lastDeployed,omitempty"`
@@ -62,4 +73,18 @@ type ResponseDeployUeLogs struct {
 
 type ResponseDeployUeList struct {
 	Instances []ResponseDeployUeStatus `json:"instances"`
+}
+
+// GnbInstance is the gNB of one deployed gNB profile.
+type GnbInstance struct {
+	Instance     string          `json:"instance"`
+	ProfileID    string          `json:"profileId"`
+	Status       string          `json:"status"`
+	Services     []ServiceStatus `json:"services,omitempty"`
+	LastDeployed *time.Time      `json:"lastDeployed,omitempty"`
+	Gnb          GnbDeployment   `json:"gnb"`
+}
+
+type ResponseDeployGnbList struct {
+	Instances []GnbInstance `json:"instances"`
 }

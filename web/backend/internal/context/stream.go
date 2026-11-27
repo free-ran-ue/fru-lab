@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/docker/compose/v5/pkg/api"
-	dockerclient "github.com/moby/moby/client"
 )
 
 // LogLine is one line of a container's output.
@@ -65,24 +64,4 @@ func (c *composeContext) FollowLogs(ctx context.Context, target, instance string
 	opts.Timestamps = true
 	opts.Tail = fmt.Sprint(tail)
 	return c.service.Logs(ctx, name, &funcLogConsumer{onLine: onLine}, opts)
-}
-
-// ExecUe runs cmd in a UE instance's container with a TTY, so its output
-// comes back as one stream.
-func (c *composeContext) ExecUe(ctx context.Context, instanceID string, cmd []string) (dockerclient.HijackedResponse, error) {
-	apiClient := c.dockerCli.Client()
-	created, err := apiClient.ExecCreate(ctx, c.ueContainerName(instanceID), dockerclient.ExecCreateOptions{
-		Cmd:          cmd,
-		AttachStdout: true,
-		AttachStderr: true,
-		TTY:          true,
-	})
-	if err != nil {
-		return dockerclient.HijackedResponse{}, fmt.Errorf("failed to run %s in ue %s: %v", cmd[0], instanceID, err)
-	}
-	attached, err := apiClient.ExecAttach(ctx, created.ID, dockerclient.ExecAttachOptions{TTY: true})
-	if err != nil {
-		return dockerclient.HijackedResponse{}, err
-	}
-	return attached.HijackedResponse, nil
 }

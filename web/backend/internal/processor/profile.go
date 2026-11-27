@@ -3,11 +3,12 @@ package processor
 import (
 	flctx "backend/internal/context"
 	"backend/model"
+	"context"
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -56,6 +57,7 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 	if p.Core == "" {
 		p.Core = model.GnbCoreLab
 	}
+	p.GnbID = strings.ToLower(p.GnbID)
 	switch {
 	case !reGnbID.MatchString(p.GnbID):
 		return bad("gnbId must be 6 hex digits")
@@ -74,19 +76,37 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 	}
 	switch p.Core {
 	case model.GnbCoreLab:
-		p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostIp = "", 0, "", 0, ""
+		p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostIp, p.HostInterface = "", 0, "", 0, "", ""
+		if p.N2Ip == "" {
+			return bad("n2Ip is required on the lab core: set the N2 IP (%s - %s)", flctx.GnbN2IpFirst, flctx.GnbN2IpLast)
+		}
+		a, err := netip.ParseAddr(p.N2Ip)
+		if err != nil || !a.Is4() || a.Compare(flctx.GnbN2IpFirst) < 0 || a.Compare(flctx.GnbN2IpLast) > 0 {
+			return bad("n2Ip must be an address in %s - %s (the lower ones are the lab core's)", flctx.GnbN2IpFirst, flctx.GnbN2IpLast)
+		}
+		p.N2Ip = a.String()
 	case model.GnbCoreExternal:
+		p.N2Ip = ""
 		if p.AmfPort == 0 {
 			p.AmfPort = 38412
 		}
 		if p.UpfPort == 0 {
 			p.UpfPort = 2152
 		}
-		for name, ip := range map[string]string{"amfIp": p.AmfIp, "upfIp": p.UpfIp, "hostIp": p.HostIp} {
-			if net.ParseIP(ip) == nil {
-				return bad("%s must be an IP address", name)
+		for _, f := range []struct{ name, ip string }{{"amfIp", p.AmfIp}, {"upfIp", p.UpfIp}} {
+			if net.ParseIP(f.ip) == nil {
+				return bad("%s must be an IP address", f.name)
 			}
 		}
+		p.HostInterface = strings.TrimSpace(p.HostInterface)
+		if p.HostInterface == "" {
+			return bad("hostInterface is required on an external core")
+		}
+		a, err := netip.ParseAddr(p.HostIp)
+		if err != nil || !a.Is4() {
+			return bad("hostIp must be an IPv4 address of %s", p.HostInterface)
+		}
+		p.HostIp = a.String()
 	default:
 		return bad("core must be %q or %q", model.GnbCoreLab, model.GnbCoreExternal)
 	}
@@ -99,9 +119,6 @@ func normalizeUeProfile(p *model.UeProfile) *model.ErrorDetail {
 	if p.Name == "" {
 		return bad("name is required")
 	}
-	if p.Count == 0 {
-		p.Count = 1
-	}
 	if p.Dnn == "" {
 		p.Dnn = "internet"
 	}
@@ -110,10 +127,8 @@ func normalizeUeProfile(p *model.UeProfile) *model.ErrorDetail {
 		return bad("mcc must be 3 digits")
 	case !reMnc.MatchString(p.Mnc):
 		return bad("mnc must be 2 or 3 digits")
-	case !reMsin.MatchString(p.MsinStart):
-		return bad("msinStart must be 9 or 10 digits")
-	case p.Count < 1 || p.Count > 500:
-		return bad("count must be 1 to 500")
+	case !reMsin.MatchString(p.Msin):
+		return bad("msin must be 9 or 10 digits")
 	case !reKey.MatchString(p.PermanentKey):
 		return bad("permanentKey must be 32 hex digits")
 	case !reKey.MatchString(p.OpValue):
@@ -126,11 +141,6 @@ func normalizeUeProfile(p *model.UeProfile) *model.ErrorDetail {
 		return bad("sst must be a number")
 	case p.Sd != "" && !reSd.MatchString(p.Sd):
 		return bad("sd must be 6 hex digits")
-	}
-	// the last MSIN must still fit the same number of digits
-	start, _ := strconv.ParseUint(p.MsinStart, 10, 64)
-	if len(strconv.FormatUint(start+uint64(p.Count)-1, 10)) > len(p.MsinStart) {
-		return bad("msinStart + count overflows %d digits", len(p.MsinStart))
 	}
 	return nil
 }
@@ -157,6 +167,13 @@ func (p *Processor) SaveGnbProfile(id string, prof *model.GnbProfile) (*model.Gn
 	if detail := normalizeGnbProfile(prof); detail != nil {
 		return nil, detail
 	}
+	others, err := p.FlContext.ListGnbProfiles()
+	if err != nil {
+		return nil, internal(err)
+	}
+	if detail := conflictDetail(gnbConflicts(prof, others)); detail != nil {
+		return nil, detail
+	}
 	if err := p.FlContext.SaveGnbProfile(prof); err != nil {
 		return nil, internal(err)
 	}
@@ -177,7 +194,13 @@ func (p *Processor) RenderGnbProfile(prof *model.GnbProfile) (*model.ResponseRen
 	if detail := normalizeGnbProfile(prof); detail != nil {
 		return nil, detail
 	}
-	yaml, err := flctx.RenderGnbConfig(prof)
+	ranIp := flctx.GnbRanIpPreview
+	if reProfileID.MatchString(prof.ID) {
+		if d := p.FlContext.GnbInstanceDeployment(prof.ID); d != nil && d.RanIp != "" {
+			ranIp = d.RanIp
+		}
+	}
+	yaml, err := flctx.RenderGnbConfig(prof, ranIp)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -206,6 +229,13 @@ func (p *Processor) SaveUeProfile(id string, prof *model.UeProfile) (*model.UePr
 	if detail := normalizeUeProfile(prof); detail != nil {
 		return nil, detail
 	}
+	others, err := p.FlContext.ListUeProfiles()
+	if err != nil {
+		return nil, internal(err)
+	}
+	if detail := conflictDetail(ueConflicts(prof, others)); detail != nil {
+		return nil, detail
+	}
 	if err := p.FlContext.SaveUeProfile(prof); err != nil {
 		return nil, internal(err)
 	}
@@ -219,19 +249,25 @@ func (p *Processor) DeleteUeProfile(id string) *model.ErrorDetail {
 	return nil
 }
 
-// RenderUeProfile is the uecfg.yaml of the profile's first UE, dialing the
-// gNB that is deployed now (or the lab gNB's address).
-func (p *Processor) RenderUeProfile(prof *model.UeProfile) (*model.ResponseRenderedConfig, *model.ErrorDetail) {
+// RenderUeProfile is the uecfg.yaml of the profile's UE, dialing the gNB
+// a deploy would pick now (or the first address of the gNB range).
+func (p *Processor) RenderUeProfile(ctx context.Context, prof *model.UeProfile) (*model.ResponseRenderedConfig, *model.ErrorDetail) {
 	if prof.Name == "" {
 		prof.Name = "preview"
 	}
 	if detail := normalizeUeProfile(prof); detail != nil {
 		return nil, detail
 	}
+	ranIp := flctx.GnbRanIpPreview
+	if gnbs, err := p.runningGnbs(ctx); err == nil {
+		if g, problem := pickUeGnb(prof.Sd, "", gnbs); problem == "" {
+			ranIp = g.RanIp
+		}
+	}
 	yaml, err := flctx.RenderUeConfig(&flctx.UeInstanceConfig{
-		Mcc: prof.Mcc, Mnc: prof.Mnc, Msin: prof.MsinStart,
+		Mcc: prof.Mcc, Mnc: prof.Mnc, Msin: prof.Msin,
 		PermanentKey: prof.PermanentKey, OpValue: prof.OpValue, Amf: prof.Amf, Sqn: prof.Sqn,
-		Dnn: prof.Dnn, Sst: prof.Sst, Sd: prof.Sd, RanIp: p.FlContext.GnbRanIp(),
+		Dnn: prof.Dnn, Sst: prof.Sst, Sd: prof.Sd, RanIp: ranIp,
 	})
 	if err != nil {
 		return nil, internal(err)

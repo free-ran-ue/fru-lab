@@ -1,14 +1,13 @@
-/* A lab view: toolbar over topology + inspector, console underneath. */
+/* A lab view: the toolbar over a topology + inspector, or one body. */
 .wb {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22rem;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "toolbar toolbar"
-    "canvas inspector"
-    "console console";
+    "canvas inspector";
 }
 
 .toolbar {
@@ -70,17 +69,29 @@
   border-left: 1px solid var(--border);
 }
 
-.console {
-  grid-area: console;
+
+.wbBody {
+  grid-template-areas:
+    "toolbar toolbar"
+    "body body";
+}
+
+.body {
+  grid-area: body;
+  min-height: 0;
   min-width: 0;
 }
 
 @media (max-width: 1000px) {
   .wb {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 26rem auto auto;
-    grid-template-areas: "toolbar" "canvas" "inspector" "console";
+    grid-template-rows: auto 26rem auto;
+    grid-template-areas: "toolbar" "canvas" "inspector";
     overflow-y: auto;
   }
   .inspector { border-left: 0; border-top: 1px solid var(--border); }
+  .wbBody {
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "toolbar" "body";
+  }
 }

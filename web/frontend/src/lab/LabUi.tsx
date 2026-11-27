@@ -54,7 +54,7 @@ export function InspectorHead({ icon, name, sub, status, statusText }: { icon: I
   return (
     <Section>
       <div className={styles.head}>
-        <span className={styles.headIcon}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><NodeIcon name={icon} x={0} y={0} size={24} /></svg></span>
+        <span className={styles.headIcon}><svg width="27" height="27" viewBox="0 0 24 24" aria-hidden="true"><NodeIcon name={icon} x={0} y={0} size={24} /></svg></span>
         <div>
           <h2 className={styles.headName}>{name}</h2>
           {sub && <div className={styles.headSub}>{sub}</div>}

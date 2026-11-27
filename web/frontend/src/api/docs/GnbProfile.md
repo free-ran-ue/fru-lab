@@ -19,7 +19,9 @@ Name | Type | Description | Notes
 **amfPort** | **number** |  | [optional] [default to undefined]
 **upfIp** | **string** |  | [optional] [default to undefined]
 **upfPort** | **number** |  | [optional] [default to undefined]
-**hostIp** | **string** | The host address the gNB listens on (external core); UEs dial it too. | [optional] [default to undefined]
+**n2Ip** | **string** | Lab core only - the gNB\&#39;s N2/N3 address on the lab\&#39;s cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core\&#39;s). Unique among the gNB profiles. | [optional] [default to undefined]
+**hostInterface** | **string** | External core only - the host interface the gNB listens on (see /api/host/interfaces). | [optional] [default to undefined]
+**hostIp** | **string** | External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles. | [optional] [default to undefined]
 **logLevel** | **string** |  | [optional] [default to undefined]
 **updatedAt** | **string** |  | [optional] [default to undefined]
 
@@ -43,6 +45,8 @@ const instance: GnbProfile = {
     amfPort,
     upfIp,
     upfPort,
+    n2Ip,
+    hostInterface,
     hostIp,
     logLevel,
     updatedAt,

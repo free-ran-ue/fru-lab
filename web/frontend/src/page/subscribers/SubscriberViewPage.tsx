@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
-import CoreTabs from '../../lab/CoreTabs'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import { fromSubscription, snssaiKey, type SubscriberFormState } from './subscriberForm'
 import styles from './webconsole-style.module.css'
+import { SortTh, useSort } from '../../lab/sort'
+
+// a numeric field as a number, so 10 sorts after 9
+const num = (v: unknown) => (v === '' || v === undefined || v === null || Number.isNaN(Number(v)) ? String(v ?? '') : Number(v))
 
 function KeyValueRows({ rows }: { rows: Array<[string, string]> }) {
   return (
@@ -62,10 +65,19 @@ export default function SubscriberViewPage() {
   }, [load])
 
   const flowRules = form ? form.sessions.flatMap((session) => session.flowRules.map((rule) => ({ session, rule }))) : []
+  const sessionSort = useSort(form?.sessions ?? [], {
+    snssai: (x) => snssaiKey(x.sst, x.sd), sst: (x) => num(x.sst), sd: (x) => x.sd, def: (x) => (x.isDefaultSlice ? 0 : 1), dnn: (x) => x.dnn,
+    ul: (x) => x.ambrUplink, dl: (x) => x.ambrDownlink, fiveQi: (x) => num(x.fiveQi), arp: (x) => num(x.arpPriority),
+    pdu: (x) => x.pduSessionType, ssc: (x) => x.sscMode, integ: (x) => (x.showUpSecurity ? x.upIntegr : ''), confid: (x) => (x.showUpSecurity ? x.upConfid : ''),
+  })
+  const ruleSort = useSort(flowRules, {
+    snssai: ({ session }) => snssaiKey(session.sst, session.sd), dnn: ({ session }) => session.dnn, filter: ({ rule }) => rule.filter,
+    prec: ({ rule }) => num(rule.precedence), fiveQi: ({ rule }) => num(rule.fiveQi), ulGbr: ({ rule }) => rule.uplinkGbr, dlGbr: ({ rule }) => rule.downlinkGbr,
+    ulMbr: ({ rule }) => rule.uplinkMbr, dlMbr: ({ rule }) => rule.downlinkMbr, charging: ({ rule }) => rule.chargingMethod, quota: ({ rule }) => num(rule.quota), cost: ({ rule }) => num(rule.unitCost),
+  })
 
   return (
     <AppLayout crumbs={[{ label: 'Subscribers', to: '/core-network/subscribers' }, { label: <span className="num">{ueId}</span> }]}>
-      <CoreTabs />
       <section className={styles.pageHeader}>
         <div className={styles.titleBlock}>
           <h1 className={`${styles.title} num`}>{ueId}</h1>
@@ -120,23 +132,23 @@ export default function SubscriberViewPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th className={styles.th}>S-NSSAI</th>
-                    <th className={styles.th}>SST</th>
-                    <th className={styles.th}>SD</th>
-                    <th className={styles.th}>Default</th>
-                    <th className={styles.th}>DNN</th>
-                    <th className={`${styles.th} ${styles.right}`}>UL AMBR</th>
-                    <th className={`${styles.th} ${styles.right}`}>DL AMBR</th>
-                    <th className={`${styles.th} ${styles.right}`}>5QI</th>
-                    <th className={`${styles.th} ${styles.right}`}>ARP</th>
-                    <th className={styles.th}>PDU type</th>
-                    <th className={styles.th}>SSC mode</th>
-                    <th className={styles.th}>UP integrity</th>
-                    <th className={styles.th}>UP confidentiality</th>
+                    <SortTh k="snssai" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>S-NSSAI</SortTh>
+                    <SortTh k="sst" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>SST</SortTh>
+                    <SortTh k="sd" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>SD</SortTh>
+                    <SortTh k="def" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>Default</SortTh>
+                    <SortTh k="dnn" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>DNN</SortTh>
+                    <SortTh k="ul" sort={sessionSort.sort} onSort={sessionSort.toggle} className={`${styles.th} ${styles.right}`}>UL AMBR</SortTh>
+                    <SortTh k="dl" sort={sessionSort.sort} onSort={sessionSort.toggle} className={`${styles.th} ${styles.right}`}>DL AMBR</SortTh>
+                    <SortTh k="fiveQi" sort={sessionSort.sort} onSort={sessionSort.toggle} className={`${styles.th} ${styles.right}`}>5QI</SortTh>
+                    <SortTh k="arp" sort={sessionSort.sort} onSort={sessionSort.toggle} className={`${styles.th} ${styles.right}`}>ARP</SortTh>
+                    <SortTh k="pdu" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>PDU type</SortTh>
+                    <SortTh k="ssc" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>SSC mode</SortTh>
+                    <SortTh k="integ" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>UP integrity</SortTh>
+                    <SortTh k="confid" sort={sessionSort.sort} onSort={sessionSort.toggle} className={styles.th}>UP confidentiality</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {form.sessions.map((session) => (
+                  {sessionSort.sorted.map((session) => (
                     <tr key={session.id} className={styles.row}>
                       <td className={styles.td}><span className={styles.tag}>{snssaiKey(session.sst, session.sd)}</span></td>
                       <td className={`${styles.td} num`}>{dash(session.sst)}</td>
@@ -166,22 +178,22 @@ export default function SubscriberViewPage() {
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th className={styles.th}>S-NSSAI</th>
-                      <th className={styles.th}>DNN</th>
-                      <th className={styles.th}>IP filter</th>
-                      <th className={`${styles.th} ${styles.right}`}>Precedence</th>
-                      <th className={`${styles.th} ${styles.right}`}>5QI</th>
-                      <th className={`${styles.th} ${styles.right}`}>UL GBR</th>
-                      <th className={`${styles.th} ${styles.right}`}>DL GBR</th>
-                      <th className={`${styles.th} ${styles.right}`}>UL MBR</th>
-                      <th className={`${styles.th} ${styles.right}`}>DL MBR</th>
-                      <th className={styles.th}>Charging</th>
-                      <th className={`${styles.th} ${styles.right}`}>Quota</th>
-                      <th className={`${styles.th} ${styles.right}`}>Unit cost</th>
+                      <SortTh k="snssai" sort={ruleSort.sort} onSort={ruleSort.toggle} className={styles.th}>S-NSSAI</SortTh>
+                      <SortTh k="dnn" sort={ruleSort.sort} onSort={ruleSort.toggle} className={styles.th}>DNN</SortTh>
+                      <SortTh k="filter" sort={ruleSort.sort} onSort={ruleSort.toggle} className={styles.th}>IP filter</SortTh>
+                      <SortTh k="prec" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>Precedence</SortTh>
+                      <SortTh k="fiveQi" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>5QI</SortTh>
+                      <SortTh k="ulGbr" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>UL GBR</SortTh>
+                      <SortTh k="dlGbr" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>DL GBR</SortTh>
+                      <SortTh k="ulMbr" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>UL MBR</SortTh>
+                      <SortTh k="dlMbr" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>DL MBR</SortTh>
+                      <SortTh k="charging" sort={ruleSort.sort} onSort={ruleSort.toggle} className={styles.th}>Charging</SortTh>
+                      <SortTh k="quota" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>Quota</SortTh>
+                      <SortTh k="cost" sort={ruleSort.sort} onSort={ruleSort.toggle} className={`${styles.th} ${styles.right}`}>Unit cost</SortTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {flowRules.map(({ session, rule }) => (
+                    {ruleSort.sorted.map(({ session, rule }) => (
                       <tr key={rule.id} className={styles.row}>
                         <td className={styles.td}><span className={styles.tag}>{snssaiKey(session.sst, session.sd)}</span></td>
                         <td className={styles.td}>{dash(session.dnn)}</td>

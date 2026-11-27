@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
-import CoreTabs from '../../lab/CoreTabs'
 import LabCanvas from '../../lab/canvas/LabCanvas'
 import { ID, buildGraph } from '../../lab/canvas/graph'
 import { useEvents } from '../../lab/console/EventsContext'
@@ -13,11 +11,11 @@ import { Actions, Button, Dot, Hint, InspectorHead, KV, Section, Segmented, ui }
 import { FREE5GC_TEMPLATE_OPTIONS, type Free5gcTemplate } from '../../lab/free5gcTemplate'
 import { templateLabel } from '../../lab/useLab'
 import { StatusTag } from '../../lab/StatusTag'
-import Workbench, { logSourceFor } from '../../lab/workbench/Workbench'
+import Workbench from '../../lab/workbench/Workbench'
+import { logsHref } from '../../lab/workbench/logSources'
 import NodeInspector from '../../lab/workbench/NodeInspector'
-import { useConsole } from '../../lab/workbench/Console'
 
-const SHORT: Record<Free5gcTemplate, string> = { basic: 'Basic', ulcl: 'ULCL', 'ulcl-2slice': 'Two Slice' }
+const SHORT: Record<Free5gcTemplate, string> = { basic: 'Basic', ulcl: 'ULCL' }
 
 // CoreNetworkPage deploys and stops free5GC. The topology expands the core
 // into its NFs (a preview of the picked template while it is stopped); the
@@ -28,8 +26,7 @@ export default function CoreNetworkPage() {
   const lab = useLab()
   const { ueLive } = useEvents()
   const { free5gc, nodes } = lab
-  const con = useConsole()
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const { addError, addSuccess } = useNotifications()
   const [picked, setPicked] = useState<Free5gcTemplate>('basic')
   const [selected, setSelected] = useState<string | null>(null)
 
@@ -60,8 +57,7 @@ export default function CoreNetworkPage() {
   )
 
   const showLogs = (id: string) => {
-    const s = logSourceFor(id)
-    if (s) { con.setSource(s); con.show('logs') }
+    navigate(logsHref(id))
   }
 
   const coreInspector = (
@@ -77,7 +73,7 @@ export default function CoreNetworkPage() {
           { k: 'Template', v: `${templateLabel(template)}${coreStopped ? ' (preview)' : ''}` },
           { k: 'NFs healthy', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length}` : '—' },
           { k: 'Last deployed', v: nodes.core.lastDeployed },
-          { k: 'Subscribers', v: <a href="/core-network/subscribers" onClick={(e) => { e.preventDefault(); navigate('/core-network/subscribers') }}>{lab.ue.rows.filter((r) => r.source === 'subscriber').length || 'open'}</a> },
+          { k: 'Subscribers', v: <a href="/core-network/subscribers" onClick={(e) => { e.preventDefault(); navigate('/core-network/subscribers') }}>open</a> },
         ]} />
         {blocked && <Hint>{blocked}</Hint>}
         <Actions>{primary}{!coreStopped && <Button small onClick={() => showLogs(ID.core)}>Logs (all NFs)</Button>}</Actions>
@@ -101,20 +97,16 @@ export default function CoreNetworkPage() {
     : <NodeInspector id={selected} onLogs={() => showLogs(selected)} extra={selected.startsWith('nf:') ? <Section><Button small onClick={() => setSelected(null)}>Back to free5GC</Button></Section> : undefined} />
 
   return (
-    <AppLayout crumbs={[{ label: 'Network functions' }]} fill overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
+    <AppLayout crumbs={[{ label: 'Network functions' }]} fill>
       <Workbench
         title="Core Network"
-        status={<><CoreTabs /><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
-        actions={primary}
-        console={con}
-        selectedId={selected}
-        onSelect={setSelected}
+        status={<><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
         canvas={(
           <LabCanvas
-            label="The free5GC core: control-plane NFs on the SBI bus, AMF, SMF and the UPFs; N2 and N3 from the gNB, N6 to the data network."
+            label="The free5GC core: control-plane NFs on the SBI bus, AMF, SMF and the UPFs."
             {...graph}
             selectedId={selected}
-            onSelect={(id) => { setSelected(id); const s = logSourceFor(id); if (s) con.setSource(s) }}
+            onSelect={setSelected}
           />
         )}
         inspector={inspector}

@@ -8,29 +8,31 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**deployFree5gcLogs**](#deployfree5gclogs) | **GET** /api/deploy/free5gc/logs | Get free5GC container logs|
 |[**deployFree5gcStatus**](#deployfree5gcstatus) | **GET** /api/deploy/free5gc/status | Get free5GC deploy status|
 |[**deployFree5gcUp**](#deployfree5gcup) | **POST** /api/deploy/free5gc | Deploy free5GC|
-|[**deployGnbDown**](#deploygnbdown) | **DELETE** /api/deploy/gnb | Stop gNB|
-|[**deployGnbLogs**](#deploygnblogs) | **GET** /api/deploy/gnb/logs | Get gNB container logs|
-|[**deployGnbSliceDown**](#deploygnbslicedown) | **DELETE** /api/deploy/gnb-slice/{slice} | Stop a gNB slice (ulcl-2slice only)|
-|[**deployGnbSliceLogs**](#deploygnbslicelogs) | **GET** /api/deploy/gnb-slice/{slice}/logs | Get a gNB slice\&#39;s container logs|
-|[**deployGnbSliceStatus**](#deploygnbslicestatus) | **GET** /api/deploy/gnb-slice/{slice}/status | Get a gNB slice\&#39;s deploy status|
-|[**deployGnbSliceUp**](#deploygnbsliceup) | **POST** /api/deploy/gnb-slice/{slice} | Deploy a gNB slice (ulcl-2slice only)|
-|[**deployGnbStatus**](#deploygnbstatus) | **GET** /api/deploy/gnb/status | Get gNB deploy status|
-|[**deployGnbUp**](#deploygnbup) | **POST** /api/deploy/gnb | Deploy gNB|
+|[**deployGnbDown**](#deploygnbdown) | **DELETE** /api/deploy/gnbs/{profileId} | Stop the gNB of one gNB profile|
+|[**deployGnbList**](#deploygnblist) | **GET** /api/deploy/gnbs | List the gNBs deployed from gNB profiles|
+|[**deployGnbLogs**](#deploygnblogs) | **GET** /api/deploy/gnbs/{profileId}/logs | Get the logs of one profile gNB|
+|[**deployGnbUp**](#deploygnbup) | **POST** /api/deploy/gnbs/{profileId} | Deploy the gNB of one gNB profile|
 |[**deployUeDown**](#deployuedown) | **DELETE** /api/deploy/ue/{instance} | Stop a UE instance|
 |[**deployUeList**](#deployuelist) | **GET** /api/deploy/ue | List all deployed UE instances|
 |[**deployUeLogs**](#deployuelogs) | **GET** /api/deploy/ue/{instance}/logs | Get a UE instance\&#39;s container logs|
+|[**deployUeProfileUp**](#deployueprofileup) | **POST** /api/deploy/ue-profiles/{profileId} | Deploy the UE of one UE profile|
 |[**deployUeStatus**](#deployuestatus) | **GET** /api/deploy/ue/{instance}/status | Get a UE instance\&#39;s deploy status|
 |[**deployUeUp**](#deployueup) | **POST** /api/deploy/ue/{instance} | Deploy a UE instance for one subscriber|
+|[**gnbProfileBulkCreate**](#gnbprofilebulkcreate) | **POST** /api/profiles/gnb/bulk | Create several gnb profiles from one|
+|[**gnbProfileCheck**](#gnbprofilecheck) | **POST** /api/profiles/gnb/check | Check a gnb profile for conflicts with the saved ones|
 |[**gnbProfileCreate**](#gnbprofilecreate) | **POST** /api/profiles/gnb | Save a new gNB profile|
 |[**gnbProfileDelete**](#gnbprofiledelete) | **DELETE** /api/profiles/gnb/{id} | Delete a gNB profile|
 |[**gnbProfileList**](#gnbprofilelist) | **GET** /api/profiles/gnb | List the saved gNB profiles|
 |[**gnbProfileRender**](#gnbprofilerender) | **POST** /api/profiles/gnb/render | Preview the config file a gNB profile deploys|
 |[**gnbProfileUpdate**](#gnbprofileupdate) | **PUT** /api/profiles/gnb/{id} | Update a gNB profile|
+|[**hostInterfaceList**](#hostinterfacelist) | **GET** /api/host/interfaces | List the host\&#39;s network interfaces|
 |[**imageList**](#imagelist) | **GET** /api/images | List the images this app deploys|
 |[**imagePull**](#imagepull) | **POST** /api/images/{key}/pull | Pull an image|
 |[**imageRemove**](#imageremove) | **DELETE** /api/images/{key} | Clear a locally cached image|
 |[**login**](#login) | **POST** /api/login | Login|
 |[**logout**](#logout) | **POST** /api/logout | Logout|
+|[**ueProfileBulkCreate**](#ueprofilebulkcreate) | **POST** /api/profiles/ue/bulk | Create several ue profiles from one|
+|[**ueProfileCheck**](#ueprofilecheck) | **POST** /api/profiles/ue/check | Check a ue profile for conflicts with the saved ones|
 |[**ueProfileCreate**](#ueprofilecreate) | **POST** /api/profiles/ue | Save a new UE profile|
 |[**ueProfileDelete**](#ueprofiledelete) | **DELETE** /api/profiles/ue/{id} | Delete a UE profile|
 |[**ueProfileList**](#ueprofilelist) | **GET** /api/profiles/ue | List the saved UE profiles|
@@ -239,7 +241,7 @@ const { status, data } = await apiInstance.deployFree5gcUp(
 # **deployGnbDown**
 > MessageResponse deployGnbDown()
 
-Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+Fails with 409 while a UE deployed onto this gNB still runs.
 
 ### Example
 
@@ -252,11 +254,18 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployGnbDown();
+let profileId: string; // (default to undefined)
+
+const { status, data } = await apiInstance.deployGnbDown(
+    profileId
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **profileId** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
@@ -277,8 +286,54 @@ This endpoint does not have any parameters.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+|**409** | Conflict - a UE on this gNB still runs |  -  |
 |**401** | Unauthorized |  -  |
-|**409** | Conflict - a UE instance is still running |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deployGnbList**
+> DeployGnbListResponse deployGnbList()
+
+One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.deployGnbList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**DeployGnbListResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -298,10 +353,10 @@ import {
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let service: string; //Filter logs down to one compose service (NF), e.g. \"amf\". Omit for every service in the project. (optional) (default to undefined)
+let profileId: string; // (default to undefined)
 
 const { status, data } = await apiInstance.deployGnbLogs(
-    service
+    profileId
 );
 ```
 
@@ -309,273 +364,12 @@ const { status, data } = await apiInstance.deployGnbLogs(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **service** | [**string**] | Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project. | (optional) defaults to undefined|
+| **profileId** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
 
 **DeployLogsResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceDown**
-> MessageResponse deployGnbSliceDown()
-
-Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceDown(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**MessageResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**409** | Conflict - a UE instance is still running |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceLogs**
-> DeployLogsResponse deployGnbSliceLogs()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceLogs(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**DeployLogsResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceStatus**
-> DeployStatusResponse deployGnbSliceStatus()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceStatus(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**DeployStatusResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbSliceUp**
-> MessageResponse deployGnbSliceUp()
-
-Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-let slice: 'slice1' | 'slice2'; //Which ulcl-2slice slice\'s gNB to act on. (default to undefined)
-
-const { status, data } = await apiInstance.deployGnbSliceUp(
-    slice
-);
-```
-
-### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **slice** | [**&#39;slice1&#39; | &#39;slice2&#39;**]**Array<&#39;slice1&#39; &#124; &#39;slice2&#39;>** | Which ulcl-2slice slice\&#39;s gNB to act on. | defaults to undefined|
-
-
-### Return type
-
-**MessageResponse**
-
-### Authorization
-
-[bearerAuth](../README.md#bearerAuth)
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-|**200** | OK |  -  |
-|**401** | Unauthorized |  -  |
-|**404** | Not Found - unknown slice |  -  |
-|**409** | Conflict - the core network isn\&#39;t running yet |  -  |
-|**500** | Internal Server Error |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-# **deployGnbStatus**
-> DeployStatusResponse deployGnbStatus()
-
-
-### Example
-
-```typescript
-import {
-    DefaultApi,
-    Configuration
-} from './api';
-
-const configuration = new Configuration();
-const apiInstance = new DefaultApi(configuration);
-
-const { status, data } = await apiInstance.deployGnbStatus();
-```
-
-### Parameters
-This endpoint does not have any parameters.
-
-
-### Return type
-
-**DeployStatusResponse**
 
 ### Authorization
 
@@ -599,24 +393,23 @@ This endpoint does not have any parameters.
 # **deployGnbUp**
 > MessageResponse deployGnbUp()
 
-Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
 
 ### Example
 
 ```typescript
 import {
     DefaultApi,
-    Configuration,
-    DeployGnbRequest
+    Configuration
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-let deployGnbRequest: DeployGnbRequest; // (optional)
+let profileId: string; // (default to undefined)
 
 const { status, data } = await apiInstance.deployGnbUp(
-    deployGnbRequest
+    profileId
 );
 ```
 
@@ -624,7 +417,7 @@ const { status, data } = await apiInstance.deployGnbUp(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
-| **deployGnbRequest** | **DeployGnbRequest**|  | |
+| **profileId** | [**string**] |  | defaults to undefined|
 
 
 ### Return type
@@ -637,7 +430,7 @@ const { status, data } = await apiInstance.deployGnbUp(
 
 ### HTTP request headers
 
- - **Content-Type**: application/json
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 
@@ -645,8 +438,9 @@ const { status, data } = await apiInstance.deployGnbUp(
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
+|**404** | No such gNB profile |  -  |
+|**409** | Conflict |  -  |
 |**401** | Unauthorized |  -  |
-|**409** | Conflict - the core network isn\&#39;t running yet |  -  |
 |**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -800,6 +594,65 @@ const { status, data } = await apiInstance.deployUeLogs(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **deployUeProfileUp**
+> MessageResponse deployUeProfileUp()
+
+Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    DeployUeProfileRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let profileId: string; // (default to undefined)
+let deployUeProfileRequest: DeployUeProfileRequest; // (optional)
+
+const { status, data } = await apiInstance.deployUeProfileUp(
+    profileId,
+    deployUeProfileRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **deployUeProfileRequest** | **DeployUeProfileRequest**|  | |
+| **profileId** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**404** | No such UE profile |  -  |
+|**409** | Conflict |  -  |
+|**401** | Unauthorized |  -  |
+|**500** | Internal Server Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **deployUeStatus**
 > DeployUeStatusResponse deployUeStatus()
 
@@ -911,6 +764,113 @@ const { status, data } = await apiInstance.deployUeUp(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **gnbProfileBulkCreate**
+> Array<GnbProfile> gnbProfileBulkCreate(profileBulkRequest)
+
+Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    ProfileBulkRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let profileBulkRequest: ProfileBulkRequest; //
+
+const { status, data } = await apiInstance.gnbProfileBulkCreate(
+    profileBulkRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **profileBulkRequest** | **ProfileBulkRequest**|  | |
+
+
+### Return type
+
+**Array<GnbProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The created profiles |  -  |
+|**400** | Bad Request |  -  |
+|**404** | No such source profile |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileCheck**
+> ProfileCheckResult gnbProfileCheck(gnbProfile)
+
+The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileCheck(
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+
+
+### Return type
+
+**ProfileCheckResult**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request - a field is malformed |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **gnbProfileCreate**
 > GnbProfile gnbProfileCreate(gnbProfile)
 
@@ -960,6 +920,7 @@ const { status, data } = await apiInstance.gnbProfileCreate(
 |-------------|-------------|------------------|
 |**200** | The saved profile, with its id |  -  |
 |**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -1160,7 +1121,54 @@ const { status, data } = await apiInstance.gnbProfileUpdate(
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
 |**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
 |**404** | Not Found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **hostInterfaceList**
+> Array<HostInterface> hostInterfaceList()
+
+The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.hostInterfaceList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<HostInterface>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+|**500** | Internal Server Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -1415,6 +1423,113 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **ueProfileBulkCreate**
+> Array<UeProfile> ueProfileBulkCreate(profileBulkRequest)
+
+Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    ProfileBulkRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let profileBulkRequest: ProfileBulkRequest; //
+
+const { status, data } = await apiInstance.ueProfileBulkCreate(
+    profileBulkRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **profileBulkRequest** | **ProfileBulkRequest**|  | |
+
+
+### Return type
+
+**Array<UeProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The created profiles |  -  |
+|**400** | Bad Request |  -  |
+|**404** | No such source profile |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileCheck**
+> ProfileCheckResult ueProfileCheck(ueProfile)
+
+The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    UeProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let ueProfile: UeProfile; //
+
+const { status, data } = await apiInstance.ueProfileCheck(
+    ueProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **ueProfile** | **UeProfile**|  | |
+
+
+### Return type
+
+**ProfileCheckResult**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request - a field is malformed |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **ueProfileCreate**
 > UeProfile ueProfileCreate(ueProfile)
 
@@ -1464,6 +1579,7 @@ const { status, data } = await apiInstance.ueProfileCreate(
 |-------------|-------------|------------------|
 |**200** | The saved profile, with its id |  -  |
 |**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -1664,6 +1780,7 @@ const { status, data } = await apiInstance.ueProfileUpdate(
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
 |**400** | Bad Request |  -  |
+|**409** | Conflict - a field that must be unique is used by another saved profile (see the check endpoint) |  -  |
 |**404** | Not Found |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

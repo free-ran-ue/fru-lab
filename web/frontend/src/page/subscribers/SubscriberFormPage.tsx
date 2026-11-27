@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
-import CoreTabs from '../../lab/CoreTabs'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import {
@@ -66,7 +64,7 @@ export default function SubscriberFormPage() {
   const [bulkFailures, setBulkFailures] = useState<BulkFailure[]>([])
   const bulkIds = useMemo(() => (isBulk ? bulkUeIds(form.ueId, count) : null), [isBulk, form.ueId, count])
 
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const { addError, addSuccess } = useNotifications()
 
   const loadForEdit = useCallback(async () => {
     if (!editUeId || !editPlmnId) return
@@ -176,7 +174,6 @@ export default function SubscriberFormPage() {
   if (isEditMode && (isLoading || loadError)) {
     return (
       <AppLayout crumbs={crumbs}>
-        <CoreTabs />
         {header}
         <section className={styles.panel}>
           <p className={styles.emptyState}>{isLoading ? 'Loading subscriber…' : loadError}</p>
@@ -193,9 +190,8 @@ export default function SubscriberFormPage() {
   return (
     <AppLayout
       crumbs={crumbs}
-      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
+     
     >
-      <CoreTabs />
       {header}
 
         <form onSubmit={handleSubmit} className={styles.form}>

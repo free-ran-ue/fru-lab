@@ -9,8 +9,7 @@ Name | Type | Description | Notes
 **name** | **string** |  | [default to undefined]
 **mcc** | **string** |  | [default to undefined]
 **mnc** | **string** |  | [default to undefined]
-**msinStart** | **string** | The first UE\&#39;s MSIN; the others count up from it. | [default to undefined]
-**count** | **number** |  | [default to undefined]
+**msin** | **string** | 9 or 10 digits. The IMSI (mcc + mnc + msin) is unique among the UE profiles. | [default to undefined]
 **permanentKey** | **string** |  | [default to undefined]
 **opValue** | **string** | OPc | [default to undefined]
 **amf** | **string** |  | [default to undefined]
@@ -30,8 +29,7 @@ const instance: UeProfile = {
     name,
     mcc,
     mnc,
-    msinStart,
-    count,
+    msin,
     permanentKey,
     opValue,
     amf,

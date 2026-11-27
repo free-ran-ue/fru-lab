@@ -80,6 +80,16 @@
   stroke-dasharray: 4 5;
 }
 
+.linkRadio {
+  stroke-width: 1.25;
+  stroke-dasharray: 1 5;
+}
+
+.radioWaves {
+  stroke-width: 1.25;
+  stroke-dasharray: none;
+}
+
 .linkHot {
   stroke: var(--accent);
   stroke-width: 2;

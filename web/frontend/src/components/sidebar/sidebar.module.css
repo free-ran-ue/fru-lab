@@ -1,70 +1,110 @@
-/* The activity bar: a narrow dark strip of view icons. */
+/* The navigation bar: a dark column of views, each an icon with its label. */
 .bar {
   position: sticky;
   top: 0;
   z-index: 30;
   flex: 0 0 auto;
-  width: 3rem;
+  width: 14rem;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.375rem 0;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  overflow-y: auto;
   background: var(--chrome);
   border-right: 1px solid var(--chrome-border);
 }
 
 .brand {
-  display: grid;
-  place-items: center;
-  width: 2.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   height: 2.25rem;
-  margin-bottom: 0.375rem;
+  padding: 0 0.5rem;
+  color: var(--chrome-strong);
+  text-decoration: none;
+}
+
+.brandName {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .group,
 .foot {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: 1px;
 }
 
 .foot {
   margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--chrome-border);
 }
 
-.sep {
-  width: 1.5rem;
-  height: 1px;
-  margin: 0.375rem 0;
-  background: var(--chrome-border);
+.heading {
+  padding: 0 0.625rem 0.25rem;
+  color: var(--chrome-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .item {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 3rem;
-  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  height: 2rem;
+  padding: 0 0.625rem;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--chrome-muted);
+  color: var(--chrome-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
+.icon {
+  flex: 0 0 auto;
+  color: var(--chrome-muted);
+}
+
+.label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .item:hover {
+  background: var(--chrome-hover);
+  color: var(--chrome-strong);
+}
+
+.item:hover .icon {
   color: var(--chrome-strong);
 }
 
 .item:focus-visible {
   outline: 1px solid var(--chrome-accent);
-  outline-offset: -3px;
+  outline-offset: -1px;
 }
 
 .active,
 .active:hover {
+  background: var(--chrome-active);
   color: var(--chrome-strong);
+}
+
+.active .icon {
+  color: var(--chrome-accent);
 }
 
 .active::before {
@@ -74,33 +114,27 @@
   top: 0.375rem;
   bottom: 0.375rem;
   width: 2px;
+  border-radius: 1px;
   background: var(--accent);
 }
 
-/* hover label */
-.item::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: calc(100% + 0.375rem);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--chrome-border);
-  border-radius: var(--radius-sm);
-  background: var(--chrome-active);
+.parentActive,
+.parentActive .icon {
   color: var(--chrome-strong);
-  font-size: 0.75rem;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.12s ease 0.25s;
 }
 
-.item:hover::after {
-  opacity: 1;
+/* a sub-page, indented under its view */
+.sub {
+  height: 1.75rem;
+  padding-left: 2.25rem;
+  font-size: 0.78rem;
 }
 
+/* Narrow screens: icons only. */
 @media (max-width: 700px) {
-  .bar { width: 2.5rem; }
-  .item { width: 2.5rem; }
+  .bar { width: 2.75rem; padding: 0.375rem 0.25rem; }
+  .brand { justify-content: center; padding: 0; }
+  .brandName, .label, .heading { display: none; }
+  .item { justify-content: center; padding: 0; }
+  .sub { display: none; }
 }

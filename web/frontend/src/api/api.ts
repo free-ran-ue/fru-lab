@@ -23,11 +23,8 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
-export interface DeployGnbRequest {
-    /**
-     * A saved gNB profile; empty deploys the lab default.
-     */
-    'profileId'?: string;
+export interface DeployGnbListResponse {
+    'instances': Array<GnbInstance>;
 }
 export interface DeployLogsResponse {
     'target': string;
@@ -47,6 +44,12 @@ export interface DeployUeLogsResponse {
     'instance': string;
     'lines': Array<string>;
 }
+export interface DeployUeProfileRequest {
+    /**
+     * The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+     */
+    'gnb'?: string;
+}
 export interface DeployUeRequest {
     'mcc': string;
     'mnc': string;
@@ -61,6 +64,10 @@ export interface DeployUeRequest {
 }
 export interface DeployUeStatusResponse {
     'instance': string;
+    /**
+     * The gNB target it was deployed onto (gnb-<profileId>); empty when unknown.
+     */
+    'gnb'?: string;
     'status': string;
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
@@ -71,6 +78,18 @@ export interface GnbDeployment {
     'core': GnbDeploymentCoreEnum;
     'amfIp': string;
     'hostIp'?: string;
+    'hostInterface'?: string;
+    'gnbId'?: string;
+    'gnbName'?: string;
+    'sd'?: string;
+    /**
+     * Its N2/N3 address (cn-ran, or the host\'s address on an external core).
+     */
+    'n2Ip'?: string;
+    /**
+     * Where UEs dial it (ran-ue), picked by fru-lab; the host address on an external core.
+     */
+    'ranIp'?: string;
 }
 
 export const GnbDeploymentCoreEnum = {
@@ -80,6 +99,17 @@ export const GnbDeploymentCoreEnum = {
 
 export type GnbDeploymentCoreEnum = typeof GnbDeploymentCoreEnum[keyof typeof GnbDeploymentCoreEnum];
 
+export interface GnbInstance {
+    /**
+     * The gNB target name, gnb-<profileId>; the log stream and UE deploys use it.
+     */
+    'instance': string;
+    'profileId': string;
+    'status': string;
+    'services'?: Array<ServiceStatus>;
+    'lastDeployed'?: string;
+    'gnb': GnbDeployment;
+}
 export interface GnbProfile {
     'id'?: string;
     'name': string;
@@ -99,7 +129,15 @@ export interface GnbProfile {
     'upfIp'?: string;
     'upfPort'?: number;
     /**
-     * The host address the gNB listens on (external core); UEs dial it too.
+     * Lab core only - the gNB\'s N2/N3 address on the lab\'s cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core\'s). Unique among the gNB profiles.
+     */
+    'n2Ip'?: string;
+    /**
+     * External core only - the host interface the gNB listens on (see /api/host/interfaces).
+     */
+    'hostInterface'?: string;
+    /**
+     * External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
      */
     'hostIp'?: string;
     'logLevel'?: string;
@@ -113,6 +151,10 @@ export const GnbProfileCoreEnum = {
 
 export type GnbProfileCoreEnum = typeof GnbProfileCoreEnum[keyof typeof GnbProfileCoreEnum];
 
+export interface HostInterface {
+    'name': string;
+    'addresses': Array<string>;
+}
 export interface ImageInfo {
     'key': string;
     'name': string;
@@ -145,6 +187,27 @@ export interface LoginResponse {
 export interface MessageResponse {
     'message'?: string;
 }
+export interface ProfileBulkRequest {
+    /**
+     * The source profile.
+     */
+    'profileId': string;
+    'count': number;
+}
+export interface ProfileCheckResult {
+    'conflicts': Array<ProfileConflict>;
+}
+export interface ProfileConflict {
+    /**
+     * The JSON field name, e.g. gnbId, n2Ip, hostIp, name, msin.
+     */
+    'field': string;
+    'message': string;
+    /**
+     * The next free value, when there is one.
+     */
+    'suggestion'?: string;
+}
 export interface RenderedConfig {
     'yaml': string;
 }
@@ -158,7 +221,6 @@ export interface RequestDeployFree5gc {
 export const RequestDeployFree5gcTemplateEnum = {
     Basic: 'basic',
     Ulcl: 'ulcl',
-    Ulcl2slice: 'ulcl-2slice',
 } as const;
 
 export type RequestDeployFree5gcTemplateEnum = typeof RequestDeployFree5gcTemplateEnum[keyof typeof RequestDeployFree5gcTemplateEnum];
@@ -173,10 +235,9 @@ export interface UeProfile {
     'mcc': string;
     'mnc': string;
     /**
-     * The first UE\'s MSIN; the others count up from it.
+     * 9 or 10 digits. The IMSI (mcc + mnc + msin) is unique among the UE profiles.
      */
-    'msinStart': string;
-    'count': number;
+    'msin': string;
     'permanentKey': string;
     /**
      * OPc
@@ -340,13 +401,17 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop gNB
+         * Fails with 409 while a UE deployed onto this gNB still runs.
+         * @summary Stop the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbDown: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb`;
+        deployGnbDown: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployGnbDown', 'profileId', profileId)
+            const localVarPath = `/api/deploy/gnbs/{profileId}`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -374,94 +439,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
-         * @summary Get gNB container logs
-         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+         * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+         * @summary List the gNBs deployed from gNB profiles
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbLogs: async (service?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb/logs`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            if (service !== undefined) {
-                localVarQueryParameter['service'] = service;
-            }
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceDown: async (slice: DeployGnbSliceDownSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceDown', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}`
-                .replace('{slice}', encodeURIComponent(String(slice)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s container logs
-         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceLogs: async (slice: DeployGnbSliceLogsSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceLogs', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}/logs`
-                .replace('{slice}', encodeURIComponent(String(slice)));
+        deployGnbList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/gnbs`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -490,16 +474,16 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
-         * @summary Get a gNB slice\'s deploy status
-         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * @summary Get the logs of one profile gNB
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbSliceStatus: async (slice: DeployGnbSliceStatusSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceStatus', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}/status`
-                .replace('{slice}', encodeURIComponent(String(slice)));
+        deployGnbLogs: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployGnbLogs', 'profileId', profileId)
+            const localVarPath = `/api/deploy/gnbs/{profileId}/logs`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -527,17 +511,17 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-         * @summary Deploy a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * @summary Deploy the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbSliceUp: async (slice: DeployGnbSliceUpSliceEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'slice' is not null or undefined
-            assertParamExists('deployGnbSliceUp', 'slice', slice)
-            const localVarPath = `/api/deploy/gnb-slice/{slice}`
-                .replace('{slice}', encodeURIComponent(String(slice)));
+        deployGnbUp: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployGnbUp', 'profileId', profileId)
+            const localVarPath = `/api/deploy/gnbs/{profileId}`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -558,77 +542,6 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
-         * @summary Get gNB deploy status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbStatus: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb/status`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-         * @summary Deploy gNB
-         * @param {DeployGnbRequest} [deployGnbRequest] 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbUp: async (deployGnbRequest?: DeployGnbRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/api/deploy/gnb`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication bearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(deployGnbRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -746,6 +659,47 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+         * @summary Deploy the UE of one UE profile
+         * @param {string} profileId 
+         * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeProfileUp: async (profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deployUeProfileUp', 'profileId', profileId)
+            const localVarPath = `/api/deploy/ue-profiles/{profileId}`
+                .replace('{profileId}', encodeURIComponent(String(profileId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deployUeProfileRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get a UE instance\'s deploy status
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -820,6 +774,84 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(deployUeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+         * @summary Create several gnb profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileBulkCreate: async (profileBulkRequest: ProfileBulkRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileBulkRequest' is not null or undefined
+            assertParamExists('gnbProfileBulkCreate', 'profileBulkRequest', profileBulkRequest)
+            const localVarPath = `/api/profiles/gnb/bulk`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(profileBulkRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a gnb profile for conflicts with the saved ones
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCheck: async (gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileCheck', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb/check`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1020,6 +1052,40 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+         * @summary List the host\'s network interfaces
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        hostInterfaceList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/host/interfaces`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
          * @summary List the images this app deploys
          * @param {*} [options] Override http request option.
@@ -1187,6 +1253,84 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+         * @summary Create several ue profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileBulkCreate: async (profileBulkRequest: ProfileBulkRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileBulkRequest' is not null or undefined
+            assertParamExists('ueProfileBulkCreate', 'profileBulkRequest', profileBulkRequest)
+            const localVarPath = `/api/profiles/ue/bulk`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(profileBulkRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a ue profile for conflicts with the saved ones
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileCheck: async (ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileCheck', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue/check`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1446,103 +1590,52 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop gNB
+         * Fails with 409 while a UE deployed onto this gNB still runs.
+         * @summary Stop the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbDown(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbDown(options);
+        async deployGnbDown(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbDown(profileId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbDown']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
-         * @summary Get gNB container logs
-         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+         * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+         * @summary List the gNBs deployed from gNB profiles
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbLogs(service?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(service, options);
+        async deployGnbList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployGnbListResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Get the logs of one profile gNB
+         * @param {string} profileId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployGnbLogs(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbLogs(profileId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbLogs']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * @summary Deploy the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceDown(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceDown']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s container logs
-         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceLogs(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceLogs']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s deploy status
-         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceStatus(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceStatus']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-         * @summary Deploy a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbSliceUp(slice, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbSliceUp']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * 
-         * @summary Get gNB deploy status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbStatus(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployStatusResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbStatus(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbStatus']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-         * @summary Deploy gNB
-         * @param {DeployGnbRequest} [deployGnbRequest] 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async deployGnbUp(deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(deployGnbRequest, options);
+        async deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(profileId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbUp']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1586,6 +1679,20 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+         * @summary Deploy the UE of one UE profile
+         * @param {string} profileId 
+         * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployUeProfileUp(profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeProfileUp(profileId, deployUeProfileRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeProfileUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get a UE instance\'s deploy status
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -1610,6 +1717,32 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.deployUeUp(instance, deployUeRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployUeUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+         * @summary Create several gnb profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<GnbProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileBulkCreate(profileBulkRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileBulkCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a gnb profile for conflicts with the saved ones
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileCheck(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ProfileCheckResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileCheck(gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileCheck']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -1678,6 +1811,18 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+         * @summary List the host\'s network interfaces
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async hostInterfaceList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<HostInterface>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.hostInterfaceList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.hostInterfaceList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
          * @summary List the images this app deploys
          * @param {*} [options] Override http request option.
@@ -1738,6 +1883,32 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.logout(options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.logout']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+         * @summary Create several ue profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<UeProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileBulkCreate(profileBulkRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileBulkCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a ue profile for conflicts with the saved ones
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileCheck(ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ProfileCheckResult>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileCheck(ueProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileCheck']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -1853,82 +2024,43 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployFree5gcUp(requestDeployFree5gc, options).then((request) => request(axios, basePath));
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop gNB
+         * Fails with 409 while a UE deployed onto this gNB still runs.
+         * @summary Stop the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbDown(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbDown(options).then((request) => request(axios, basePath));
+        deployGnbDown(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbDown(profileId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+         * @summary List the gNBs deployed from gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployGnbList(options?: RawAxiosRequestConfig): AxiosPromise<DeployGnbListResponse> {
+            return localVarFp.deployGnbList(options).then((request) => request(axios, basePath));
         },
         /**
          * 
-         * @summary Get gNB container logs
-         * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+         * @summary Get the logs of one profile gNB
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbLogs(service?: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
-            return localVarFp.deployGnbLogs(service, options).then((request) => request(axios, basePath));
+        deployGnbLogs(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployGnbLogs(profileId, options).then((request) => request(axios, basePath));
         },
         /**
-         * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-         * @summary Stop a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * @summary Deploy the gNB of one gNB profile
+         * @param {string} profileId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbSliceDown(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s container logs
-         * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
-            return localVarFp.deployGnbSliceLogs(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get a gNB slice\'s deploy status
-         * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
-            return localVarFp.deployGnbSliceStatus(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-         * @summary Deploy a gNB slice (ulcl-2slice only)
-         * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbSliceUp(slice, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * 
-         * @summary Get gNB deploy status
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbStatus(options?: RawAxiosRequestConfig): AxiosPromise<DeployStatusResponse> {
-            return localVarFp.deployGnbStatus(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-         * @summary Deploy gNB
-         * @param {DeployGnbRequest} [deployGnbRequest] 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        deployGnbUp(deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbUp(deployGnbRequest, options).then((request) => request(axios, basePath));
+        deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbUp(profileId, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1960,6 +2092,17 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployUeLogs(instance, options).then((request) => request(axios, basePath));
         },
         /**
+         * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+         * @summary Deploy the UE of one UE profile
+         * @param {string} profileId 
+         * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployUeProfileUp(profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployUeProfileUp(profileId, deployUeProfileRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get a UE instance\'s deploy status
          * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -1979,6 +2122,26 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
             return localVarFp.deployUeUp(instance, deployUeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+         * @summary Create several gnb profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<GnbProfile>> {
+            return localVarFp.gnbProfileBulkCreate(profileBulkRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a gnb profile for conflicts with the saved ones
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCheck(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<ProfileCheckResult> {
+            return localVarFp.gnbProfileCheck(gnbProfile, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2031,6 +2194,15 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.gnbProfileUpdate(id, gnbProfile, options).then((request) => request(axios, basePath));
         },
         /**
+         * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+         * @summary List the host\'s network interfaces
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        hostInterfaceList(options?: RawAxiosRequestConfig): AxiosPromise<Array<HostInterface>> {
+            return localVarFp.hostInterfaceList(options).then((request) => request(axios, basePath));
+        },
+        /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
          * @summary List the images this app deploys
          * @param {*} [options] Override http request option.
@@ -2077,6 +2249,26 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         logout(options?: RawAxiosRequestConfig): AxiosPromise<void> {
             return localVarFp.logout(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+         * @summary Create several ue profiles from one
+         * @param {ProfileBulkRequest} profileBulkRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<UeProfile>> {
+            return localVarFp.ueProfileBulkCreate(profileBulkRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+         * @summary Check a ue profile for conflicts with the saved ones
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileCheck(ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<ProfileCheckResult> {
+            return localVarFp.ueProfileCheck(ueProfile, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2178,89 +2370,46 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-     * @summary Stop gNB
+     * Fails with 409 while a UE deployed onto this gNB still runs.
+     * @summary Stop the gNB of one gNB profile
+     * @param {string} profileId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbDown(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbDown(options).then((request) => request(this.axios, this.basePath));
+    public deployGnbDown(profileId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbDown(profileId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+     * @summary List the gNBs deployed from gNB profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployGnbList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbList(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
      * 
-     * @summary Get gNB container logs
-     * @param {string} [service] Filter logs down to one compose service (NF), e.g. \&quot;amf\&quot;. Omit for every service in the project.
+     * @summary Get the logs of one profile gNB
+     * @param {string} profileId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbLogs(service?: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbLogs(service, options).then((request) => request(this.axios, this.basePath));
+    public deployGnbLogs(profileId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbLogs(profileId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
-     * Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-     * @summary Stop a gNB slice (ulcl-2slice only)
-     * @param {DeployGnbSliceDownSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
+     * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+     * @summary Deploy the gNB of one gNB profile
+     * @param {string} profileId 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbSliceDown(slice: DeployGnbSliceDownSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceDown(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get a gNB slice\'s container logs
-     * @param {DeployGnbSliceLogsSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbSliceLogs(slice: DeployGnbSliceLogsSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceLogs(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get a gNB slice\'s deploy status
-     * @param {DeployGnbSliceStatusSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbSliceStatus(slice: DeployGnbSliceStatusSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceStatus(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn\'t running yet.
-     * @summary Deploy a gNB slice (ulcl-2slice only)
-     * @param {DeployGnbSliceUpSliceEnum} slice Which ulcl-2slice slice\&#39;s gNB to act on.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbSliceUp(slice: DeployGnbSliceUpSliceEnum, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbSliceUp(slice, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * 
-     * @summary Get gNB deploy status
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbStatus(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbStatus(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
-     * @summary Deploy gNB
-     * @param {DeployGnbRequest} [deployGnbRequest] 
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public deployGnbUp(deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbUp(deployGnbRequest, options).then((request) => request(this.axios, this.basePath));
+    public deployGnbUp(profileId: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbUp(profileId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -2296,6 +2445,18 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile\'s, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+     * @summary Deploy the UE of one UE profile
+     * @param {string} profileId 
+     * @param {DeployUeProfileRequest} [deployUeProfileRequest] 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployUeProfileUp(profileId: string, deployUeProfileRequest?: DeployUeProfileRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployUeProfileUp(profileId, deployUeProfileRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * 
      * @summary Get a UE instance\'s deploy status
      * @param {string} instance The subscriber\&#39;s UE ID (IMSI), used as the UE instance identifier.
@@ -2316,6 +2477,28 @@ export class DefaultApi extends BaseAPI {
      */
     public deployUeUp(instance: string, deployUeRequest: DeployUeRequest, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).deployUeUp(instance, deployUeRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+     * @summary Create several gnb profiles from one
+     * @param {ProfileBulkRequest} profileBulkRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileBulkCreate(profileBulkRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+     * @summary Check a gnb profile for conflicts with the saved ones
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileCheck(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileCheck(gnbProfile, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -2374,6 +2557,16 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker\'s own bridges and veths are left out).
+     * @summary List the host\'s network interfaces
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public hostInterfaceList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).hostInterfaceList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
      * @summary List the images this app deploys
      * @param {*} [options] Override http request option.
@@ -2424,6 +2617,28 @@ export class DefaultApi extends BaseAPI {
      */
     public logout(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).logout(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+     * @summary Create several ue profiles from one
+     * @param {ProfileBulkRequest} profileBulkRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileBulkCreate(profileBulkRequest: ProfileBulkRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileBulkCreate(profileBulkRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+     * @summary Check a ue profile for conflicts with the saved ones
+     * @param {UeProfile} ueProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileCheck(ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileCheck(ueProfile, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -2482,25 +2697,5 @@ export class DefaultApi extends BaseAPI {
     }
 }
 
-export const DeployGnbSliceDownSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceDownSliceEnum = typeof DeployGnbSliceDownSliceEnum[keyof typeof DeployGnbSliceDownSliceEnum];
-export const DeployGnbSliceLogsSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceLogsSliceEnum = typeof DeployGnbSliceLogsSliceEnum[keyof typeof DeployGnbSliceLogsSliceEnum];
-export const DeployGnbSliceStatusSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceStatusSliceEnum = typeof DeployGnbSliceStatusSliceEnum[keyof typeof DeployGnbSliceStatusSliceEnum];
-export const DeployGnbSliceUpSliceEnum = {
-    Slice1: 'slice1',
-    Slice2: 'slice2',
-} as const;
-export type DeployGnbSliceUpSliceEnum = typeof DeployGnbSliceUpSliceEnum[keyof typeof DeployGnbSliceUpSliceEnum];
 
 

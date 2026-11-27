@@ -217,61 +217,65 @@
   transition: width 0.3s ease;
 }
 
-/* switch row */
-.switchRow {
+/* a unique field clashing with another saved profile */
+.conflict {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--bad-ink);
 }
 
-.switchRow p {
-  margin: 0;
-  flex: 1 1 auto;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.switchRow b {
-  display: block;
-  font-size: 0.78125rem;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 2rem;
-  height: 1.125rem;
+.useBtn {
+  padding: 0 0.375rem;
+  height: 1.25rem;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   cursor: pointer;
 }
 
-.switch::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 0.875rem;
-  height: 0.875rem;
-  border-radius: 50%;
-  background: var(--muted);
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.switch[aria-checked="true"] {
+.useBtn:hover {
   border-color: var(--accent);
-  background: var(--accent);
 }
 
-.switch[aria-checked="true"]::after {
-  background: var(--on-accent);
-  transform: translateX(0.875rem);
+/* read-only value in the form (e.g. the only address of an interface) */
+.readonly {
+  display: flex;
+  align-items: center;
+  height: 1.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-2);
 }
 
-.switch:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+/* bulk create in a list head */
+.bulk {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bulk input {
+  width: 4.5rem;
+}
+
+/* Save / Discard, at the top of the Config tab, under the detail header */
+.saveBar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.saveState {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: 0.75rem;
 }

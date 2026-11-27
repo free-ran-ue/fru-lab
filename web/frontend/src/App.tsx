@@ -4,7 +4,8 @@ import DashboardPage from './page/dashboard/DashboardPage'
 import SubscribersPage from './page/subscribers/SubscribersPage'
 import SubscriberFormPage from './page/subscribers/SubscriberFormPage'
 import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
-import LogsPage from './page/logs/LogsPage'
+import LogsPage from './page/overview/LogsPage'
+import EventsPage from './page/overview/EventsPage'
 import ImagesPage from './page/images/ImagesPage'
 import CoreNetworkPage from './page/core/CoreNetworkPage'
 import FreeRanPage from './page/ran/FreeRanPage'
@@ -36,7 +37,11 @@ export default function App() {
         <Route path="/core-network/subscribers/:ueId/:plmnId/edit" element={<SubscriberFormPage />} />
         <Route path="/core-network/subscribers/:ueId/:plmnId" element={<SubscriberViewPage />} />
         <Route path="/free-ran" element={<FreeRanPage />} />
+        {/* profiles are edited on the free-ran / free-ue pages themselves */}
+        <Route path="/free-ran/profiles" element={<Navigate to="/free-ran" replace />} />
         <Route path="/free-ue" element={<FreeUePage />} />
+        <Route path="/free-ue/profiles" element={<Navigate to="/free-ue" replace />} />
+        <Route path="/events" element={<EventsPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/images" element={<ImagesPage />} />
       </Route>

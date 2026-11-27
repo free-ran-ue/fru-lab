@@ -30,7 +30,8 @@ function sectionOf(pathname: string): Crumb | null {
   if (pathname.startsWith('/core-network')) return { label: 'Core Network', to: '/core-network' }
   if (pathname.startsWith('/free-ran')) return { label: 'free-ran', to: '/free-ran' }
   if (pathname.startsWith('/free-ue')) return { label: 'free-ue', to: '/free-ue' }
-  if (pathname.startsWith('/logs') || pathname.startsWith('/images')) return { label: 'Tools' }
+  if (pathname.startsWith('/logs') || pathname.startsWith('/events')) return { label: 'Overview', to: '/' }
+  if (pathname.startsWith('/images')) return { label: 'Tools' }
   return null
 }
 
@@ -71,7 +72,8 @@ export default function AppLayout({ crumbs, crumbExtra, headerActions, overlay, 
   }
 
   const core = lab.gnbExternal && !lab.coreUp ? 'external' : lab.runningTemplate ?? 'off'
-  const gnb = lab.nodes.gnb.status === 'stopped' ? 'off' : lab.isTwoSlice ? '2 slices' : (lab.gnb.gnbDeployment?.profileName ?? 'on')
+  // how many gNBs run
+  const gnb = lab.gnbs.length === 0 ? 'off' : String(lab.gnbs.length)
 
   return (
     <div className={styles.shell}>

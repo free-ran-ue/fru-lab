@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useTheme } from '../../theme'
 import styles from './sidebar.module.css'
 
@@ -16,7 +16,7 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg className={styles.icon} width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={styles.icon} width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {children}
     </svg>
   )
@@ -27,50 +27,90 @@ const ICONS = {
   core: <Icon><rect x="2.5" y="2.5" width="11" height="4" rx="1" /><rect x="2.5" y="9.5" width="11" height="4" rx="1" /><path d="M5 4.5h.01M5 11.5h.01" /></Icon>,
   ran: <Icon><path d="M8 7v7M5.5 14h5M8 7l-2.5 7M8 7l2.5 7" /><path d="M5.2 4.2a4 4 0 0 1 5.6 0M3.4 2.4a6.5 6.5 0 0 1 9.2 0" /></Icon>,
   ue: <Icon><rect x="4.5" y="1.5" width="7" height="13" rx="1.5" /><path d="M7 12h2" /></Icon>,
-  logs: <Icon><path d="M3 4h10M3 8h10M3 12h6" /></Icon>,
   images: <Icon><path d="M8 2.5l5.5 3-5.5 3-5.5-3zM2.5 8.5l5.5 3 5.5-3M2.5 11l5.5 3 5.5-3" /></Icon>,
   sun: <Icon><circle cx="8" cy="8" r="2.75" /><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" /></Icon>,
   moon: <Icon><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" /></Icon>,
   logout: <Icon><path d="M6 2.5H3v11h3M10 5l3 3-3 3M13 8H6" /></Icon>,
 }
 
-const ITEMS: { to: string; label: string; icon: ReactNode; end?: boolean }[] = [
-  { to: '/', label: 'Overview', icon: ICONS.overview, end: true },
-  { to: '/core-network', label: 'Core Network', icon: ICONS.core },
+interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean; children?: { to: string; label: string; end?: boolean }[] }
+
+const ITEMS: NavItem[] = [
+  {
+    to: '/', label: 'Overview', icon: ICONS.overview, end: true,
+    children: [{ to: '/', label: 'Topology', end: true }, { to: '/events', label: 'Events' }, { to: '/logs', label: 'Logs' }],
+  },
+  {
+    to: '/core-network', label: 'Core Network (free5GC)', icon: ICONS.core,
+    children: [{ to: '/core-network', label: 'Network functions', end: true }, { to: '/core-network/subscribers', label: 'Subscribers' }],
+  },
   { to: '/free-ran', label: 'free-ran (gNB)', icon: ICONS.ran },
   { to: '/free-ue', label: 'free-ue (UE)', icon: ICONS.ue },
 ]
 
-const TOOLS: typeof ITEMS = [
-  { to: '/logs', label: 'Logs', icon: ICONS.logs },
+const TOOLS: NavItem[] = [
   { to: '/images', label: 'Images', icon: ICONS.images },
 ]
 
 const cls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.active : ''}`
+const parentCls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.parentActive : ''}`
+const subCls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${styles.sub} ${isActive ? styles.active : ''}`
 
 interface SidebarProps {
   onLogout?: () => void
 }
 
-// Sidebar is the workbench's activity bar: one icon per view, the tools,
-// and the theme and log-out buttons at the bottom. Labels show on hover.
+// Item is one view; a view with sub-pages lists them under it.
+function Item({ to, label, icon, end, children }: NavItem) {
+  const { pathname } = useLocation()
+  // a view with sub-pages is lit while any of them is open
+  const inGroup = children?.some((c) => (c.end ? pathname === c.to : pathname.startsWith(c.to)))
+  return (
+    <>
+      <NavLink to={children ? children[0].to : to} end={end} className={children ? () => parentCls({ isActive: Boolean(inGroup) }) : cls} title={label}>
+        {icon}
+        <span className={styles.label}>{label}</span>
+      </NavLink>
+      {children?.map((c) => (
+        <NavLink key={c.to} to={c.to} end={c.end} className={subCls} title={`${label} · ${c.label}`}>
+          <span className={styles.label}>{c.label}</span>
+        </NavLink>
+      ))}
+    </>
+  )
+}
+
+// Sidebar is the workbench's navigation: the views, the tools, and the
+// theme and log-out buttons at the bottom, each an icon with its label.
+// Below 700px it collapses to icons only.
 export default function Sidebar({ onLogout }: SidebarProps) {
   const [theme, toggleTheme] = useTheme()
+  const themeLabel = theme === 'dark' ? 'Light theme' : 'Dark theme'
   return (
     <aside className={styles.bar} aria-label="Views">
-      <Link to="/" className={styles.brand} aria-label="fru-lab overview"><LogoMark size={24} /></Link>
-      <nav className={styles.group}>
-        {ITEMS.map((i) => <NavLink key={i.to} to={i.to} end={i.end} className={cls} aria-label={i.label} data-tip={i.label}>{i.icon}</NavLink>)}
+      <Link to="/" className={styles.brand} aria-label="fru-lab overview">
+        <LogoMark size={27} />
+        <span className={styles.brandName}>fru-lab</span>
+      </Link>
+      <nav className={styles.group} aria-label="Lab">
+        <span className={styles.heading}>Lab</span>
+        {ITEMS.map((i) => <Item key={i.to} {...i} />)}
       </nav>
-      <span className={styles.sep} />
-      <nav className={styles.group}>
-        {TOOLS.map((i) => <NavLink key={i.to} to={i.to} className={cls} aria-label={i.label} data-tip={i.label}>{i.icon}</NavLink>)}
+      <nav className={styles.group} aria-label="Tools">
+        <span className={styles.heading}>Tools</span>
+        {TOOLS.map((i) => <Item key={i.to} {...i} />)}
       </nav>
       <div className={styles.foot}>
-        <button type="button" className={styles.item} onClick={toggleTheme} aria-label={theme === 'dark' ? 'Light theme' : 'Dark theme'} data-tip={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
+        <button type="button" className={styles.item} onClick={toggleTheme} title={themeLabel}>
           {theme === 'dark' ? ICONS.sun : ICONS.moon}
+          <span className={styles.label}>{themeLabel}</span>
         </button>
-        {onLogout && <button type="button" className={styles.item} onClick={onLogout} aria-label="Log out" data-tip="Log out">{ICONS.logout}</button>}
+        {onLogout && (
+          <button type="button" className={styles.item} onClick={onLogout} title="Log out">
+            {ICONS.logout}
+            <span className={styles.label}>Log out</span>
+          </button>
+        )}
       </div>
     </aside>
   )

@@ -1,26 +1,41 @@
+import type { GnbDeployment } from '../api'
 import { useFree5gcStatus } from './useFree5gcStatus'
-import { useGnbStatus } from './useGnbStatus'
-import { useGnbSliceStatus } from './useGnbSliceStatus'
+import { useGnbInstances } from './useGnbInstances'
 import { useUeInstances, type UeRow } from './useUeInstances'
-import { useStoredState, useUeProfiles } from './useProfiles'
+import { useGnbProfiles, useUeProfiles } from './useProfiles'
 import { FREE5GC_TEMPLATE_OPTIONS, detectFree5gcTemplate, type Free5gcTemplate } from './free5gcTemplate'
 import type { DeploymentNode, NetworkFunction, NodeStatus } from './types'
 
-export interface GnbSlice {
+// LabGnb is one gNB that is up: a gNB profile's gNB. Its id is the gNB
+// target name, gnb-<profileId>, which is also its canvas node id, its log
+// stream target and the `gnb` a UE's status records.
+export interface LabGnb {
+  id: string
+  profileId: string
   name: string
+  profileName: string
   status: NodeStatus
-  // UE instances currently up on this slice (by the subscriber's sd)
-  ueCount: number
+  networkFunctions: NetworkFunction[]
+  lastDeployed: string
+  // what it was deployed with (profile name, core, IDs and addresses)
+  deployment: GnbDeployment | null
+  core: 'lab' | 'external'
+  sd: string
+  pending: boolean
+  stop: () => Promise<void>
 }
 
-// mirrors backend's constant.SLICE1_SD / SLICE2_SD - which gNB slice a
-// UE attaches to under ulcl-2slice, from its subscriber's first session.
-export const SLICE1_SD = '010203'
-export const SLICE2_SD = '112233'
+const STATUS_RANK: NodeStatus[] = ['unhealthy', 'deploying', 'running', 'stopped']
+// the worst of several statuses; stopped when there are none
+function worst(statuses: NodeStatus[]): NodeStatus {
+  return STATUS_RANK.find((s) => statuses.includes(s)) ?? 'stopped'
+}
 
-// UE's count is driven by subscribers, not by who happens to be deployed
-// right now - a subscriber that's never been deployed still counts toward
-// the total, just as "stopped".
+const fmtTime = (t?: string) => (t ? new Date(t).toLocaleString() : '—')
+
+// The UE count is driven by the UE profiles (one UE each), not by who
+// happens to be deployed right now - a profile never deployed still counts
+// toward the total, just as "stopped".
 function computeUeNode(rows: UeRow[]): DeploymentNode {
   const total = rows.length
   const runningCount = rows.filter((row) => row.status === 'running').length
@@ -33,7 +48,7 @@ function computeUeNode(rows: UeRow[]): DeploymentNode {
   return {
     id: 'ue',
     label: 'UE',
-    sublabel: total === 0 ? 'No subscribers yet' : `${runningCount} / ${total} UE instance${total === 1 ? '' : 's'} running`,
+    sublabel: total === 0 ? 'No UE profiles yet' : `${runningCount} / ${total} UE instance${total === 1 ? '' : 's'} running`,
     status,
     statusLabel: `${runningCount} / ${total}`,
     template: 'basic (built-in template)',
@@ -41,79 +56,70 @@ function computeUeNode(rows: UeRow[]): DeploymentNode {
   }
 }
 
-// Under ulcl-2slice the one gNB stands for both slice gNBs: this folds
-// their two statuses into one.
-function computeGnbAggregateNode(slice1: DeploymentNode, slice2: DeploymentNode): DeploymentNode {
-  const statuses = [slice1.status, slice2.status]
-  const status: NodeStatus = statuses.includes('unhealthy')
-    ? 'unhealthy'
-    : statuses.includes('deploying')
-      ? 'deploying'
-      : statuses.includes('running') ? 'running' : 'stopped'
-  return {
-    id: 'gnb',
-    label: 'gNB',
-    sublabel: 'free-ran-ue · slice1 + slice2',
-    status,
-    template: 'ulcl-2slice (two slices)',
-    lastDeployed: slice1.lastDeployed !== '—' ? slice1.lastDeployed : slice2.lastDeployed,
-  }
-}
-
 export function templateLabel(template: Free5gcTemplate): string {
   return FREE5GC_TEMPLATE_OPTIONS.find((option) => option.value === template)?.label ?? 'Basic'
 }
 
-// useLab polls every deploy target (core, gNB and its two slices, the UE
-// fleet) and derives what the Dashboard and the Core Network / free-ran /
-// free-ue pages all need: aggregate nodes, the running template, and the
-// dependency rules the backend enforces (core → gNB → UE).
+// useLab polls every deploy target (core, the profile gNBs, the UE fleet) and derives what the Dashboard and the Core Network /
+// free-ran / free-ue pages all need: the running gNBs, aggregate nodes, the
+// running template, and the dependency rules the backend enforces
+// (core → gNB → UE).
 function useLabState() {
   const free5gc = useFree5gcStatus()
-  const gnb = useGnbStatus()
-  const gnbSlice1 = useGnbSliceStatus('slice1')
-  const gnbSlice2 = useGnbSliceStatus('slice2')
+  const gnbInstances = useGnbInstances()
+  const gnbProfiles = useGnbProfiles()
   const ueProfiles = useUeProfiles()
-  // whether the UE fleet includes the free5GC subscribers (only possible
-  // while the lab core runs)
-  const [subscribersWanted, setSubscribersWanted] = useStoredState('frulab-ue-subscribers', true)
+  const ue = useUeInstances({ profiles: ueProfiles.profiles })
   const coreRunning = free5gc.node.status === 'running'
-  const useSubscribers = subscribersWanted && coreRunning
-  const ue = useUeInstances({ profiles: ueProfiles.profiles, useSubscribers })
 
   // the template actually running, read back from the live NFs; null while
   // the core is stopped
   const runningTemplate = detectFree5gcTemplate(free5gc.networkFunctions)
-  const isTwoSlice = runningTemplate === 'ulcl-2slice'
 
-  const gnbNode = isTwoSlice ? computeGnbAggregateNode(gnbSlice1.node, gnbSlice2.node) : gnb.node
+  // every gNB that is up, in profile order
+  const { stop: stopGnb, pending: gnbPending } = gnbInstances
+  const profileOrder = new Map(gnbProfiles.profiles.map((p, i) => [p.id, i]))
+  const gnbs: LabGnb[] = [
+    ...[...gnbInstances.instances]
+      .filter((g) => g.status !== 'stopped')
+      .sort((a, b) => (profileOrder.get(a.profileId) ?? 1e9) - (profileOrder.get(b.profileId) ?? 1e9))
+      .map((g): LabGnb => ({
+        id: g.instance,
+        profileId: g.profileId,
+        name: g.instance,
+        profileName: g.gnb?.profileName || gnbProfiles.profiles.find((p) => p.id === g.profileId)?.name || g.profileId,
+        status: g.status as NodeStatus,
+        networkFunctions: (g.services ?? []).map((s) => ({ name: s.name.toUpperCase(), status: s.status as NodeStatus })),
+        lastDeployed: fmtTime(g.lastDeployed),
+        deployment: g.gnb ?? null,
+        core: g.gnb?.core === 'external' ? 'external' : 'lab',
+        sd: g.gnb?.sd ?? '',
+        pending: Boolean(gnbPending[g.profileId]),
+        stop: () => stopGnb(g.profileId),
+      })),
+  ]
+
+  const gnbNode: DeploymentNode = {
+    id: 'gnb',
+    label: 'gNB',
+    sublabel: gnbs.length ? `${gnbs.length} gNB${gnbs.length === 1 ? '' : 's'} running` : 'free-ran-ue · gNB simulator',
+    status: worst(gnbs.map((g) => g.status)),
+    statusLabel: gnbs.length ? String(gnbs.length) : undefined,
+    template: 'gNB profiles',
+    lastDeployed: gnbs[0]?.lastDeployed ?? '—',
+  }
   const ueNode = computeUeNode(ue.rows)
 
-  // when the gNB stands for both slices, list both slices' own services
-  const gnbNetworkFunctions: NetworkFunction[] = isTwoSlice
-    ? [
-      ...gnbSlice1.networkFunctions.map((nf) => ({ ...nf, name: `SLICE1-${nf.name}` })),
-      ...gnbSlice2.networkFunctions.map((nf) => ({ ...nf, name: `SLICE2-${nf.name}` })),
-    ]
-    : gnb.networkFunctions
-
   const coreUp = free5gc.node.status !== 'stopped'
-  // any gNB target up, including one left over from another template
-  const gnbUp = gnb.node.status !== 'stopped' || gnbSlice1.node.status !== 'stopped' || gnbSlice2.node.status !== 'stopped'
-  // the single gNB runs on an external core (its profile says so)
-  const gnbExternal = gnb.node.status !== 'stopped' && gnb.gnbDeployment?.core === 'external'
+  const gnbUp = gnbs.length > 0
+  // the running gNBs that dial a core outside the lab
+  const externalGnbs = gnbs.filter((g) => g.core === 'external')
+  const gnbExternal = externalGnbs.length > 0
   // gNBs that depend on the lab core
-  const labGnbUp = (gnb.node.status !== 'stopped' && !gnbExternal) || gnbSlice1.node.status !== 'stopped' || gnbSlice2.node.status !== 'stopped'
-  const loaded = free5gc.loaded && gnb.loaded && !ue.isLoadingInstances
+  const labGnbs = gnbs.filter((g) => g.core === 'lab')
+  const loaded = free5gc.loaded && gnbInstances.loaded && !ue.isLoadingInstances
   const upUes = ue.rows.filter((row) => row.status !== 'stopped')
   const ueUp = upUes.length > 0
-
-  const gnbSlices: GnbSlice[] | null = isTwoSlice
-    ? [
-      { name: 'slice1', status: gnbSlice1.node.status, ueCount: upUes.filter((row) => row.sd === SLICE1_SD).length },
-      { name: 'slice2', status: gnbSlice2.node.status, ueCount: upUes.filter((row) => row.sd === SLICE2_SD).length },
-    ]
-    : null
 
   const healthyNfs = free5gc.networkFunctions.filter((nf) => nf.status === 'running').length
   const ueCounts = {
@@ -127,21 +133,28 @@ function useLabState() {
   // checkDeployPrerequisite), so buttons are disabled with a reason
   // instead of only failing after a click
   const blocked = {
-    coreStop: labGnbUp ? 'Stop gNB on the free-ran page before stopping the core network' : undefined,
+    coreStop: labGnbs.length
+      ? `Stop the ${labGnbs.length} gNB${labGnbs.length === 1 ? '' : 's'} on the lab core (free-ran) before stopping the core network`
+      : undefined,
     // for a gNB on the lab core; one on an external core needs nothing
-    gnbDeploy: free5gc.node.status !== 'running' ? 'Deploy the core network first, or pick a gNB profile on an external core' : undefined,
-    gnbStop: ueUp ? 'Stop all UE instances on the free-ue page before stopping gNB' : undefined,
-    ueDeploy: gnbNode.status === 'stopped' ? 'Deploy gNB on the free-ran page before deploying a UE instance' : undefined,
+    gnbDeploy: coreRunning ? undefined : 'Deploy the core network first, or pick a gNB profile on an external core',
+    ueDeploy: gnbUp ? undefined : 'Deploy a gNB on the free-ran page before deploying a UE instance',
+  }
+  // why stopping gNB `id` is not possible now: while a UE recorded on it runs
+  const gnbStopBlocked = (id: string): string | undefined => {
+    const on = upUes.filter((r) => r.gnb === id)
+    if (on.length === 0) return undefined
+    return `Stop the ${on.length} UE${on.length === 1 ? '' : 's'} on this gNB first (free-ue)`
   }
 
   return {
-    free5gc, gnb, gnbSlice1, gnbSlice2, ue,
-    runningTemplate, isTwoSlice,
+    free5gc, gnbInstances, ue,
+    gnbs, externalGnbs,
+    runningTemplate,
     nodes: { core: free5gc.node, gnb: gnbNode, ue: ueNode },
-    gnbNetworkFunctions, gnbSlices,
     coreUp, gnbUp, ueUp, upUes, gnbExternal, loaded,
-    ueProfiles, useSubscribers, subscribersWanted, setSubscribersWanted, coreRunning,
-    healthyNfs, ueCounts, blocked,
+    gnbProfiles, ueProfiles, coreRunning,
+    healthyNfs, ueCounts, blocked, gnbStopBlocked,
   }
 }
 

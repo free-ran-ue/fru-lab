@@ -1,55 +1,88 @@
 import { useEffect, useState } from 'react'
-import type { GnbProfile } from '../../api'
-import { extractErrorMessage } from '../../apiClient'
+import type { GnbProfile, HostInterface } from '../../api'
+import { api, extractErrorMessage } from '../../apiClient'
 import { Button, Segmented } from '../LabUi'
+import type { LabGnb } from '../useLab'
 import { LAB_DEFAULT_GNB, useGnbProfiles } from '../useProfiles'
-import { Field, ps, useConfigPreview, Yaml } from './parts'
+import { ConflictNote, Field, ps, useConfigPreview, useProfileCheck, Yaml } from './parts'
 
 const HEX6 = /^[0-9a-fA-F]{6}$/
 const IP = /^(\d{1,3}\.){3}\d{1,3}$|:/
 const LEVELS = ['error', 'warn', 'info', 'debug', 'trace']
+// the fields the form shows a conflict under; any other comes as a banner
+const SHOWN = new Set(['name', 'gnbId', 'gnbName', 'mcc', 'mnc', 'tac', 'sst', 'sd', 'n2Ip', 'amfIp', 'amfPort', 'upfIp', 'upfPort', 'hostInterface', 'hostIp'])
+
+// useHostInterfaces loads the host's interfaces once `enabled` turns on
+// (an external-core profile is being edited).
+function useHostInterfaces(enabled: boolean) {
+  const [list, setList] = useState<HostInterface[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!enabled || list) return
+    api.hostInterfaceList()
+      .then((r) => { setList(r.data); setError(null) })
+      .catch((e) => setError(extractErrorMessage(e, 'Cannot list the host interfaces')))
+  }, [enabled, list])
+  return { list: list ?? [], loaded: list !== null, error }
+}
 
 interface Props {
   profiles: ReturnType<typeof useGnbProfiles>
-  // '' is the lab default
+  // '' is a new, unsaved profile
   selectedId: string
   onSelect: (id: string) => void
-  // the profile the running gNB uses (null when it is stopped)
-  inUse: string | null
-  // why deploying `p` is not possible now, if it is not
-  deployBlocked: (p: GnbProfile) => string | undefined
-  gnbUp: boolean
-  busy: boolean
-  onDeploy: (id: string) => void
+  // a new profile starts as a copy of this one (Duplicate); without it,
+  // from the defaults
+  copyOf?: GnbProfile
+  // the selected profile's gNB when it is up
+  running?: LabGnb
   onNotify: (ok: boolean, msg: string) => void
-  // ULCL (Two Slice) runs the built-in slice gNBs instead
-  twoSlice: boolean
 }
 
-// GnbProfilesPanel lists the gNB profiles and edits the selected one, with
-// the gnbcfg.yaml it deploys rendered live beside the form.
-export default function GnbProfilesPanel({ profiles, selectedId, onSelect, inUse, deployBlocked, gnbUp, busy, onDeploy, onNotify, twoSlice }: Props) {
+// GnbProfilesPanel is the Config tab of a gNB: the profile's form (every
+// profile is one gNB) with Save / Discard on a bar at its top, the
+// gnbcfg.yaml it deploys rendered live, and clashes with other saved
+// profiles shown under each field. Deploying and deleting live in the
+// detail header, not here.
+export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyOf, running, onNotify }: Props) {
   const saved = profiles.profiles.find((p) => p.id === selectedId)
-  const base = saved ?? LAB_DEFAULT_GNB
+  const initial = (): GnbProfile => saved ?? (copyOf ? { ...copyOf, id: undefined, updatedAt: undefined, name: `${copyOf.name} copy` } : LAB_DEFAULT_GNB)
+  const [base, setBase] = useState<GnbProfile>(initial)
   const [draft, setDraft] = useState<GnbProfile>(base)
   const [saving, setSaving] = useState(false)
   const dirty = JSON.stringify(draft) !== JSON.stringify(base)
-  // the untouched lab default (read-only until a field changes)
-  const builtIn = !draft.id && selectedId === '' && !dirty
-  const isNew = !draft.id && !builtIn
+  const isNew = !draft.id
+  const external = draft.core === 'external'
   const preview = useConfigPreview(draft, profiles.render)
+  const check = useProfileCheck(draft, profiles.check)
+  const hosts = useHostInterfaces(external)
 
-  // a different profile picked: edit that one
-  useEffect(() => { setDraft(saved ?? LAB_DEFAULT_GNB) }, [selectedId, saved])
+  // a different profile picked (or the saved one reloaded): edit that one
+  useEffect(() => {
+    const b = initial()
+    setBase(b)
+    setDraft(b)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, saved])
 
   const set = (patch: Partial<GnbProfile>) => setDraft((d) => ({ ...d, ...patch }))
-  const external = draft.core === 'external'
+  const conflict = check.byField
 
-  async function save(asNew: boolean) {
+  // external core: the interface the gNB listens on, then one of its addresses
+  const iface = hosts.list.find((h) => h.name === draft.hostInterface)
+  const ifaceMissing = Boolean(draft.hostInterface) && hosts.loaded && !iface
+  function pickInterface(name: string) {
+    const h = hosts.list.find((x) => x.name === name)
+    set({ hostInterface: name || undefined, hostIp: h?.addresses[0] ?? undefined })
+  }
+
+  async function save() {
     setSaving(true)
     try {
-      const p = await profiles.save(asNew ? { ...draft, id: undefined } : draft)
+      const p = await profiles.save(draft)
       onSelect(p.id ?? '')
+      setBase(p)
+      setDraft(p)
       onNotify(true, `Saved gNB profile ${p.name}`)
     } catch (e) {
       onNotify(false, extractErrorMessage(e, 'Failed to save the profile'))
@@ -58,66 +91,76 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, inUse
     }
   }
 
-  async function remove() {
-    if (!draft.id || !window.confirm(`Delete gNB profile ${draft.name}?`)) return
-    try {
-      await profiles.remove(draft.id)
-      onSelect('')
-      onNotify(true, `Deleted ${draft.name}`)
-    } catch (e) {
-      onNotify(false, extractErrorMessage(e, 'Failed to delete the profile'))
-    }
-  }
 
-  const blocked = deployBlocked(draft) ?? (dirty ? 'Save the profile before deploying it' : undefined)
+  const hasConflicts = check.conflicts.length > 0
+  const others = check.conflicts.filter((c) => !SHOWN.has(c.field))
 
   return (
     <div className={ps.panel}>
-      <div className={ps.section}>
-        <p className={ps.sectionTitle}>gNB profiles</p>
-        <div className={ps.pills}>
-          {[{ ...LAB_DEFAULT_GNB, id: '' }, ...profiles.profiles].map((p) => (
-            <button key={p.id || 'default'} type="button" className={ps.pill} aria-pressed={(p.id ?? '') === selectedId && !isNew} onClick={() => onSelect(p.id ?? '')}>
-              <b>{p.name}</b>
-              <span>{p.core === 'external' ? `external · AMF ${p.amfIp}` : 'lab free5GC'}</span>
-              {inUse === (p.id ?? '') && <span className={ps.inUse}>● running</span>}
-            </button>
-          ))}
-          <button type="button" className={`${ps.pill} ${ps.pillNew}`} aria-pressed={isNew} onClick={() => setDraft({ ...base, id: undefined, name: `${base.name} copy` })}>+ new profile from the selected one</button>
-        </div>
+      <div className={ps.saveBar}>
+        <span className={ps.saveState}>{hasConflicts ? `${check.conflicts.length} conflict${check.conflicts.length === 1 ? '' : 's'} to resolve` : isNew ? 'Not saved yet' : dirty ? 'Unsaved changes' : 'Saved'}</span>
+        {draft.id && dirty && <Button small onClick={() => setDraft(base)}>Discard</Button>}
+        <Button kind="primary" small busy={saving} disabled={hasConflicts || (!dirty && !isNew)} title={hasConflicts ? 'Resolve the conflicts first' : undefined} onClick={save}>
+          {isNew ? 'Save profile' : 'Save'}
+        </Button>
       </div>
-
       <div className={ps.section}>
-        {twoSlice && <p className={`${ps.banner} ${ps.bannerWarn}`}>The core runs ULCL (Two Slice): free-ran deploys its two built-in slice gNBs, so profiles are not used until the core runs another template.</p>}
-        {builtIn && <p className={ps.banner}>The built-in lab gNB. Change any field to start a new profile from it.</p>}
+        {isNew && <p className={ps.banner}>A new profile{draft.name ? ` (${draft.name})` : ''}. Every field is editable; save it, then deploy it from the header.</p>}
+        {running && <p className={ps.banner}>This profile's gNB runs as {running.name}. Changes apply the next time it is deployed.</p>}
+        {others.map((c) => <p key={c.field} className={`${ps.banner} ${ps.bannerWarn}`}>{c.message}</p>)}
         <div className={ps.grid}>
-          <Field wide label="Profile name" value={draft.name} onChange={(v) => set({ name: v })} />
+          <Field wide label="Profile name" value={draft.name} onChange={(v) => set({ name: v })} conflict={conflict('name')} />
           <div className={`${ps.field} ${ps.wide}`}>
             <label>Core network</label>
             <Segmented
               value={draft.core}
               options={[{ value: 'lab', label: 'Lab free5GC' }, { value: 'external', label: 'External core' }]}
               onChange={(v) => set(v === 'external'
-                ? { core: v, amfIp: draft.amfIp ?? '', amfPort: draft.amfPort ?? 38412, upfIp: draft.upfIp ?? '', upfPort: draft.upfPort ?? 2152, hostIp: draft.hostIp ?? '' }
-                : { core: v, amfIp: undefined, amfPort: undefined, upfIp: undefined, upfPort: undefined, hostIp: undefined })}
+                ? { core: v, amfIp: draft.amfIp ?? '', amfPort: draft.amfPort ?? 38412, upfIp: draft.upfIp ?? '', upfPort: draft.upfPort ?? 2152, n2Ip: undefined }
+                : { core: v, amfIp: undefined, amfPort: undefined, upfIp: undefined, upfPort: undefined, hostInterface: undefined, hostIp: undefined, n2Ip: draft.n2Ip ?? LAB_DEFAULT_GNB.n2Ip })}
             />
           </div>
+          {!external && (
+            <Field wide label="N2 IP" value={draft.n2Ip ?? ''} onChange={(v) => set({ n2Ip: v })} pattern={IP} conflict={conflict('n2Ip')} hint="The gNB's N2/N3 address on the lab network: 10.0.1.20 - 10.0.1.254. The address UEs dial is assigned on deploy." />
+          )}
           {external && (
             <>
-              <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} />
-              <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} />
-              <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} />
-              <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} />
-              <Field wide label="Host IP" value={draft.hostIp ?? ''} onChange={(v) => set({ hostIp: v })} pattern={IP} hint="An address of this host the core can reach. The gNB runs on the host network and listens here; UEs dial it too." />
+              <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} conflict={conflict('amfIp')} />
+              <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} conflict={conflict('amfPort')} />
+              <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} conflict={conflict('upfIp')} />
+              <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} conflict={conflict('upfPort')} />
+              <div className={ps.field}>
+                <label htmlFor="gnb-iface">Host interface</label>
+                <select id="gnb-iface" className={`${ps.input} ${ifaceMissing || conflict('hostInterface') ? ps.inputBad : ''}`} value={draft.hostInterface ?? ''} onChange={(e) => pickInterface(e.target.value)}>
+                  <option value="">{hosts.loaded ? 'pick an interface' : 'loading…'}</option>
+                  {hosts.list.map((h) => <option key={h.name} value={h.name}>{h.name} · {h.addresses.join(', ')}</option>)}
+                  {ifaceMissing && <option value={draft.hostInterface}>{draft.hostInterface} (not on this host)</option>}
+                </select>
+                {hosts.error && <span className={ps.fieldHint}>{hosts.error}</span>}
+                <ConflictNote conflict={conflict('hostInterface')} onUse={pickInterface} />
+              </div>
+              <div className={ps.field}>
+                <label htmlFor="gnb-hostip">Host IP</label>
+                {iface && iface.addresses.length > 1
+                  ? (
+                    <select id="gnb-hostip" className={`${ps.input} ${conflict('hostIp') ? ps.inputBad : ''}`} value={draft.hostIp ?? ''} onChange={(e) => set({ hostIp: e.target.value })}>
+                      {!iface.addresses.includes(draft.hostIp ?? '') && <option value={draft.hostIp ?? ''}>{draft.hostIp || 'pick an address'}</option>}
+                      {iface.addresses.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  )
+                  : <span id="gnb-hostip" className={ps.readonly}>{draft.hostIp || '—'}</span>}
+                <ConflictNote conflict={conflict('hostIp')} onUse={(v) => set({ hostIp: v })} />
+              </div>
+              <span className={`${ps.fieldHint} ${ps.wide}`}>The gNB runs on the host network and listens on this address; the core must reach it, and UEs dial it too.</span>
             </>
           )}
-          <Field label="gNB ID" value={draft.gnbId} onChange={(v) => set({ gnbId: v })} pattern={HEX6} hint="6 hex digits" />
-          <Field label="gNB name" value={draft.gnbName ?? ''} onChange={(v) => set({ gnbName: v })} />
-          <Field label="MCC" value={draft.mcc} onChange={(v) => set({ mcc: v })} pattern={/^\d{3}$/} />
-          <Field label="MNC" value={draft.mnc} onChange={(v) => set({ mnc: v })} pattern={/^\d{2,3}$/} />
-          <Field label="TAC" value={draft.tac} onChange={(v) => set({ tac: v })} pattern={HEX6} hint="6 hex digits" />
-          <Field label="SST" value={draft.sst} onChange={(v) => set({ sst: v })} pattern={/^\d{1,3}$/} />
-          <Field label="SD" value={draft.sd ?? ''} onChange={(v) => set({ sd: v })} pattern={/^([0-9a-fA-F]{6})?$/} hint="6 hex digits, optional" />
+          <Field label="gNB ID" value={draft.gnbId} onChange={(v) => set({ gnbId: v })} pattern={HEX6} hint="6 hex digits" conflict={conflict('gnbId')} />
+          <Field label="gNB name" value={draft.gnbName ?? ''} onChange={(v) => set({ gnbName: v })} conflict={conflict('gnbName')} />
+          <Field label="MCC" value={draft.mcc} onChange={(v) => set({ mcc: v })} pattern={/^\d{3}$/} conflict={conflict('mcc')} />
+          <Field label="MNC" value={draft.mnc} onChange={(v) => set({ mnc: v })} pattern={/^\d{2,3}$/} conflict={conflict('mnc')} />
+          <Field label="TAC" value={draft.tac} onChange={(v) => set({ tac: v })} pattern={HEX6} hint="6 hex digits" conflict={conflict('tac')} />
+          <Field label="SST" value={draft.sst} onChange={(v) => set({ sst: v })} pattern={/^\d{1,3}$/} conflict={conflict('sst')} />
+          <Field label="SD" value={draft.sd ?? ''} onChange={(v) => set({ sd: v })} pattern={/^([0-9a-fA-F]{6})?$/} hint="6 hex digits, optional" conflict={conflict('sd')} />
           <div className={ps.field}>
             <label htmlFor="gnb-log">Log level</label>
             <select id="gnb-log" className={ps.input} value={draft.logLevel ?? 'info'} onChange={(e) => set({ logLevel: e.target.value })}>
@@ -132,15 +175,6 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, inUse
         <Yaml text={preview.yaml} error={preview.error} />
       </div>
 
-      <div className={ps.actions}>
-        {!builtIn && (dirty || isNew) && <Button kind="primary" small busy={saving} onClick={() => save(isNew)}>{isNew ? 'Save new profile' : 'Save changes'}</Button>}
-        {draft.id && dirty && <Button small onClick={() => save(true)}>Save as new</Button>}
-        {draft.id && !dirty && <Button kind="danger" small onClick={remove}>Delete</Button>}
-        <span className={ps.spacer} />
-        <Button kind="primary" busy={busy} disabled={gnbUp || twoSlice || Boolean(blocked)} title={gnbUp ? 'Stop the running gNB first' : blocked} onClick={() => onDeploy(draft.id ?? '')}>
-          Deploy with this profile
-        </Button>
-      </div>
     </div>
   )
 }

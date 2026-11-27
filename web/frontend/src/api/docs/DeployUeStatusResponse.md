@@ -6,6 +6,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **instance** | **string** |  | [default to undefined]
+**gnb** | **string** | The gNB target it was deployed onto (gnb-&lt;profileId&gt;); empty when unknown. | [optional] [default to undefined]
 **status** | **string** |  | [default to undefined]
 **services** | [**Array&lt;ServiceStatus&gt;**](ServiceStatus.md) |  | [optional] [default to undefined]
 **lastDeployed** | **string** |  | [optional] [default to undefined]
@@ -17,6 +18,7 @@ import { DeployUeStatusResponse } from './api';
 
 const instance: DeployUeStatusResponse = {
     instance,
+    gnb,
     status,
     services,
     lastDeployed,

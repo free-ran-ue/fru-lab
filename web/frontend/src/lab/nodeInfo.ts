@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ID } from './canvas/graph'
+import { ID, ueGnbId } from './canvas/graph'
 import type { IconName } from './canvas/icons'
 import { templateLabel, type Lab } from './useLab'
 import type { NodeStatus } from './types'
@@ -18,27 +18,30 @@ export interface NodeInfo {
   // for kind 'ue' / 'nf' / 'gnb'
   ueId?: string
   nf?: string
-  slice?: 'slice1' | 'slice2'
 }
 
 // nodeInfo describes a canvas node (by its graph id) for the floating card.
 export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
   const core = lab.nodes.core
+  if (id === ID.externalCore || (id === ID.core && lab.gnbExternal && !lab.coreUp)) {
+    const ext = lab.externalGnbs
+    return {
+      kind: 'core', icon: 'core', name: 'External core', sub: 'a 5G core outside the lab', page: '/free-ran',
+      rows: [
+        { k: 'AMF', v: [...new Set(ext.map((g) => g.deployment?.amfIp).filter(Boolean))].join(', ') || '—' },
+        { k: 'gNBs on it', v: ext.map((g) => g.profileName).join(', ') || '—' },
+        { k: 'gNB host IP', v: ext.map((g) => g.deployment?.hostIp).filter(Boolean).join(', ') || '—' },
+      ],
+    }
+  }
   if (id === ID.core) {
     const nfs = lab.free5gc.networkFunctions
-    if (lab.gnbExternal && !lab.coreUp) {
-      const d = lab.gnb.gnbDeployment
-      return {
-        kind: 'core', icon: 'core', name: 'External core', sub: 'a 5G core outside the lab', page: '/free-ran',
-        rows: [{ k: 'AMF', v: d?.amfIp ?? '—' }, { k: 'gNB profile', v: d?.profileName ?? '—' }, { k: 'gNB host IP', v: d?.hostIp ?? '—' }],
-      }
-    }
     return {
       kind: 'core', icon: 'core', name: 'free5GC core', sub: '5G core network', status: core.status, page: '/core-network',
       rows: [
         { k: 'Template', v: lab.runningTemplate ? templateLabel(lab.runningTemplate) : '—' },
         { k: 'Network functions', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length} healthy` : '—' },
-        { k: 'Subscribers', v: lab.ueCounts.total },
+        { k: 'gNBs on it', v: lab.gnbs.filter((g) => g.core === 'lab').length },
         { k: 'Last deployed', v: core.lastDeployed },
       ],
     }
@@ -55,34 +58,35 @@ export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
       ],
     }
   }
-  if (id === ID.gnb || id === ID.slice('slice1') || id === ID.slice('slice2')) {
-    const slice = id === ID.gnb ? undefined : (id === ID.slice('slice1') ? 'slice1' : 'slice2') as 'slice1' | 'slice2'
-    const target = slice === 'slice1' ? lab.gnbSlice1 : slice === 'slice2' ? lab.gnbSlice2 : null
-    const node = target ? target.node : lab.nodes.gnb
+  if (id === ID.gnbNone) {
+    return { kind: 'gnb', icon: 'gnb', name: 'gNB', sub: 'none is running', status: 'stopped', page: '/free-ran', rows: [{ k: 'Deploy', v: 'pick a gNB profile on free-ran' }] }
+  }
+  const gnb = lab.gnbs.find((g) => g.id === id)
+  if (gnb) {
+    const d = gnb.deployment
     return {
-      kind: 'gnb', icon: 'gnb', name: slice ? `gNB ${slice}` : 'gNB', sub: 'free-ran-ue base station', status: node.status, slice, page: '/free-ran',
+      kind: 'gnb', icon: 'gnb', name: gnb.profileName, sub: gnb.name, status: gnb.status, page: '/free-ran',
       rows: [
-        ...(slice
-          ? [{ k: 'Template', v: 'ULCL (Two Slice)' }]
-          : [
-            { k: 'Profile', v: node.status !== 'stopped' ? lab.gnb.gnbDeployment?.profileName ?? '—' : '—' },
-            { k: 'Core', v: lab.gnbExternal ? `external · AMF ${lab.gnb.gnbDeployment?.amfIp}` : 'lab free5GC' },
-          ]),
-        { k: 'UEs attached', v: lab.upUes.length },
-        { k: 'Last deployed', v: node.lastDeployed },
+        { k: 'Profile', v: gnb.profileName },
+        { k: 'Core', v: gnb.core === 'external' ? `external · AMF ${d?.amfIp ?? ''}` : 'lab free5GC' },
+        ...(d?.n2Ip ? [{ k: 'N2 IP', v: d.n2Ip }] : []),
+        ...(d?.ranIp ? [{ k: 'RAN IP (auto)', v: d.ranIp }] : []),
+        ...(gnb.sd ? [{ k: 'SD', v: gnb.sd }] : []),
+        { k: 'UEs attached', v: lab.upUes.filter((r) => ueGnbId(lab, r) === gnb.id).length },
+        { k: 'Last deployed', v: gnb.lastDeployed },
       ],
-      services: target ? target.networkFunctions : lab.gnbNetworkFunctions,
+      services: gnb.networkFunctions,
     }
   }
   if (id === ID.fleet) {
     const c = lab.ueCounts
     return {
-      kind: 'fleet', icon: 'fleet', name: 'UE fleet', sub: 'one free-ran-ue container per subscriber', status: lab.nodes.ue.status, statusText: `${c.running} / ${c.total}`, page: '/free-ue',
+      kind: 'fleet', icon: 'fleet', name: 'UE fleet', sub: 'one free-ran-ue container per UE profile', status: lab.nodes.ue.status, statusText: `${c.running} / ${c.total}`, page: '/free-ue',
       rows: [
         { k: 'Running', v: c.running },
         { k: 'Starting', v: c.starting },
         { k: 'Unhealthy', v: c.unhealthy },
-        { k: 'Subscribers', v: c.total },
+        { k: 'UE profiles', v: c.total },
       ],
     }
   }
@@ -93,10 +97,10 @@ export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
     return {
       kind: 'ue', icon: 'ue', name: row.ueId, sub: 'UE instance', status: row.status, ueId, page: '/free-ue',
       rows: [
-        { k: 'Source', v: row.source === 'profile' ? `profile · ${row.profileName}` : row.source === 'subscriber' ? 'free5GC subscriber' : 'deployed earlier' },
+        { k: 'Source', v: row.source === 'profile' ? `profile · ${row.profileName}` : 'deployed earlier' },
+        { k: 'gNB', v: row.status !== 'stopped' ? ueGnbId(lab, row) || '—' : '—' },
         { k: 'PLMN', v: row.plmnId },
-        ...(row.gpsi ? [{ k: 'GPSI', v: row.gpsi }] : []),
-        ...(row.sd ? [{ k: 'Slice SD', v: row.sd }] : []),
+        ...(row.sd ? [{ k: 'SD', v: row.sd }] : []),
         { k: 'Last deployed', v: row.lastDeployed },
       ],
     }

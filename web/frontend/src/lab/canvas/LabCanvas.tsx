@@ -16,7 +16,7 @@ export interface CanvasNode {
   status?: NodeStatus
   // drawn faded: a part of the lab that lives on another page
   ghost?: boolean
-  // small mono tag under the label (e.g. "slice1 · 3 UE")
+  // small mono tag under the label (e.g. "3 UE attached")
   tag?: string
   // per-UE dots for a fleet node
   dots?: { id: string; status: NodeStatus }[]
@@ -32,6 +32,17 @@ export interface CanvasLink {
   // packets flow along it
   live?: boolean
   dashed?: boolean
+  // a radio link (Uu): drawn dotted with signal waves off the UE end
+  radio?: boolean
+}
+
+// three arcs fanning out from the start of a path toward its end
+function radioWaves(d: string): string {
+  const m = /^M([\d.-]+) ([\d.-]+)/.exec(d)
+  if (!m) return ''
+  const x = Number(m[1]) + 8
+  const y = Number(m[2])
+  return [5, 9, 13].map((r) => `M${x + r * 0.5} ${y - r}A${r} ${r} 0 0 1 ${x + r * 0.5} ${y + r}`).join('')
 }
 
 export interface CanvasFrame {
@@ -54,6 +65,8 @@ interface LabCanvasProps {
   notes?: { x: number; y: number; text: string; anchor?: 'start' | 'middle' | 'end' }[]
   selectedId: string | null
   onSelect: (id: string | null) => void
+  // a node double-clicked (the Overview opens its terminal)
+  onOpen?: (id: string) => void
   // overlay in the top-left corner (a legend)
   overlay?: ReactNode
   label: string
@@ -63,7 +76,8 @@ interface View { k: number; tx: number; ty: number }
 
 const PAD = 40
 const MIN_K = 0.25
-const MAX_K = 2.5
+// the UI is drawn at 1.5x, so the map may zoom in that much further too
+const MAX_K = 3.75
 // at most this many links animate packets at once
 const MAX_LIVE = 40
 
@@ -89,7 +103,7 @@ const RING: Record<NodeStatus, string> = {
 // to zoom, hover a node to light up its links, click it for a floating
 // card. Running nodes breathe, deploying ones spin, and packets flow along
 // links whose both ends are up.
-export default function LabCanvas({ nodes, links, frames = [], notes = [], selectedId, onSelect, overlay, label }: LabCanvasProps) {
+export default function LabCanvas({ nodes, links, frames = [], notes = [], selectedId, onSelect, onOpen, overlay, label }: LabCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [view, setView] = useState<View>({ k: 1, tx: 0, ty: 0 })
@@ -112,7 +126,7 @@ export default function LabCanvas({ nodes, links, frames = [], notes = [], selec
 
   const fit = useCallback(() => {
     if (!size.w || !size.h) return
-    const k = Math.min(MAX_K, Math.max(MIN_K, Math.min((size.w - PAD * 2) / bounds.w, (size.h - PAD * 2) / bounds.h, 1.25)))
+    const k = Math.min(MAX_K, Math.max(MIN_K, Math.min((size.w - PAD * 2) / bounds.w, (size.h - PAD * 2) / bounds.h, 1.875)))
     setView({ k, tx: (size.w - bounds.w * k) / 2 - bounds.x * k, ty: (size.h - bounds.h * k) / 2 - bounds.y * k })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h, boundsKey])
@@ -251,7 +265,14 @@ export default function LabCanvas({ nodes, links, frames = [], notes = [], selec
               <path
                 key={l.id}
                 d={l.d}
-                className={`${styles.link} ${l.live ? styles.linkLive : ''} ${l.dashed ? styles.linkDashed : ''} ${hot ? (hot.has(l.id) ? styles.linkHot : styles.linkCold) : ''}`}
+                className={`${styles.link} ${l.live ? styles.linkLive : ''} ${l.dashed ? styles.linkDashed : ''} ${l.radio ? styles.linkRadio : ''} ${hot ? (hot.has(l.id) ? styles.linkHot : styles.linkCold) : ''}`}
+              />
+            ))}
+            {links.filter((l) => l.radio).map((l) => (
+              <path
+                key={`w-${l.id}`}
+                d={radioWaves(l.d)}
+                className={`${styles.link} ${styles.radioWaves} ${l.live ? styles.linkLive : ''} ${hot ? (hot.has(l.id) ? styles.linkHot : styles.linkCold) : ''}`}
               />
             ))}
           </g>
@@ -286,6 +307,7 @@ export default function LabCanvas({ nodes, links, frames = [], notes = [], selec
                 aria-pressed={on}
                 className={`${styles.node} ${on ? styles.on : ''} ${n.ghost ? styles.ghost : ''} ${n.status ? styles[`st_${n.status}`] : ''}`}
                 onClick={() => onSelect(n.id)}
+                onDoubleClick={() => onOpen?.(n.id)}
                 onKeyDown={pressKey(n.id)}
                 onPointerEnter={() => setHovered(n.id)}
                 onPointerLeave={() => setHovered(null)}
@@ -319,7 +341,7 @@ export default function LabCanvas({ nodes, links, frames = [], notes = [], selec
         <button type="button" onClick={() => zoomAt(1.2, size.w / 2, size.h / 2)} aria-label="Zoom in">+</button>
         <button type="button" onClick={() => zoomAt(1 / 1.2, size.w / 2, size.h / 2)} aria-label="Zoom out">−</button>
         <button type="button" onClick={fit} aria-label="Fit to screen" title="Fit">
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>
+          <svg viewBox="0 0 16 16" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>
         </button>
       </div>
       <div className={styles.hint} aria-hidden="true">drag to pan · scroll to zoom · click a node</div>

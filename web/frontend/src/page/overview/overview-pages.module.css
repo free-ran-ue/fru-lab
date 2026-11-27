@@ -1,0 +1,8 @@
+/* A full-height console view (events, logs); dark in both themes. */
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome);
+  color: var(--chrome-text);
+}

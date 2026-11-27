@@ -34,15 +34,15 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const pending = useRef<LabEvent[]>([])
   const streams = useRef(new Map<string, () => void>())
 
+  const gnbIds = lab.gnbs.map((g) => g.id).join('|')
   const sources = useMemo(() => {
     const out: LogSource[] = []
     if (lab.coreUp) out.push({ target: 'free5gc', service: 'amf' })
-    if (lab.gnb.node.status !== 'stopped') out.push({ target: 'gnb' })
-    if (lab.gnbSlice1.node.status !== 'stopped') out.push({ target: 'gnb-slice1' })
-    if (lab.gnbSlice2.node.status !== 'stopped') out.push({ target: 'gnb-slice2' })
+    // every running gNB (gnb-<profileId>)
+    for (const id of gnbIds.split('|').filter(Boolean)) out.push({ target: id as `gnb-${string}` })
     for (const r of lab.upUes.slice(0, MAX_UE_STREAMS)) out.push({ target: 'ue', instance: r.ueId })
     return out
-  }, [lab.coreUp, lab.gnb.node.status, lab.gnbSlice1.node.status, lab.gnbSlice2.node.status, lab.upUes])
+  }, [lab.coreUp, gnbIds, lab.upUes])
   const keys = sources.map(sourceKey).join('|')
 
   useEffect(() => {

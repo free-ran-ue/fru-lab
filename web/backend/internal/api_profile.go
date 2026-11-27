@@ -15,11 +15,15 @@ func (b *backend) getProfileRoutes() util.Routes {
 	return util.Routes{
 		{Name: "GnbProfileList", Method: http.MethodGet, Pattern: "/profiles/gnb", HandlerFunc: withLogging("GnbProfileList", b.DeployLog, b.handleGnbProfileList)},
 		{Name: "GnbProfileCreate", Method: http.MethodPost, Pattern: "/profiles/gnb", HandlerFunc: withLogging("GnbProfileCreate", b.DeployLog, b.handleGnbProfileSave)},
+		{Name: "GnbProfileCheck", Method: http.MethodPost, Pattern: "/profiles/gnb/check", HandlerFunc: withLogging("GnbProfileCheck", b.DeployLog, b.handleGnbProfileCheck)},
+		{Name: "GnbProfileBulk", Method: http.MethodPost, Pattern: "/profiles/gnb/bulk", HandlerFunc: withLogging("GnbProfileBulk", b.DeployLog, b.handleGnbProfileBulk)},
 		{Name: "GnbProfileRender", Method: http.MethodPost, Pattern: "/profiles/gnb/render", HandlerFunc: withLogging("GnbProfileRender", b.DeployLog, b.handleGnbProfileRender)},
 		{Name: "GnbProfileUpdate", Method: http.MethodPut, Pattern: "/profiles/gnb/:id", HandlerFunc: withLogging("GnbProfileUpdate", b.DeployLog, b.handleGnbProfileSave)},
 		{Name: "GnbProfileDelete", Method: http.MethodDelete, Pattern: "/profiles/gnb/:id", HandlerFunc: withLogging("GnbProfileDelete", b.DeployLog, b.handleGnbProfileDelete)},
 		{Name: "UeProfileList", Method: http.MethodGet, Pattern: "/profiles/ue", HandlerFunc: withLogging("UeProfileList", b.DeployLog, b.handleUeProfileList)},
 		{Name: "UeProfileCreate", Method: http.MethodPost, Pattern: "/profiles/ue", HandlerFunc: withLogging("UeProfileCreate", b.DeployLog, b.handleUeProfileSave)},
+		{Name: "UeProfileCheck", Method: http.MethodPost, Pattern: "/profiles/ue/check", HandlerFunc: withLogging("UeProfileCheck", b.DeployLog, b.handleUeProfileCheck)},
+		{Name: "UeProfileBulk", Method: http.MethodPost, Pattern: "/profiles/ue/bulk", HandlerFunc: withLogging("UeProfileBulk", b.DeployLog, b.handleUeProfileBulk)},
 		{Name: "UeProfileRender", Method: http.MethodPost, Pattern: "/profiles/ue/render", HandlerFunc: withLogging("UeProfileRender", b.DeployLog, b.handleUeProfileRender)},
 		{Name: "UeProfileUpdate", Method: http.MethodPut, Pattern: "/profiles/ue/:id", HandlerFunc: withLogging("UeProfileUpdate", b.DeployLog, b.handleUeProfileSave)},
 		{Name: "UeProfileDelete", Method: http.MethodDelete, Pattern: "/profiles/ue/:id", HandlerFunc: withLogging("UeProfileDelete", b.DeployLog, b.handleUeProfileDelete)},
@@ -89,11 +93,47 @@ func (b *backend) handleUeProfileRender(c *gin.Context) {
 	if !bindOrBad(c, &p) {
 		return
 	}
-	out, detail := b.Processor.RenderUeProfile(&p)
+	out, detail := b.Processor.RenderUeProfile(c.Request.Context(), &p)
 	respond(c, out, detail)
 }
 
 func (b *backend) handleUeProfileDelete(c *gin.Context) {
 	detail := b.Processor.DeleteUeProfile(c.Param("id"))
 	respond(c, model.ResponseDeployAction{Message: "Deleted"}, detail)
+}
+
+func (b *backend) handleGnbProfileCheck(c *gin.Context) {
+	var p model.GnbProfile
+	if !bindOrBad(c, &p) {
+		return
+	}
+	out, detail := b.Processor.CheckGnbProfile(&p)
+	respond(c, out, detail)
+}
+
+func (b *backend) handleGnbProfileBulk(c *gin.Context) {
+	var req model.RequestProfileBulk
+	if !bindOrBad(c, &req) {
+		return
+	}
+	out, detail := b.Processor.BulkGnbProfiles(&req)
+	respond(c, out, detail)
+}
+
+func (b *backend) handleUeProfileCheck(c *gin.Context) {
+	var p model.UeProfile
+	if !bindOrBad(c, &p) {
+		return
+	}
+	out, detail := b.Processor.CheckUeProfile(&p)
+	respond(c, out, detail)
+}
+
+func (b *backend) handleUeProfileBulk(c *gin.Context) {
+	var req model.RequestProfileBulk
+	if !bindOrBad(c, &req) {
+		return
+	}
+	out, detail := b.Processor.BulkUeProfiles(&req)
+	respond(c, out, detail)
 }

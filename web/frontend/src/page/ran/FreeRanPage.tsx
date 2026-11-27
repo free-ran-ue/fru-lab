@@ -1,155 +1,294 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
-import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
+import { useConfirm } from '../../components/feedback/Feedback'
 import { extractErrorMessage } from '../../apiClient'
 import type { GnbProfile } from '../../api'
-import LabCanvas from '../../lab/canvas/LabCanvas'
-import { ID, buildGraph } from '../../lab/canvas/graph'
+import { ueGnbId } from '../../lab/canvas/graph'
 import { useEvents } from '../../lab/console/EventsContext'
+import { STAGE_LABEL } from '../../lab/console/events'
 import { useLab } from '../../lab/LabContext'
-import { Actions, Button, Dot, Hint, InspectorHead, KV, Section, Tabs, ui } from '../../lab/LabUi'
+import { Button, Dot, Hint, KV, Section, ui } from '../../lab/LabUi'
 import GnbProfilesPanel from '../../lab/profiles/GnbProfilesPanel'
-import { LAB_DEFAULT_GNB, useGnbProfiles, useStoredState } from '../../lab/useProfiles'
-import Workbench, { logSourceFor } from '../../lab/workbench/Workbench'
-import NodeInspector from '../../lab/workbench/NodeInspector'
-import { useConsole } from '../../lab/workbench/Console'
+import { BulkCreate } from '../../lab/profiles/parts'
+import type { LabGnb } from '../../lab/useLab'
+import { useStoredState } from '../../lab/useProfiles'
+import { compareValues } from '../../lab/sort'
+import Workbench from '../../lab/workbench/Workbench'
+import { logsHref } from '../../lab/workbench/logSources'
+import DetailHeader from '../../lab/workbench/DetailHeader'
+import ItemList from '../../lab/workbench/ItemList'
+import Split from '../../lab/workbench/Split'
 
-// FreeRanPage runs the free-ran-ue gNB from a gNB profile: the lab default
-// or a saved one, on the lab free5GC or on a core outside the lab. Under
-// ULCL (Two Slice) it runs the two built-in slice gNBs instead.
+type Tab = 'status' | 'config'
+// what the detail pane shows: a saved profile, or a new one (blank, or a
+// copy of a saved one)
+type View = { kind: 'profile'; id: string } | { kind: 'new'; from?: string }
+
+const coreOf = (p: GnbProfile) => (p.core === 'external' ? `external ${p.amfIp ?? ''}` : 'lab free5GC')
+const addrOf = (p: GnbProfile) => (p.core === 'external' ? p.hostIp : p.n2Ip) || '—'
+
+// FreeRanPage is everything about gNBs on one page. Every gNB profile is
+// one gNB and one row. Actions sit in two fixed places only:
+//   list toolbar   New, Bulk create, find (the whole list)
+//   detail header  Deploy / Stop, Logs, Duplicate, Delete (one gNB)
+// and each row ends with its Deploy / Stop. The detail pane has a Status
+// tab (the running gNB) and a Config tab (the profile, Save at its top).
 export default function FreeRanPage() {
+  const navigate = useNavigate()
   const lab = useLab()
   const { ueLive, events } = useEvents()
-  const { gnb, gnbSlice1, gnbSlice2, nodes, isTwoSlice } = lab
-  const gnbProfiles = useGnbProfiles()
-  const con = useConsole()
-  const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
-  const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'gnb' | 'profiles'>('gnb')
-  const [profileId, setProfileId] = useStoredState('frulab-gnb-profile', '')
+  const { gnbInstances, gnbProfiles } = lab
+  const { addError, addSuccess } = useNotifications()
+  const confirm = useConfirm()
+  const [storedId, setStoredId] = useStoredState('frulab-gnb-profile', '')
+  const [view, setView] = useState<View | null>(null)
+  const [tab, setTab] = useState<Tab>('status')
+  const [find, setFind] = useState('')
+  // the rows ticked for Delete selected
+  const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
 
-  const profile: GnbProfile = gnbProfiles.profiles.find((p) => p.id === profileId) ?? LAB_DEFAULT_GNB
-  const gnbStopped = nodes.gnb.status === 'stopped'
-  const pending = isTwoSlice ? gnbSlice1.isActionPending || gnbSlice2.isActionPending : gnb.isActionPending
-  const deployBlocked = (p: GnbProfile) => (isTwoSlice || p.core === 'external' ? undefined : lab.blocked.gnbDeploy)
-  const blocked = gnbStopped ? (isTwoSlice ? lab.blocked.gnbDeploy : deployBlocked(profile)) : lab.blocked.gnbStop
-  const graph = buildGraph(lab, 'ran', 'basic', ueLive)
-  const inUse = gnbStopped || isTwoSlice ? null : (gnb.gnbDeployment?.profileId ?? '')
-  const d = gnb.gnbDeployment
-  const ngSetup = [...events].reverse().find((e) => e.node.startsWith('gnb') && /NG Setup complete|Cannot reach the AMF/.test(e.text))
+  const profiles = gnbProfiles.profiles
+  const runningOf = (id?: string) => lab.gnbs.find((g) => g.profileId === id)
+  // a UE that failed to register is up but not connected
+  const connected = (id: string) => lab.upUes.filter((r) => ueGnbId(lab, r) === id && ueLive[r.ueId]?.stage !== 'failed')
 
-  async function deploy(id: string) {
+  // the selection: what was picked, else the remembered profile, else the first
+  let current: View | null = null
+  if (view?.kind === 'new') current = view
+  else {
+    const p = profiles.find((x) => x.id === (view?.id ?? storedId)) ?? profiles[0]
+    if (p?.id) current = { kind: 'profile', id: p.id }
+  }
+  const profile = current?.kind === 'profile' ? profiles.find((p) => p.id === current.id) : undefined
+  const running = runningOf(profile?.id)
+  const shownTab: Tab = current?.kind === 'new' ? 'config' : tab
+
+  function pick(id: string) {
+    setView({ kind: 'profile', id })
+    setStoredId(id)
+  }
+
+  const deployBlocked = (p: GnbProfile) => (p.core !== 'external' ? lab.blocked.gnbDeploy : undefined)
+
+  async function deploy(p: GnbProfile) {
+    if (!p.id) return
     try {
-      if (isTwoSlice) {
-        await Promise.allSettled([gnbSlice1.deploy(), gnbSlice2.deploy()])
-        addSuccess('The slice gNBs are starting')
-      } else {
-        setProfileId(id)
-        await gnb.deploy(id || undefined)
-        addSuccess(`gNB is starting with ${gnbProfiles.profiles.find((p) => p.id === id)?.name ?? LAB_DEFAULT_GNB.name}`)
-        setTab('gnb')
-        setSelected(ID.gnb)
-        con.setSource({ target: 'gnb' })
-        con.show('logs')
-      }
+      await gnbInstances.deploy(p.id)
+      addSuccess(`gNB ${p.name} is starting`)
+      pick(p.id)
+      setTab('status')
     } catch (error) {
       addError(extractErrorMessage(error, 'gNB deploy failed'))
     }
   }
 
-  async function stop() {
+  async function stop(g: LabGnb) {
     try {
-      if (isTwoSlice) await Promise.allSettled([gnbSlice1.stop(), gnbSlice2.stop()])
-      else await gnb.stop()
-      addSuccess('gNB stopped')
+      await g.stop()
+      addSuccess(`${g.name} stopped`)
     } catch (error) {
-      addError(extractErrorMessage(error, 'Failed to stop gNB'))
+      addError(extractErrorMessage(error, `Failed to stop ${g.name}`))
     }
   }
 
-  const primary = gnbStopped
-    ? <Button kind="primary" busy={pending} disabled={Boolean(blocked)} title={blocked} onClick={() => deploy(profileId)}>{isTwoSlice ? 'Deploy slice gNBs' : `Deploy gNB · ${profile.name}`}</Button>
-    : <Button kind="danger" busy={pending} disabled={Boolean(blocked)} title={blocked} onClick={stop}>Stop gNB{isTwoSlice ? 's' : ''}</Button>
-
-  const showLogs = (id: string) => {
-    const s = logSourceFor(id)
-    if (s) { con.setSource(s); con.show('logs') }
+  async function remove(p: GnbProfile) {
+    if (!p.id || !await confirm({ title: `Delete gNB profile ${p.name}?`, message: 'The profile is removed for good. Its gNB is not running.', confirmLabel: 'Delete', danger: true })) return
+    try {
+      await gnbProfiles.remove(p.id)
+      setView(null)
+      addSuccess(`Deleted ${p.name}`)
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to delete the profile'))
+    }
   }
 
-  const gnbInspector = (
-    <>
-      <InspectorHead icon="gnb" name={isTwoSlice ? 'gNB slices' : 'gNB'} sub="free-ran-ue base station" status={nodes.gnb.status} />
-      <Section title="Run">
-        {!isTwoSlice && gnbStopped && (
-          <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.625rem' }}>
-            <select className={ui.select} style={{ flex: 1 }} value={profileId} onChange={(e) => setProfileId(e.target.value)} aria-label="gNB profile">
-              {[{ ...LAB_DEFAULT_GNB, id: '' }, ...gnbProfiles.profiles].map((p) => <option key={p.id || 'default'} value={p.id ?? ''}>{p.name} · {p.core === 'external' ? `external ${p.amfIp}` : 'lab free5GC'}</option>)}
-            </select>
-            <Button small onClick={() => setTab('profiles')}>Edit</Button>
-          </div>
-        )}
-        <KV rows={isTwoSlice
-          ? [{ k: 'Template', v: 'ULCL (Two Slice)' }, { k: 'slice1', v: gnbSlice1.node.status }, { k: 'slice2', v: gnbSlice2.node.status }, { k: 'UEs attached', v: lab.upUes.length }]
-          : [
-            { k: 'Profile', v: gnbStopped ? profile.name : d?.profileName ?? '—' },
-            { k: 'Core', v: (gnbStopped ? profile.core : d?.core) === 'external' ? `external · ${gnbStopped ? profile.amfIp : d?.amfIp}` : 'lab free5GC' },
-            { k: 'NG Setup', v: gnbStopped ? '—' : ngSetup ? <><Dot status={ngSetup.level === 'error' ? 'unhealthy' : 'running'} /> {ngSetup.level === 'error' ? 'failed' : 'done'}</> : 'waiting' },
-            { k: 'UEs attached', v: lab.upUes.length },
-            { k: 'Last deployed', v: nodes.gnb.lastDeployed },
-          ]} />
-        {blocked && <Hint>{blocked}</Hint>}
-        <Actions>{primary}{!gnbStopped && <Button small onClick={() => showLogs(isTwoSlice ? 'gnb-slice1' : ID.gnb)}>Logs</Button>}</Actions>
-      </Section>
-      {lab.gnbNetworkFunctions.length > 0 && (
-        <Section title="Containers">
-          <ul className={ui.list}>{lab.gnbNetworkFunctions.map((s) => <li key={s.name}><Dot status={s.status} />{s.name}<span>{s.status}</span></li>)}</ul>
-        </Section>
+  // Delete selected: the ticked profiles (running ones can't be ticked)
+  async function removeTicked() {
+    const targets = profiles.filter((p) => p.id && ticked.has(p.id) && !runningOf(p.id))
+    if (targets.length === 0 || !await confirm({ title: `Delete ${targets.length} gNB profile${targets.length === 1 ? '' : 's'}?`, message: <ul>{targets.slice(0, 10).map((p) => <li key={p.id}>{p.name}</li>)}{targets.length > 10 && <li>… {targets.length - 10} more</li>}</ul>, confirmLabel: 'Delete', danger: true })) return
+    setDeleting(true)
+    let failed = 0
+    for (const p of targets) {
+      try { await gnbProfiles.remove(p.id!) } catch { failed += 1 }
+    }
+    setDeleting(false)
+    setTicked(new Set())
+    setView(null)
+    if (failed) addError(`${failed} of ${targets.length} profiles could not be deleted`)
+    else addSuccess(`Deleted ${targets.length} gNB profile${targets.length === 1 ? '' : 's'}`)
+  }
+
+  async function bulk(count: number) {
+    if (!profile?.id) return
+    try {
+      const created = await gnbProfiles.bulk(profile.id, count)
+      addSuccess(`Created ${created.length} gNB profile${created.length === 1 ? '' : 's'}`)
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Bulk create failed'))
+    }
+  }
+
+  // Deploy or Stop for one profile: the row's end and the detail header
+  function toggle(p: GnbProfile) {
+    const g = runningOf(p.id)
+    if (g) {
+      const blocked = lab.gnbStopBlocked(g.id)
+      return <Button kind="danger" small busy={g.pending} disabled={Boolean(blocked)} title={blocked} onClick={() => stop(g)}>Stop</Button>
+    }
+    const blocked = deployBlocked(p)
+    return <Button kind="primary" small busy={Boolean(p.id && gnbInstances.pending[p.id])} disabled={Boolean(blocked)} title={blocked} onClick={() => deploy(p)}>Deploy</Button>
+  }
+
+  // top to bottom by profile name, A to Z, until a header is clicked
+  const shown = [...profiles].sort((a, b) => compareValues(a.name, b.name, 'asc')).filter((p) => !find || `${p.name} ${p.n2Ip ?? ''} ${p.hostIp ?? ''} ${p.gnbId}`.toLowerCase().includes(find.toLowerCase()))
+
+  const list = (
+    <ItemList
+      label="gNBs"
+      columns={['Profile', 'Core', 'N2 / host IP', 'UEs']}
+      template="minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 2.5rem"
+      rows={shown.map((p) => {
+        const g = runningOf(p.id)
+        return { id: p.id ?? '', status: g?.status ?? 'stopped', cells: [p.name, coreOf(p), addrOf(p), g ? connected(g.id).length : '—'], action: toggle(p), checkable: g ? 'Stop its gNB first' : true }
+      })}
+      selectedId={current?.kind === 'profile' ? current.id : null}
+      onSelect={pick}
+      checked={ticked}
+      onChecked={setTicked}
+      defaultSort={{ key: '0', dir: 'asc' }}
+      head={(
+        <>
+          <Button kind="primary" small onClick={() => setView({ kind: 'new' })}>+ New</Button>
+          <BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; gNB ID and N2 IP count up to the next free value` : 'Select a profile to copy'} onCreate={bulk} />
+          <input className={ui.select} style={{ flex: '1 1 7rem', minWidth: 0 }} placeholder="find" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Find a gNB" />
+          {ticked.size > 0 && <Button kind="danger" small busy={deleting} onClick={removeTicked}>Delete selected ({ticked.size})</Button>}
+        </>
       )}
-    </>
+      empty={profiles.length ? 'Nothing matches.' : 'No gNB profiles yet. Press + New: every profile is one gNB.'}
+    />
   )
 
-  const ownsSelection = !selected || selected === ID.gnb || selected.startsWith('gnb-')
-  const inspector = (
-    <>
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'gnb', label: 'gNB' }, { value: 'profiles', label: `Profiles (${gnbProfiles.profiles.length + 1})` }]} />
-      {tab === 'profiles'
-        ? (
-          <GnbProfilesPanel
-            profiles={gnbProfiles}
-            selectedId={profileId}
-            onSelect={setProfileId}
-            inUse={inUse}
-            deployBlocked={deployBlocked}
-            gnbUp={!gnbStopped}
-            busy={pending}
-            onDeploy={deploy}
-            onNotify={(ok, msg) => (ok ? addSuccess(msg) : addError(msg))}
-            twoSlice={isTwoSlice}
-          />
-        )
-        : ownsSelection ? gnbInspector : <NodeInspector id={selected!} onLogs={() => showLogs(selected!)} />}
-    </>
-  )
+  // the Status tab: what the gNB will deploy with, or how it runs
+  function statusOf(p: GnbProfile, g?: LabGnb) {
+    if (!g) {
+      const blocked = deployBlocked(p)
+      return (
+        <Section title="Will deploy with">
+          <KV rows={[
+            { k: 'gNB ID', v: p.gnbId },
+            { k: p.core === 'external' ? 'Host IP (N2/N3)' : 'N2 IP', v: addrOf(p) },
+            ...(p.core === 'external' && p.hostInterface ? [{ k: 'Host interface', v: p.hostInterface }] : []),
+            { k: 'RAN IP', v: 'picked on deploy' },
+            { k: 'PLMN', v: `${p.mcc}${p.mnc}` },
+            { k: 'TAC', v: p.tac },
+            { k: 'SD', v: p.sd || '—' },
+          ]} />
+          {blocked && <Hint>{blocked}</Hint>}
+        </Section>
+      )
+    }
+    const d = g.deployment
+    const ues = connected(g.id)
+    const ngSetup = [...events].reverse().find((e) => e.node === g.id && /NG Setup complete|Cannot reach the AMF/.test(e.text))
+    const stopBlocked = lab.gnbStopBlocked(g.id)
+    return (
+      <>
+        <Section title="Running">
+          <KV rows={[
+            { k: 'gNB ID', v: d?.gnbId || '—' },
+            { k: g.core === 'external' ? 'Host IP (N2/N3)' : 'N2 IP', v: d?.n2Ip || d?.hostIp || '—' },
+            ...(g.core === 'external' && d?.hostInterface ? [{ k: 'Host interface', v: d.hostInterface }] : []),
+            { k: 'RAN IP (auto)', v: d?.ranIp || '—' },
+            { k: 'SD', v: g.sd || '—' },
+            { k: 'NG Setup', v: ngSetup ? <><Dot status={ngSetup.level === 'error' ? 'unhealthy' : 'running'} /> {ngSetup.level === 'error' ? 'failed' : 'done'}</> : 'waiting' },
+            { k: 'Last deployed', v: g.lastDeployed },
+          ]} />
+          {stopBlocked && <Hint>{stopBlocked}</Hint>}
+        </Section>
+        <Section title="Connected UEs" aside={<span>{ues.length}</span>}>
+          {ues.length === 0
+            ? <p className={ui.empty} style={{ padding: 0 }}>No UE is connected.</p>
+            : (
+              <ul className={ui.list}>
+                {ues.map((r) => {
+                  const l = ueLive[r.ueId]
+                  return (
+                    <li key={r.ueId}>
+                      <button type="button" onClick={() => navigate(`/free-ue?ue=${encodeURIComponent(r.ueId)}`)}>
+                        <Dot status={l?.stage === 'failed' ? 'unhealthy' : r.status} />{r.ueId.replace(/^imsi-/, '')}
+                        <span style={{ marginLeft: 'auto' }}>{l?.ip ?? (l?.stage ? STAGE_LABEL[l.stage] : r.status)}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+        </Section>
+        {g.networkFunctions.length > 0 && (
+          <Section title="Containers">
+            <ul className={ui.list}>{g.networkFunctions.map((s) => <li key={s.name}><Dot status={s.status} />{s.name}<span>{s.status}</span></li>)}</ul>
+          </Section>
+        )}
+      </>
+    )
+  }
+
+  // ----- detail -----
+  const notify = (ok: boolean, msg: string) => (ok ? addSuccess(msg) : addError(msg))
+  let detail = <p className={ui.empty}>Press + New to create the first gNB profile.</p>
+  if (current?.kind === 'new') {
+    const from = current.from ? profiles.find((p) => p.id === current.from) : undefined
+    detail = (
+      <>
+        <DetailHeader icon="gnb" name="New gNB profile" sub={from ? `copy of ${from.name}` : 'from the lab defaults'} />
+        <GnbProfilesPanel
+          key={`new-${current.from ?? ''}`}
+          profiles={gnbProfiles}
+          selectedId=""
+          copyOf={from}
+          onSelect={(id) => { if (id) { pick(id); setTab('config') } }}
+          onNotify={notify}
+        />
+      </>
+    )
+  } else if (profile) {
+    detail = (
+      <>
+        <DetailHeader
+          icon="gnb"
+          name={profile.name}
+          sub={`${running ? running.name : 'not deployed'} · ${coreOf(profile)}`}
+          status={running?.status ?? 'stopped'}
+          actions={(
+            <>
+              {toggle(profile)}
+              <Button small disabled={!running} title={running ? undefined : 'Not running'} onClick={() => { if (running) navigate(logsHref(running.id)) }}>Logs</Button>
+              <Button small onClick={() => setView({ kind: 'new', from: profile.id })}>Duplicate</Button>
+              <Button kind="danger" small disabled={Boolean(running)} title={running ? 'Stop its gNB first' : undefined} onClick={() => remove(profile)}>Delete</Button>
+            </>
+          )}
+          tab={shownTab}
+          tabs={[{ value: 'status', label: 'Status' }, { value: 'config', label: 'Config' }]}
+          onTab={setTab}
+        />
+        {shownTab === 'config'
+          ? <GnbProfilesPanel key={profile.id} profiles={gnbProfiles} selectedId={profile.id ?? ''} running={running} onSelect={(id) => { if (id) pick(id) }} onNotify={notify} />
+          : statusOf(profile, running)}
+      </>
+    )
+  }
+
+  const externalAmfs = [...new Set(lab.externalGnbs.map((g) => g.deployment?.amfIp).filter(Boolean))]
 
   return (
-    <AppLayout crumbs={[{ label: 'gNB' }]} fill overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
+    <AppLayout crumbs={[{ label: 'gNBs' }]} fill>
       <Workbench
-        title="free-ran"
-        status={<><span>gNB <b>{nodes.gnb.status}</b></span><span>profile <b>{gnbStopped ? profile.name : d?.profileName ?? '—'}</b></span><span>core <b>{lab.gnbExternal ? `external ${d?.amfIp}` : nodes.core.status}</b></span><span>UEs <b>{lab.upUes.length}</b></span></>}
-        actions={primary}
-        console={con}
-        selectedId={selected}
-        onSelect={(id) => { setSelected(id); setTab('gnb') }}
-        canvas={(
-          <LabCanvas
-            label="The radio side: the UE fleet over Uu to the gNB, and the gNB over N2 and N3 to its core."
-            {...graph}
-            selectedId={selected}
-            onSelect={(id) => { setSelected(id); setTab('gnb'); const s = logSourceFor(id); if (s) con.setSource(s) }}
-          />
-        )}
-        inspector={inspector}
+        title="gNBs"
+        status={<><span>profiles <b>{profiles.length}</b></span><span>running <b>{lab.gnbs.length}</b></span><span>lab core <b>{lab.nodes.core.status}</b></span>{externalAmfs.length > 0 && <span>external <b>{externalAmfs.join(', ')}</b></span>}<span>UEs connected <b>{lab.gnbs.reduce((n, g) => n + connected(g.id).length, 0)}</b></span></>}
+        body={<Split storageKey="frulab-split-gnb-6040" defaultRatio={0.6} left={list} right={detail} leftLabel="gNB list" rightLabel="gNB detail" />}
       />
     </AppLayout>
   )

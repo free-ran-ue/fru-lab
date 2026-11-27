@@ -1,22 +1,27 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
 import LabCanvas from '../../lab/canvas/LabCanvas'
-import { buildGraph } from '../../lab/canvas/graph'
+import { buildOverviewGraph } from '../../lab/canvas/graph'
 import { NodeIcon, type IconName } from '../../lab/canvas/icons'
 import { useEvents } from '../../lab/console/EventsContext'
 import { useLab } from '../../lab/LabContext'
 import { Actions, Button, Dot, KV, Section, ui } from '../../lab/LabUi'
 import { templateLabel } from '../../lab/useLab'
-import Workbench, { logSourceFor } from '../../lab/workbench/Workbench'
+import Workbench from '../../lab/workbench/Workbench'
+import { logsHref } from '../../lab/workbench/logSources'
+import TerminalDock from '../../lab/workbench/TerminalDock'
+import { useNotifications } from '../../hooks/useNotifications'
+import { useConfirm } from '../../components/feedback/Feedback'
+import { extractErrorMessage } from '../../apiClient'
+import { useStoredState } from '../../lab/useProfiles'
 import NodeInspector from '../../lab/workbench/NodeInspector'
-import { useConsole } from '../../lab/workbench/Console'
 import empty from './empty-lab.module.css'
 
 const STEPS: { n: number; icon: IconName; title: string; text: string; to: string }[] = [
-  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy free5GC from a template: Basic, ULCL or Two Slice. Skip it if your gNB will use a core outside the lab.', to: '/core-network' },
-  { n: 2, icon: 'gnb', title: 'free-ran', text: 'Bring up a gNB from a profile, on the lab free5GC or pointed at any AMF and UPF you can reach.', to: '/free-ran' },
-  { n: 3, icon: 'ue', title: 'free-ue', text: 'Launch UEs from the free5GC subscribers or your own UE profiles, then test their data path.', to: '/free-ue' },
+  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy free5GC from a template: Basic or ULCL. Skip it if your gNB will use a core outside the lab.', to: '/core-network' },
+  { n: 2, icon: 'gnb', title: 'free-ran', text: 'Save gNB profiles and bring up as many gNBs as you need, on the lab free5GC or pointed at any AMF and UPF you can reach.', to: '/free-ran' },
+  { n: 3, icon: 'ue', title: 'free-ue', text: 'Launch a UE from each UE profile onto the gNB you pick, then test its data path.', to: '/free-ue' },
 ]
 
 // EmptyLab is the overview before anything runs: the three steps.
@@ -33,7 +38,7 @@ function EmptyLab() {
           <li key={s.n}>
             <button type="button" className={empty.step} onClick={() => navigate(s.to)}>
               <span className={empty.num}>{s.n}</span>
-              <span className={empty.icon}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><NodeIcon name={s.icon} x={0} y={0} size={24} /></svg></span>
+              <span className={empty.icon}><svg width="27" height="27" viewBox="0 0 24 24" aria-hidden="true"><NodeIcon name={s.icon} x={0} y={0} size={24} /></svg></span>
               <span className={empty.text}><b>{s.title}</b>{s.text}</span>
               <span className={empty.go} aria-hidden="true">→</span>
             </button>
@@ -45,15 +50,66 @@ function EmptyLab() {
 }
 
 // DashboardPage is the overview: the whole lab on one topology, read-only.
-// Each node links to the view that manages it; the console follows every
-// component's logs and events.
+// Each node links to the view that manages it and to its logs; a running
+// UE or gNB opens a shell in the terminal dock under the topology
+// (double-click its node; ?terminal=<ue> opens one from another page). Events and Logs are the Overview's
+// sub-pages.
 export default function DashboardPage() {
   const navigate = useNavigate()
   const lab = useLab()
   const { ueLive, events } = useEvents()
-  const con = useConsole()
   const [selected, setSelected] = useState<string | null>(null)
   const { nodes, ueCounts } = lab
+  const [params, setParams] = useSearchParams()
+  // the open shells, by node id (ue:<imsi>, gnb-<profileId>); they survive
+  // leaving the page and reconnect on return
+  const [sessions, setSessions] = useStoredState<string[]>('frulab-terminal-nodes', [])
+  const [activeTerm, setActiveTerm] = useState<string | null>(null)
+  const { addError, addSuccess } = useNotifications()
+  const confirm = useConfirm()
+  // what Tear down is stopping right now; null when idle
+  const [tearing, setTearing] = useState<string | null>(null)
+
+  // Tear down stops the whole lab in the order the backend requires: every
+  // UE, then every gNB, then the core
+  async function tearDown() {
+    const ues = lab.upUes.length
+    const gnbs = lab.gnbs
+    const what = [ues && `${ues} UE${ues === 1 ? '' : 's'}`, gnbs.length && `${gnbs.length} gNB${gnbs.length === 1 ? '' : 's'}`, lab.coreUp && 'the free5GC core'].filter(Boolean).join(', ')
+    if (!await confirm({ title: 'Tear down the whole lab?', message: <>This stops {what}, in that order. Their profiles stay; deploy them again any time.</>, confirmLabel: 'Tear down', danger: true })) return
+    try {
+      if (ues) { setTearing('Stopping UEs…'); await lab.ue.stopAll() }
+      for (const g of gnbs) { setTearing(`Stopping ${g.profileName}…`); await g.stop() }
+      if (lab.coreUp) { setTearing('Stopping the core…'); await lab.free5gc.stop() }
+      setSessions([])
+      addSuccess('The lab is torn down')
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Tear down stopped part way'))
+    } finally {
+      setTearing(null)
+    }
+  }
+
+  // a node a shell can open in: a running UE or a running profile gNB
+  function canShell(id: string): boolean {
+    if (id.startsWith('ue:')) return lab.ue.rows.some((r) => r.ueId === id.slice(3) && r.status === 'running')
+    return lab.gnbs.some((g) => g.id === id && g.status === 'running')
+  }
+  function openTerminal(id: string) {
+    if (!sessions.includes(id)) setSessions([...sessions, id])
+    setActiveTerm(id)
+  }
+  const terminalLabel = (id: string) => (id.startsWith('ue:') ? id.slice(3).replace(/^imsi-/, '') : `gNB ${lab.gnbs.find((g) => g.id === id)?.profileName ?? id}`)
+  // another page asked for a terminal
+  const asked = params.get('terminal')
+  useEffect(() => {
+    if (!asked) return
+    const node = asked.startsWith('gnb-') || asked.startsWith('ue:') ? asked : `ue:${asked}`
+    openTerminal(node)
+    setSelected(node)
+    setParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked])
 
   if (!lab.loaded || !(lab.coreUp || lab.gnbUp || lab.ueUp)) {
     return (
@@ -63,7 +119,14 @@ export default function DashboardPage() {
     )
   }
 
-  const graph = buildGraph(lab, 'all', 'basic', ueLive)
+  // a running UE or gNB gets a terminal button in the inspector (or a
+  // double-click on its node)
+  function terminalButton(id: string) {
+    if (!canShell(id)) return undefined
+    return <Section><Button kind="primary" small onClick={() => openTerminal(id)}>{sessions.includes(id) ? 'Show terminal' : 'Open terminal'}</Button><p className={ui.empty} style={{ padding: '0.375rem 0 0' }}>Tip: double-click the node.</p></Section>
+  }
+
+  const graph = buildOverviewGraph(lab, ueLive)
   const errors = events.filter((e) => e.level === 'error').slice(-5).reverse()
   const coreText = lab.gnbExternal && !lab.coreUp ? 'external' : lab.runningTemplate ? templateLabel(lab.runningTemplate) : 'off'
   const withPdu = lab.ue.rows.filter((r) => r.status === 'running' && ueLive[r.ueId]?.ip).length
@@ -74,8 +137,8 @@ export default function DashboardPage() {
         <KV rows={[
           { k: 'Core', v: <><Dot status={lab.gnbExternal && !lab.coreUp ? 'running' : nodes.core.status} /> {coreText}</> },
           { k: 'NFs healthy', v: lab.free5gc.networkFunctions.length ? `${lab.healthyNfs}/${lab.free5gc.networkFunctions.length}` : '—' },
-          { k: 'gNB', v: <><Dot status={nodes.gnb.status} /> {nodes.gnb.status === 'stopped' ? 'off' : lab.isTwoSlice ? '2 slices' : lab.gnb.gnbDeployment?.profileName}</> },
-          { k: 'UEs running', v: `${ueCounts.running} / ${ueCounts.total}` },
+          { k: 'gNBs running', v: lab.gnbs.length },
+          { k: 'UEs connected', v: `${ueCounts.running} / ${ueCounts.total}` },
           { k: 'UEs with PDU session', v: withPdu },
         ]} />
         <Actions>
@@ -97,19 +160,30 @@ export default function DashboardPage() {
     <AppLayout crumbs={[{ label: 'Overview' }]} fill>
       <Workbench
         title="Overview"
-        status={<><span>core <b>{coreText}</b></span><span>gNB <b>{nodes.gnb.status}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
-        console={con}
-        selectedId={selected}
-        onSelect={setSelected}
+        actions={<Button kind="danger" busy={Boolean(tearing)} title="Stop every UE, every gNB and the core" onClick={tearDown}>{tearing ?? 'Tear down'}</Button>}
+        status={<><span>core <b>{coreText}</b></span><span>gNBs <b>{lab.gnbs.length}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
         canvas={(
-          <LabCanvas
-            label="The lab: UE fleet over Uu to the gNB, N2 and N3 into the core, N6 out to the data network."
-            {...graph}
-            selectedId={selected}
-            onSelect={(id) => { setSelected(id); const s = logSourceFor(id); if (s) con.setSource(s) }}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ position: 'relative', flex: '1 1 auto', minHeight: 0 }}>
+              <LabCanvas
+                label="The lab: each connected UE on the radio to its gNB, every running gNB over N2 and N3 to its core, N6 out to the data network."
+                {...graph}
+                selectedId={selected}
+                onSelect={setSelected}
+                onOpen={(id) => { setSelected(id); if (canShell(id)) openTerminal(id) }}
+              />
+            </div>
+            <TerminalDock
+              sessions={sessions}
+              active={activeTerm}
+              onActive={setActiveTerm}
+              onClose={(id) => setSessions(sessions.filter((x) => x !== id))}
+              onCloseAll={() => setSessions([])}
+              labelOf={terminalLabel}
+            />
+          </div>
         )}
-        inspector={selected ? <NodeInspector id={selected} onLogs={() => { const s = logSourceFor(selected); if (s) { con.setSource(s); con.show('logs') } }} /> : summary}
+        inspector={selected ? <NodeInspector id={selected} onLogs={() => navigate(logsHref(selected))} extra={terminalButton(selected)} /> : summary}
       />
     </AppLayout>
   )

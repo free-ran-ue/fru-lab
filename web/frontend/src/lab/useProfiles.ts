@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../apiClient'
-import type { GnbProfile, UeProfile } from '../api'
+import type { GnbProfile, ProfileConflict, UeProfile } from '../api'
 
 interface ProfileApi<T> {
   list: () => Promise<T[]>
@@ -8,6 +8,8 @@ interface ProfileApi<T> {
   update: (id: string, p: T) => Promise<T>
   remove: (id: string) => Promise<unknown>
   render: (p: T) => Promise<string>
+  check: (p: T) => Promise<ProfileConflict[]>
+  bulk: (profileId: string, count: number) => Promise<T[]>
 }
 
 const gnbApi: ProfileApi<GnbProfile> = {
@@ -16,6 +18,8 @@ const gnbApi: ProfileApi<GnbProfile> = {
   update: async (id, p) => (await api.gnbProfileUpdate(id, p)).data,
   remove: (id) => api.gnbProfileDelete(id),
   render: async (p) => (await api.gnbProfileRender(p)).data.yaml,
+  check: async (p) => (await api.gnbProfileCheck(p)).data.conflicts ?? [],
+  bulk: async (profileId, count) => (await api.gnbProfileBulkCreate({ profileId, count })).data,
 }
 
 const ueApi: ProfileApi<UeProfile> = {
@@ -24,10 +28,13 @@ const ueApi: ProfileApi<UeProfile> = {
   update: async (id, p) => (await api.ueProfileUpdate(id, p)).data,
   remove: (id) => api.ueProfileDelete(id),
   render: async (p) => (await api.ueProfileRender(p)).data.yaml,
+  check: async (p) => (await api.ueProfileCheck(p)).data.conflicts ?? [],
+  bulk: async (profileId, count) => (await api.ueProfileBulkCreate({ profileId, count })).data,
 }
 
-// useProfiles loads the saved gNB or UE profiles and saves, deletes and
-// previews them (the backend renders the config file a profile deploys).
+// useProfiles loads the saved gNB or UE profiles and saves, deletes,
+// copies, checks and previews them (the backend renders the config file a
+// profile deploys).
 function useProfilesOf<T extends { id?: string; name: string }>(a: ProfileApi<T>) {
   const [profiles, setProfiles] = useState<T[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -53,16 +60,24 @@ function useProfilesOf<T extends { id?: string; name: string }>(a: ProfileApi<T>
     await refresh()
   }, [a, refresh])
 
-  return { profiles, loaded, refresh, save, remove, render: a.render }
+  // bulk copies a saved profile `count` times (the backend counts the
+  // unique fields up) and returns the created profiles
+  const bulk = useCallback(async (profileId: string, count: number): Promise<T[]> => {
+    const created = await a.bulk(profileId, count)
+    await refresh()
+    return created
+  }, [a, refresh])
+
+  return { profiles, loaded, refresh, save, remove, bulk, render: a.render, check: a.check }
 }
 
 export const useGnbProfiles = () => useProfilesOf(gnbApi)
 export const useUeProfiles = () => useProfilesOf(ueApi)
 
-// LAB_DEFAULT_GNB mirrors the backend's DefaultGnbProfile: the gNB the lab
-// deploys without a saved profile.
+// LAB_DEFAULT_GNB holds the lab's usual gNB values: a brand-new gNB
+// profile starts from them (nothing deploys without a saved profile).
 export const LAB_DEFAULT_GNB: GnbProfile = {
-  name: 'Lab default',
+  name: 'New gNB profile',
   gnbId: '000314',
   gnbName: 'gNB',
   mcc: '208',
@@ -71,6 +86,7 @@ export const LAB_DEFAULT_GNB: GnbProfile = {
   sst: '1',
   sd: '010203',
   core: 'lab',
+  n2Ip: '10.0.1.20',
   logLevel: 'info',
 }
 
@@ -79,8 +95,7 @@ export const NEW_UE_PROFILE: UeProfile = {
   name: 'New UE profile',
   mcc: '208',
   mnc: '93',
-  msinStart: '0000000001',
-  count: 1,
+  msin: '0000000001',
   permanentKey: '8baf473f2f8fd09487cccbd7097c6862',
   opValue: '8e27b6af0e692e750f32667a3b14605d',
   amf: '8000',
@@ -90,14 +105,15 @@ export const NEW_UE_PROFILE: UeProfile = {
   sd: '010203',
 }
 
-// msinAt is the MSIN of a profile's k-th UE: the start plus k, same width.
-export function msinAt(start: string, k: number): string {
-  return (BigInt(start) + BigInt(k)).toString().padStart(start.length, '0')
+// the UE instance id a profile deploys, imsi-<mcc><mnc><msin>
+export function profileUeId(p: UeProfile): string {
+  return `imsi-${p.mcc}${p.mnc}${p.msin}`
 }
 
-// the UE instance ids a profile launches, imsi-<mcc><mnc><msin>
-export function profileUeIds(p: UeProfile): string[] {
-  return Array.from({ length: p.count }, (_, k) => `imsi-${p.mcc}${p.mnc}${msinAt(p.msinStart, k)}`)
+// the gNB target a profile's gNB runs as (the log stream and UE deploys
+// use it too)
+export function gnbInstanceOf(profileId: string): string {
+  return `gnb-${profileId}`
 }
 
 // useStoredState is useState kept in localStorage (a per-browser choice,

@@ -6,16 +6,15 @@ import type { DeploymentNode, NetworkFunction, NodeStatus } from './types'
 const POLL_INTERVAL_MS = 4000
 
 interface DeployApi {
-  // variant is ignored by targets that only ever have one template (gnb) -
-  // only free5gc's `up` actually reads it.
+  // variant is free5gc's template
   up: (variant?: string) => AxiosPromise<MessageResponse>
   down: () => AxiosPromise<MessageResponse>
   status: () => AxiosPromise<DeployStatusResponse>
   logs: () => AxiosPromise<DeployLogsResponse>
 }
 
-// Shared by every target that has a real deploy API (currently free5gc and
-// gnb): polls status, and exposes deploy/stop/fetchLogs actions. Each
+// Used by the singleton free5gc target (the profile gNBs are polled as a
+// list by useGnbInstances): polls status, and exposes deploy/stop/fetchLogs actions. Each
 // target's hook is just this with its own id/label/api methods plugged in.
 export function useDeployTarget(
   id: string,
@@ -36,7 +35,7 @@ export function useDeployTarget(
   // false until the first status answer, so pages can tell "stopped" from
   // "not known yet"
   const [loaded, setLoaded] = useState(false)
-  // the gnb target's deployed profile
+  // what a gNB target was deployed with (unused by free5gc)
   const [gnbDeployment, setGnbDeployment] = useState<GnbDeployment | null>(null)
   const [logLines, setLogLines] = useState<string[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)

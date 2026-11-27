@@ -175,19 +175,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployLogsResponse'
 
-  /api/deploy/gnb:
+  /api/deploy/gnbs:
+    get:
+      summary: List the gNBs deployed from gNB profiles
+      description: One entry per gNB profile that has been deployed and not stopped since (a stopped one is removed).
+      operationId: deployGnbList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployGnbListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/gnbs/{profileId}:
     post:
-      summary: Deploy gNB
-      description: Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn't running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+      summary: Deploy the gNB of one gNB profile
+      description: Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile's n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
       operationId: deployGnbUp
       security:
         - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeployGnbRequest'
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -195,14 +222,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
+        '404':
+          description: No such gNB profile
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
         '409':
-          description: Conflict - the core network isn't running yet
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -214,50 +247,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
     delete:
-      summary: Stop gNB
-      description: Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
+      summary: Stop the gNB of one gNB profile
+      description: Fails with 409 while a UE deployed onto this gNB still runs.
       operationId: deployGnbDown
       security:
         - bearerAuth: []
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
         '409':
-          description: Conflict - a UE instance is still running
+          description: Conflict - a UE on this gNB still runs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/deploy/gnb/status:
-    get:
-      summary: Get gNB deploy status
-      operationId: deployGnbStatus
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
         '401':
           description: Unauthorized
           content:
@@ -269,16 +282,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
+                $ref: '#/components/schemas/MessageResponse'
 
-  /api/deploy/gnb/logs:
+  /api/deploy/gnbs/{profileId}/logs:
     get:
-      summary: Get gNB container logs
+      summary: Get the logs of one profile gNB
       operationId: deployGnbLogs
       security:
         - bearerAuth: []
       parameters:
-        - $ref: '#/components/parameters/LogService'
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -297,155 +314,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
-
-  /api/deploy/gnb-slice/{slice}:
-    post:
-      summary: Deploy a gNB slice (ulcl-2slice only)
-      description: Deploys the gNB dedicated to one slice of the ulcl-2slice free5gc template. Unlike /api/deploy/gnb, gnb-slice1 and gnb-slice2 are independent and can both be deployed at the same time. Fails with 409 if the core network isn't running yet.
-      operationId: deployGnbSliceUp
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
                 $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: Conflict - the core network isn't running yet
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-    delete:
-      summary: Stop a gNB slice (ulcl-2slice only)
-      description: Fails with 409 if any UE instance is still running - all UE instances must be stopped first.
-      operationId: deployGnbSliceDown
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '409':
-          description: Conflict - a UE instance is still running
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-
-  /api/deploy/gnb-slice/{slice}/status:
-    get:
-      summary: Get a gNB slice's deploy status
-      operationId: deployGnbSliceStatus
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployStatusResponse'
-
-  /api/deploy/gnb-slice/{slice}/logs:
-    get:
-      summary: Get a gNB slice's container logs
-      operationId: deployGnbSliceLogs
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/GnbSlice'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '404':
-          description: Not Found - unknown slice
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployLogsResponse'
 
   /api/deploy/ue:
     get:
@@ -472,6 +341,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeployUeListResponse'
+
+  /api/deploy/ue-profiles/{profileId}:
+    post:
+      summary: Deploy the UE of one UE profile
+      description: Every UE profile is one UE (instance imsi-<mcc><mnc><msin>). gnb picks the gNB it attaches to; without it fru-lab picks a running gNB whose SD matches the profile's, else any running gNB. Fails with 409 if no gNB runs, the picked gNB does not run, or the UE already runs.
+      operationId: deployUeProfileUp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployUeProfileRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such UE profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
 
   /api/deploy/ue/{instance}:
     post:
@@ -602,6 +522,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployUeLogsResponse'
 
+  /api/host/interfaces:
+    get:
+      summary: List the host's network interfaces
+      description: The interfaces with an IPv4 address an external-core gNB can listen on (loopback and Docker's own bridges and veths are left out).
+      operationId: hostInterfaceList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HostInterface'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
   /api/profiles/gnb:
     get:
       summary: List the saved gNB profiles
@@ -641,6 +590,74 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/gnb/check:
+    post:
+      summary: Check a gnb profile for conflicts with the saved ones
+      description: The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+      operationId: gnbProfileCheck
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileCheckResult'
+        '400':
+          description: Bad Request - a field is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/gnb/bulk:
+    post:
+      summary: Create several gnb profiles from one
+      description: Copies the source profile count times; the fields that must be unique count up to the next free value (gNB ID and N2 IP; lab core only). Names get a -2, -3, ... suffix.
+      operationId: gnbProfileBulkCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileBulkRequest'
+      responses:
+        '200':
+          description: The created profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GnbProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such source profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
   /api/profiles/gnb/render:
     post:
       summary: Preview the config file a gNB profile deploys
@@ -693,6 +710,12 @@ paths:
                 $ref: '#/components/schemas/GnbProfile'
         '400':
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
           content:
             application/json:
               schema:
@@ -760,6 +783,74 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue/check:
+    post:
+      summary: Check a ue profile for conflicts with the saved ones
+      description: The fields that must be unique are compared with every other saved profile (the one with the same id is skipped). Saving runs the same check and fails with 409 when it finds any.
+      operationId: ueProfileCheck
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileCheckResult'
+        '400':
+          description: Bad Request - a field is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/profiles/ue/bulk:
+    post:
+      summary: Create several ue profiles from one
+      description: Copies the source profile count times; the fields that must be unique count up to the next free value (MSIN). Names get a -2, -3, ... suffix.
+      operationId: ueProfileBulkCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileBulkRequest'
+      responses:
+        '200':
+          description: The created profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UeProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such source profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
   /api/profiles/ue/render:
     post:
       summary: Preview the config file a UE profile deploys
@@ -812,6 +903,12 @@ paths:
                 $ref: '#/components/schemas/UeProfile'
         '400':
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a field that must be unique is used by another saved profile (see the check endpoint)
           content:
             application/json:
               schema:
@@ -968,17 +1065,6 @@ components:
       schema:
         type: string
         example: amf
-    GnbSlice:
-      name: slice
-      in: path
-      required: true
-      description: Which ulcl-2slice slice's gNB to act on.
-      schema:
-        type: string
-        enum:
-          - slice1
-          - slice2
-        example: slice1
   schemas:
     LoginRequest:
       type: object
@@ -1064,7 +1150,6 @@ components:
           enum:
             - basic
             - ulcl
-            - ulcl-2slice
           example: basic
     DeployUeRequest:
       type: object
@@ -1118,6 +1203,9 @@ components:
         instance:
           type: string
           example: imsi-208930000000001
+        gnb:
+          type: string
+          description: The gNB target it was deployed onto (gnb-<profileId>); empty when unknown.
         status:
           type: string
           example: running
@@ -1187,12 +1275,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageInfo'
-    DeployGnbRequest:
-      type: object
-      properties:
-        profileId:
-          type: string
-          description: A saved gNB profile; empty deploys the lab default.
     GnbDeployment:
       type: object
       required: [profileName, core, amfIp]
@@ -1208,6 +1290,20 @@ components:
           type: string
         hostIp:
           type: string
+        hostInterface:
+          type: string
+        gnbId:
+          type: string
+        gnbName:
+          type: string
+        sd:
+          type: string
+        n2Ip:
+          type: string
+          description: Its N2/N3 address (cn-ran, or the host's address on an external core).
+        ranIp:
+          type: string
+          description: Where UEs dial it (ran-ue), picked by fru-lab; the host address on an external core.
     RenderedConfig:
       type: object
       required: [yaml]
@@ -1250,9 +1346,17 @@ components:
           type: string
         upfPort:
           type: integer
+        n2Ip:
+          type: string
+          example: 10.0.1.20
+          description: Lab core only - the gNB's N2/N3 address on the lab's cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core's). Unique among the gNB profiles.
+        hostInterface:
+          type: string
+          example: eth0
+          description: External core only - the host interface the gNB listens on (see /api/host/interfaces).
         hostIp:
           type: string
-          description: The host address the gNB listens on (external core); UEs dial it too.
+          description: External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
         logLevel:
           type: string
         updatedAt:
@@ -1260,7 +1364,7 @@ components:
           format: date-time
     UeProfile:
       type: object
-      required: [name, mcc, mnc, msinStart, count, permanentKey, opValue, amf, sqn, sst]
+      required: [name, mcc, mnc, msin, permanentKey, opValue, amf, sqn, sst]
       properties:
         id:
           type: string
@@ -1270,13 +1374,9 @@ components:
           type: string
         mnc:
           type: string
-        msinStart:
+        msin:
           type: string
-          description: The first UE's MSIN; the others count up from it.
-        count:
-          type: integer
-          minimum: 1
-          maximum: 500
+          description: 9 or 10 digits. The IMSI (mcc + mnc + msin) is unique among the UE profiles.
         permanentKey:
           type: string
         opValue:
@@ -1295,3 +1395,83 @@ components:
         updatedAt:
           type: string
           format: date-time
+    DeployGnbListResponse:
+      type: object
+      required: [instances]
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/GnbInstance'
+    GnbInstance:
+      type: object
+      required: [instance, profileId, status, gnb]
+      properties:
+        instance:
+          type: string
+          description: The gNB target name, gnb-<profileId>; the log stream and UE deploys use it.
+          example: gnb-3f2a9c1e5b7d
+        profileId:
+          type: string
+        status:
+          type: string
+          example: running
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+        lastDeployed:
+          type: string
+          format: date-time
+        gnb:
+          $ref: '#/components/schemas/GnbDeployment'
+    DeployUeProfileRequest:
+      type: object
+      properties:
+        gnb:
+          type: string
+          description: The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+    ProfileCheckResult:
+      type: object
+      required: [conflicts]
+      properties:
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileConflict'
+    ProfileConflict:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: The JSON field name, e.g. gnbId, n2Ip, hostIp, name, msin.
+        message:
+          type: string
+          example: gNB ID 000314 is used by profile Lab gNB
+        suggestion:
+          type: string
+          description: The next free value, when there is one.
+    ProfileBulkRequest:
+      type: object
+      required: [profileId, count]
+      properties:
+        profileId:
+          type: string
+          description: The source profile.
+        count:
+          type: integer
+          minimum: 1
+          maximum: 500
+    HostInterface:
+      type: object
+      required: [name, addresses]
+      properties:
+        name:
+          type: string
+          example: eth0
+        addresses:
+          type: array
+          items:
+            type: string
+          example: [192.168.1.20]

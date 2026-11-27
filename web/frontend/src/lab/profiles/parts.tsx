@@ -1,12 +1,29 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ProfileConflict } from '../../api'
 import { extractErrorMessage } from '../../apiClient'
+import { Button, ui } from '../LabUi'
 import styles from './profiles.module.css'
 
 export { styles as ps }
 
+// ConflictNote shows a field's clash with another saved profile under it,
+// with the backend's next free value as a one-click fix.
+export function ConflictNote({ conflict, onUse }: { conflict?: ProfileConflict; onUse?: (v: string) => void }) {
+  if (!conflict) return null
+  return (
+    <span className={styles.conflict} role="alert">
+      {conflict.message}
+      {conflict.suggestion && onUse && (
+        <button type="button" className={styles.useBtn} onClick={() => onUse(conflict.suggestion!)}>use {conflict.suggestion}</button>
+      )}
+    </span>
+  )
+}
+
 // A labelled text input; `pattern` only colours the box red while the value
-// does not match (the backend's checks are the real ones).
-export function Field({ label, value, onChange, hint, disabled, pattern, wide, type = 'text', min, max }: {
+// does not match (the backend's checks are the real ones). `conflict` is
+// the backend's check result for this field.
+export function Field({ label, value, onChange, hint, disabled, pattern, wide, type = 'text', min, max, conflict }: {
   label: string
   value: string | number
   onChange: (v: string) => void
@@ -17,9 +34,10 @@ export function Field({ label, value, onChange, hint, disabled, pattern, wide, t
   type?: 'text' | 'number'
   min?: number
   max?: number
+  conflict?: ProfileConflict
 }) {
   const id = `f-${label.replace(/\W+/g, '-').toLowerCase()}`
-  const badValue = pattern && !disabled && !pattern.test(String(value))
+  const badValue = (pattern && !disabled && !pattern.test(String(value))) || Boolean(conflict)
   return (
     <div className={`${styles.field} ${wide ? styles.wide : ''}`}>
       <label htmlFor={id}>{label}</label>
@@ -36,12 +54,60 @@ export function Field({ label, value, onChange, hint, disabled, pattern, wide, t
         onChange={(e) => onChange(e.target.value)}
       />
       {hint && <span className={styles.fieldHint}>{hint}</span>}
+      <ConflictNote conflict={conflict} onUse={onChange} />
     </div>
   )
 }
 
-export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={styles.switch} disabled={disabled} onClick={() => onChange(!checked)} />
+// useProfileCheck asks the backend, ~300 ms after `draft` stops changing,
+// which of its unique fields clash with another saved profile. A malformed
+// draft (400) has no conflicts to show; the config preview shows why.
+export function useProfileCheck<T>(draft: T, check: (d: T) => Promise<ProfileConflict[]>) {
+  const [conflicts, setConflicts] = useState<ProfileConflict[]>([])
+  const [checking, setChecking] = useState(false)
+  const key = JSON.stringify(draft)
+  const checkRef = useRef(check)
+  checkRef.current = check
+  useEffect(() => {
+    let cancelled = false
+    setChecking(true)
+    const timer = window.setTimeout(() => {
+      checkRef.current(JSON.parse(key) as T)
+        .then((c) => { if (!cancelled) setConflicts(c) })
+        .catch(() => { if (!cancelled) setConflicts([]) })
+        .finally(() => { if (!cancelled) setChecking(false) })
+    }, 300)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [key])
+  const byField = (field: string) => conflicts.find((c) => c.field === field)
+  return { conflicts, checking, byField }
+}
+
+// BulkCreate copies the selected saved profile 1-500 times.
+export function BulkCreate({ disabled, title, onCreate }: { disabled?: boolean; title?: string; onCreate: (count: number) => Promise<void> }) {
+  const [count, setCount] = useState(10)
+  const [busy, setBusy] = useState(false)
+  const valid = Number.isInteger(count) && count >= 1 && count <= 500
+  async function create() {
+    setBusy(true)
+    try { await onCreate(count) } finally { setBusy(false) }
+  }
+  return (
+    <span className={styles.bulk}>
+      <input
+        className={ui.select}
+        type="number"
+        min={1}
+        max={500}
+        value={count}
+        disabled={disabled}
+        onChange={(e) => setCount(Math.trunc(Number(e.target.value)))}
+        aria-label="How many copies"
+        title="How many copies (1-500)"
+      />
+      <Button small busy={busy} disabled={disabled || !valid} title={title ?? 'Copy the selected profile; unique fields count up to the next free value'} onClick={create}>Bulk create</Button>
+    </span>
+  )
 }
 
 // useConfigPreview asks the backend to render `draft` a moment after it
