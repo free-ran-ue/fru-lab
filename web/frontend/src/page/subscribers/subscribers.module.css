@@ -67,7 +67,7 @@
 .btnPrimary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #FFFFFF;
+  color: var(--on-accent);
 }
 
 .btnPrimary:hover:not(:disabled) {

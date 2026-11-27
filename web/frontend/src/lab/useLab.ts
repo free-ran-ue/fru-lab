@@ -2,9 +2,16 @@ import { useFree5gcStatus } from './useFree5gcStatus'
 import { useGnbStatus } from './useGnbStatus'
 import { useGnbSliceStatus } from './useGnbSliceStatus'
 import { useUeInstances, type UeRow } from './useUeInstances'
+import { useStoredState, useUeProfiles } from './useProfiles'
 import { FREE5GC_TEMPLATE_OPTIONS, detectFree5gcTemplate, type Free5gcTemplate } from './free5gcTemplate'
-import type { GnbSlice } from './TopologySchematic'
 import type { DeploymentNode, NetworkFunction, NodeStatus } from './types'
+
+export interface GnbSlice {
+  name: string
+  status: NodeStatus
+  // UE instances currently up on this slice (by the subscriber's sd)
+  ueCount: number
+}
 
 // mirrors backend's constant.SLICE1_SD / SLICE2_SD - which gNB slice a
 // UE attaches to under ulcl-2slice, from its subscriber's first session.
@@ -61,12 +68,18 @@ export function templateLabel(template: Free5gcTemplate): string {
 // fleet) and derives what the Dashboard and the Core Network / free-ran /
 // free-ue pages all need: aggregate nodes, the running template, and the
 // dependency rules the backend enforces (core → gNB → UE).
-export function useLab() {
+function useLabState() {
   const free5gc = useFree5gcStatus()
   const gnb = useGnbStatus()
   const gnbSlice1 = useGnbSliceStatus('slice1')
   const gnbSlice2 = useGnbSliceStatus('slice2')
-  const ue = useUeInstances()
+  const ueProfiles = useUeProfiles()
+  // whether the UE fleet includes the free5GC subscribers (only possible
+  // while the lab core runs)
+  const [subscribersWanted, setSubscribersWanted] = useStoredState('frulab-ue-subscribers', true)
+  const coreRunning = free5gc.node.status === 'running'
+  const useSubscribers = subscribersWanted && coreRunning
+  const ue = useUeInstances({ profiles: ueProfiles.profiles, useSubscribers })
 
   // the template actually running, read back from the live NFs; null while
   // the core is stopped
@@ -87,6 +100,11 @@ export function useLab() {
   const coreUp = free5gc.node.status !== 'stopped'
   // any gNB target up, including one left over from another template
   const gnbUp = gnb.node.status !== 'stopped' || gnbSlice1.node.status !== 'stopped' || gnbSlice2.node.status !== 'stopped'
+  // the single gNB runs on an external core (its profile says so)
+  const gnbExternal = gnb.node.status !== 'stopped' && gnb.gnbDeployment?.core === 'external'
+  // gNBs that depend on the lab core
+  const labGnbUp = (gnb.node.status !== 'stopped' && !gnbExternal) || gnbSlice1.node.status !== 'stopped' || gnbSlice2.node.status !== 'stopped'
+  const loaded = free5gc.loaded && gnb.loaded && !ue.isLoadingInstances
   const upUes = ue.rows.filter((row) => row.status !== 'stopped')
   const ueUp = upUes.length > 0
 
@@ -109,8 +127,9 @@ export function useLab() {
   // checkDeployPrerequisite), so buttons are disabled with a reason
   // instead of only failing after a click
   const blocked = {
-    coreStop: gnbUp ? 'Stop gNB on the free-ran page before stopping the core network' : undefined,
-    gnbDeploy: free5gc.node.status !== 'running' ? 'Deploy the core network before deploying gNB' : undefined,
+    coreStop: labGnbUp ? 'Stop gNB on the free-ran page before stopping the core network' : undefined,
+    // for a gNB on the lab core; one on an external core needs nothing
+    gnbDeploy: free5gc.node.status !== 'running' ? 'Deploy the core network first, or pick a gNB profile on an external core' : undefined,
     gnbStop: ueUp ? 'Stop all UE instances on the free-ue page before stopping gNB' : undefined,
     ueDeploy: gnbNode.status === 'stopped' ? 'Deploy gNB on the free-ran page before deploying a UE instance' : undefined,
   }
@@ -120,9 +139,12 @@ export function useLab() {
     runningTemplate, isTwoSlice,
     nodes: { core: free5gc.node, gnb: gnbNode, ue: ueNode },
     gnbNetworkFunctions, gnbSlices,
-    coreUp, gnbUp, ueUp, upUes,
+    coreUp, gnbUp, ueUp, upUes, gnbExternal, loaded,
+    ueProfiles, useSubscribers, subscribersWanted, setSubscribersWanted, coreRunning,
     healthyNfs, ueCounts, blocked,
   }
 }
 
-export type Lab = ReturnType<typeof useLab>
+export type Lab = ReturnType<typeof useLabState>
+
+export { useLabState }

@@ -51,6 +51,44 @@ func (p *Processor) DeployUp(ctx context.Context, target string, templateVariant
 	}, nil
 }
 
+// DeployGnbUp deploys the single gNB target with a saved profile, or the
+// lab default when profileID is empty. A profile on an external core does
+// not need the lab's free5GC.
+func (p *Processor) DeployGnbUp(ctx context.Context, profileID string) (*model.ResponseDeployAction, *model.ErrorDetail) {
+	prof := flctx.DefaultGnbProfile()
+	if profileID != "" {
+		saved, err := p.FlContext.GetGnbProfile(profileID)
+		if err != nil {
+			return nil, internal(err)
+		}
+		if saved == nil {
+			return nil, notFound("gNB profile", profileID)
+		}
+		prof = *saved
+	}
+	if detail := normalizeGnbProfile(&prof); detail != nil {
+		return nil, detail
+	}
+
+	if running, err := p.isTargetRunning(ctx, constant.DEPLOY_TARGET_GNB); err == nil && running {
+		return nil, &model.ErrorDetail{HttpStatus: http.StatusConflict, Detail: "gNB is already running; stop it first"}
+	}
+	if prof.Core == model.GnbCoreLab {
+		if detail := p.checkDeployPrerequisite(ctx, constant.DEPLOY_TARGET_GNB); detail != nil {
+			return nil, detail
+		}
+	}
+
+	if err := p.FlContext.UpGnb(ctx, &prof, profileID); err != nil {
+		p.ProcLog.Errorf("Failed to deploy gnb with profile %q: %v", prof.Name, err)
+		return nil, &model.ErrorDetail{
+			HttpStatus: http.StatusInternalServerError,
+			Detail:     "Failed to deploy gnb, so it was taken down again: " + err.Error(),
+		}
+	}
+	return &model.ResponseDeployAction{Message: "Deploy started for gnb with profile " + prof.Name}, nil
+}
+
 func (p *Processor) DeployDown(ctx context.Context, target string) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	p.ProcLog.Debugf("Processing deploy down for target: %s", target)
 
@@ -83,12 +121,17 @@ func (p *Processor) DeployStatus(ctx context.Context, target string) (*model.Res
 		}
 	}
 
-	return &model.ResponseDeployStatus{
+	response := &model.ResponseDeployStatus{
 		Target:       target,
 		Status:       aggregateServiceStatus(result.Services),
 		Services:     result.Services,
 		LastDeployed: result.LastDeployed,
-	}, nil
+	}
+	if target == constant.DEPLOY_TARGET_GNB {
+		d := p.FlContext.GnbDeployment()
+		response.Gnb = &d
+	}
+	return response, nil
 }
 
 func (p *Processor) DeployLogs(ctx context.Context, target string, services []string) (*model.ResponseDeployLogs, *model.ErrorDetail) {
@@ -134,7 +177,7 @@ func (p *Processor) DeployUeUp(ctx context.Context, instance string, req *model.
 		Dnn:          req.Dnn,
 		Sst:          req.Sst,
 		Sd:           req.Sd,
-		RanIp:        gnbRanIp(gnbTarget),
+		RanIp:        p.gnbRanIp(gnbTarget),
 	}
 
 	if err := p.FlContext.UpUe(ctx, instance, cfg); err != nil {
@@ -265,7 +308,7 @@ func isGnbTarget(target string) bool {
 func (p *Processor) checkStopDependents(ctx context.Context, target string) *model.ErrorDetail {
 	switch {
 	case target == constant.DEPLOY_TARGET_FREE5GC:
-		running, err := p.anyGnbRunning(ctx)
+		running, err := p.anyLabGnbRunning(ctx)
 		if err != nil {
 			p.ProcLog.Warnf("Failed to check gnb status before stopping core: %v", err)
 			return nil
@@ -334,8 +377,13 @@ func (p *Processor) isTargetRunning(ctx context.Context, target string) (bool, e
 	return status != "stopped", nil
 }
 
-func (p *Processor) anyGnbRunning(ctx context.Context) (bool, error) {
+// anyLabGnbRunning is anyGnbRunning minus a gNB deployed on an external
+// core, which does not depend on the lab's free5GC.
+func (p *Processor) anyLabGnbRunning(ctx context.Context) (bool, error) {
 	for _, target := range gnbTargets {
+		if target == constant.DEPLOY_TARGET_GNB && p.FlContext.GnbDeployment().Core == model.GnbCoreExternal {
+			continue
+		}
 		running, err := p.isTargetRunning(ctx, target)
 		if err != nil {
 			return false, err
@@ -386,11 +434,16 @@ func (p *Processor) resolveUeGnbTarget(ctx context.Context, sd string) (string, 
 
 // gnbRanIp is the ran-ue static IP a UE dials for a given gNB target - see
 // the gnb/gnb-slice1/gnb-slice2 compose templates' own ran-ue ipv4_address.
-func gnbRanIp(target string) string {
-	if target == constant.DEPLOY_TARGET_GNB_SLICE2 {
+// The single gNB's address depends on its profile (the host's address on
+// an external core).
+func (p *Processor) gnbRanIp(target string) string {
+	switch target {
+	case constant.DEPLOY_TARGET_GNB_SLICE2:
 		return "10.0.2.5"
+	case constant.DEPLOY_TARGET_GNB_SLICE1:
+		return "10.0.2.3"
 	}
-	return "10.0.2.3"
+	return p.FlContext.GnbRanIp()
 }
 
 func (p *Processor) anyUeRunning(ctx context.Context) (bool, error) {

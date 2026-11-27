@@ -23,6 +23,12 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+export interface DeployGnbRequest {
+    /**
+     * A saved gNB profile; empty deploys the lab default.
+     */
+    'profileId'?: string;
+}
 export interface DeployLogsResponse {
     'target': string;
     'lines': Array<string>;
@@ -32,6 +38,7 @@ export interface DeployStatusResponse {
     'status': string;
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
+    'gnb'?: GnbDeployment;
 }
 export interface DeployUeListResponse {
     'instances'?: Array<DeployUeStatusResponse>;
@@ -58,6 +65,54 @@ export interface DeployUeStatusResponse {
     'services'?: Array<ServiceStatus>;
     'lastDeployed'?: string;
 }
+export interface GnbDeployment {
+    'profileId'?: string;
+    'profileName': string;
+    'core': GnbDeploymentCoreEnum;
+    'amfIp': string;
+    'hostIp'?: string;
+}
+
+export const GnbDeploymentCoreEnum = {
+    Lab: 'lab',
+    External: 'external',
+} as const;
+
+export type GnbDeploymentCoreEnum = typeof GnbDeploymentCoreEnum[keyof typeof GnbDeploymentCoreEnum];
+
+export interface GnbProfile {
+    'id'?: string;
+    'name': string;
+    'gnbId': string;
+    'gnbName'?: string;
+    'mcc': string;
+    'mnc': string;
+    'tac': string;
+    'sst': string;
+    'sd'?: string;
+    /**
+     * lab dials the free5GC fru-lab deploys; external runs the gNB on the host network and dials amfIp / upfIp.
+     */
+    'core': GnbProfileCoreEnum;
+    'amfIp'?: string;
+    'amfPort'?: number;
+    'upfIp'?: string;
+    'upfPort'?: number;
+    /**
+     * The host address the gNB listens on (external core); UEs dial it too.
+     */
+    'hostIp'?: string;
+    'logLevel'?: string;
+    'updatedAt'?: string;
+}
+
+export const GnbProfileCoreEnum = {
+    Lab: 'lab',
+    External: 'external',
+} as const;
+
+export type GnbProfileCoreEnum = typeof GnbProfileCoreEnum[keyof typeof GnbProfileCoreEnum];
+
 export interface ImageInfo {
     'key': string;
     'name': string;
@@ -90,6 +145,9 @@ export interface LoginResponse {
 export interface MessageResponse {
     'message'?: string;
 }
+export interface RenderedConfig {
+    'yaml': string;
+}
 export interface RequestDeployFree5gc {
     /**
      * Which free5gc compose template to deploy. Defaults to \"basic\" when omitted.
@@ -108,6 +166,28 @@ export type RequestDeployFree5gcTemplateEnum = typeof RequestDeployFree5gcTempla
 export interface ServiceStatus {
     'name': string;
     'status': string;
+}
+export interface UeProfile {
+    'id'?: string;
+    'name': string;
+    'mcc': string;
+    'mnc': string;
+    /**
+     * The first UE\'s MSIN; the others count up from it.
+     */
+    'msinStart': string;
+    'count': number;
+    'permanentKey': string;
+    /**
+     * OPc
+     */
+    'opValue': string;
+    'amf': string;
+    'sqn': string;
+    'dnn'?: string;
+    'sst': string;
+    'sd'?: string;
+    'updatedAt'?: string;
 }
 
 /**
@@ -519,12 +599,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+         * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
          * @summary Deploy gNB
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbUp: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        deployGnbUp: async (deployGnbRequest?: DeployGnbRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/deploy/gnb`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -541,11 +622,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
+            localVarHeaderParameter['Content-Type'] = 'application/json';
             localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deployGnbRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -744,6 +827,199 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * 
+         * @summary Save a new gNB profile
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCreate: async (gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileCreate', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Delete a gNB profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('gnbProfileDelete', 'id', id)
+            const localVarPath = `/api/profiles/gnb/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary List the saved gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/profiles/gnb`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Preview the config file a gNB profile deploys
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileRender: async (gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileRender', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb/render`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Update a gNB profile
+         * @param {string} id 
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileUpdate: async (id: string, gnbProfile: GnbProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('gnbProfileUpdate', 'id', id)
+            // verify required parameter 'gnbProfile' is not null or undefined
+            assertParamExists('gnbProfileUpdate', 'gnbProfile', gnbProfile)
+            const localVarPath = `/api/profiles/gnb/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(gnbProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
          * @summary List the images this app deploys
          * @param {*} [options] Override http request option.
@@ -917,6 +1193,199 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
                 options: localVarRequestOptions,
             };
         },
+        /**
+         * 
+         * @summary Save a new UE profile
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileCreate: async (ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileCreate', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Delete a UE profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('ueProfileDelete', 'id', id)
+            const localVarPath = `/api/profiles/ue/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary List the saved UE profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/profiles/ue`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Preview the config file a UE profile deploys
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileRender: async (ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileRender', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue/render`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Update a UE profile
+         * @param {string} id 
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileUpdate: async (id: string, ueProfile: UeProfile, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('ueProfileUpdate', 'id', id)
+            // verify required parameter 'ueProfile' is not null or undefined
+            assertParamExists('ueProfileUpdate', 'ueProfile', ueProfile)
+            const localVarPath = `/api/profiles/ue/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(ueProfile, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
     }
 };
 
@@ -1066,13 +1535,14 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+         * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
          * @summary Deploy gNB
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbUp(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(options);
+        async deployGnbUp(deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(deployGnbRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbUp']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1143,6 +1613,71 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 
+         * @summary Save a new gNB profile
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileCreate(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<GnbProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileCreate(gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Delete a gNB profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary List the saved gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<GnbProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Preview the config file a gNB profile deploys
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileRender(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RenderedConfig>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileRender(gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileRender']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Update a gNB profile
+         * @param {string} id 
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async gnbProfileUpdate(id: string, gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<GnbProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.gnbProfileUpdate(id, gnbProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.gnbProfileUpdate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
          * @summary List the images this app deploys
          * @param {*} [options] Override http request option.
@@ -1203,6 +1738,71 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.logout(options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.logout']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Save a new UE profile
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileCreate(ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UeProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileCreate(ueProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Delete a UE profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary List the saved UE profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<UeProfile>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Preview the config file a UE profile deploys
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileRender(ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RenderedConfig>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileRender(ueProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileRender']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Update a UE profile
+         * @param {string} id 
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ueProfileUpdate(id: string, ueProfile: UeProfile, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UeProfile>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ueProfileUpdate(id, ueProfile, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ueProfileUpdate']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
     }
@@ -1321,13 +1921,14 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployGnbStatus(options).then((request) => request(axios, basePath));
         },
         /**
-         * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+         * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
          * @summary Deploy gNB
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbUp(options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbUp(options).then((request) => request(axios, basePath));
+        deployGnbUp(deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbUp(deployGnbRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1380,6 +1981,56 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployUeUp(instance, deployUeRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * 
+         * @summary Save a new gNB profile
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileCreate(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<GnbProfile> {
+            return localVarFp.gnbProfileCreate(gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Delete a gNB profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.gnbProfileDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary List the saved gNB profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileList(options?: RawAxiosRequestConfig): AxiosPromise<Array<GnbProfile>> {
+            return localVarFp.gnbProfileList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Preview the config file a gNB profile deploys
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileRender(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<RenderedConfig> {
+            return localVarFp.gnbProfileRender(gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Update a gNB profile
+         * @param {string} id 
+         * @param {GnbProfile} gnbProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        gnbProfileUpdate(id: string, gnbProfile: GnbProfile, options?: RawAxiosRequestConfig): AxiosPromise<GnbProfile> {
+            return localVarFp.gnbProfileUpdate(id, gnbProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
          * @summary List the images this app deploys
          * @param {*} [options] Override http request option.
@@ -1426,6 +2077,56 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          */
         logout(options?: RawAxiosRequestConfig): AxiosPromise<void> {
             return localVarFp.logout(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Save a new UE profile
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileCreate(ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<UeProfile> {
+            return localVarFp.ueProfileCreate(ueProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Delete a UE profile
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.ueProfileDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary List the saved UE profiles
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileList(options?: RawAxiosRequestConfig): AxiosPromise<Array<UeProfile>> {
+            return localVarFp.ueProfileList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Preview the config file a UE profile deploys
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileRender(ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<RenderedConfig> {
+            return localVarFp.ueProfileRender(ueProfile, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Update a UE profile
+         * @param {string} id 
+         * @param {UeProfile} ueProfile 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ueProfileUpdate(id: string, ueProfile: UeProfile, options?: RawAxiosRequestConfig): AxiosPromise<UeProfile> {
+            return localVarFp.ueProfileUpdate(id, ueProfile, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -1552,13 +2253,14 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+     * Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
      * @summary Deploy gNB
+     * @param {DeployGnbRequest} [deployGnbRequest] 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbUp(options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbUp(options).then((request) => request(this.axios, this.basePath));
+    public deployGnbUp(deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbUp(deployGnbRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -1617,6 +2319,61 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
+     * 
+     * @summary Save a new gNB profile
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileCreate(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileCreate(gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Delete a gNB profile
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary List the saved gNB profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Preview the config file a gNB profile deploys
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileRender(gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileRender(gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Update a gNB profile
+     * @param {string} id 
+     * @param {GnbProfile} gnbProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public gnbProfileUpdate(id: string, gnbProfile: GnbProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).gnbProfileUpdate(id, gnbProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * Reports every image pinned by the compose templates (free5gc\'s NFs, mongo, and free-ran-ue), and whether each is currently present in the local docker image cache.
      * @summary List the images this app deploys
      * @param {*} [options] Override http request option.
@@ -1667,6 +2424,61 @@ export class DefaultApi extends BaseAPI {
      */
     public logout(options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).logout(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Save a new UE profile
+     * @param {UeProfile} ueProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileCreate(ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileCreate(ueProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Delete a UE profile
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary List the saved UE profiles
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Preview the config file a UE profile deploys
+     * @param {UeProfile} ueProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileRender(ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileRender(ueProfile, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Update a UE profile
+     * @param {string} id 
+     * @param {UeProfile} ueProfile 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ueProfileUpdate(id: string, ueProfile: UeProfile, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ueProfileUpdate(id, ueProfile, options).then((request) => request(this.axios, this.basePath));
     }
 }
 

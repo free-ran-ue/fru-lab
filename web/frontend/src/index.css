@@ -1,6 +1,7 @@
-/* fru-lab design tokens. Colours follow the logo (src/assets/frulab-logo.png):
-   indigo-to-violet on a near-black ink. Status colours stay green/amber/red
-   so they read at a glance. Use the variables, not hex values, in modules. */
+/* fru-lab design tokens: an engineering workbench. Neutral greys, one
+   indigo accent from the logo, status colours that read at a glance, small
+   radii and thin borders. Dark by default, light from the toggle. Use the
+   variables, not hex values, in modules. */
 @import '@fontsource/ibm-plex-sans/400.css';
 @import '@fontsource/ibm-plex-sans/500.css';
 @import '@fontsource/ibm-plex-sans/600.css';
@@ -19,51 +20,70 @@
   --font-sans: 'IBM Plex Sans', 'Segoe UI', 'Noto Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* surfaces */
-  --bg: #F5F5FA;            /* page */
-  --surface: #FFFFFF;       /* panels, cards */
-  --surface-sunken: #F9F8FD;/* table heads, footers */
-  --surface-muted: #F0EFF6; /* tracks, tags */
-  --border: #DEDCEB;        /* panel borders */
-  --border-soft: #EEEDF5;   /* row dividers */
-  --border-strong: #CFCDE0; /* inputs, secondary buttons */
+  /* brand: the logo cube; the UI itself is neutral with one accent */
+  --brand: #4A57D6;
+  --brand-2: #7C5CE0;
+  --cube-top: #9D8CFF;
+  --cube-left: #5B4BEF;
+  --cube-right: #8247F0;
+  /* flat on purpose: the workbench has no gradients */
+  --grad-brand: linear-gradient(var(--accent), var(--accent));
+  --grad-spark: linear-gradient(var(--ok), var(--ok));
+  --on-accent: #FFFFFF;
+  --violet: #9B7BEA;
+  --coral: var(--accent);
 
-  /* text */
-  --ink: #13122B;
-  --ink-2: #2D2B48;         /* labels */
-  --muted: #5B5975;         /* secondary text, 4.5:1 on white */
+  /* chrome: activity bar, console, terminal; dark in both modes */
+  --chrome: #0B0D11;
+  --chrome-hover: #181B22;
+  --chrome-active: #1F232C;
+  --chrome-border: #1D2129;
+  --chrome-strong: #F1F3F7;
+  --chrome-text: #C3C8D3;
+  --chrome-muted: #7C8496;
+  --chrome-accent: #8E99FF;
+  --log-info: #7FD8A8;
+  --log-warn: #F2C56B;
+  --log-err: #FF8A8E;
+  --log-ts: #5F6778;
 
-  /* brand */
-  --accent: #4F46E5;
-  --accent-hover: #4338CA;
-  --accent-ink: #3730A3;    /* accent text on tinted bg */
-  --accent-soft: #ECEBFD;   /* selected rows, chips */
-  --accent-ring: #E4E2FB;
-  --violet: #A855F7;        /* second series */
-  --brand-1: #8B7CF6;       /* cube faces */
-  --brand-2: #4F46E5;
-  --brand-3: #6D3FE8;
-
-  /* chrome (sidebar, log viewer) */
-  --chrome: #13122B;
-  --chrome-hover: #1E1D3D;
-  --chrome-active: #2B2858;
-  --chrome-text: #CBC9E6;
-  --chrome-muted: #908DB9;
-  --chrome-accent: #A99BFF;
-
-  /* status */
-  --ok: #12A150;  --ok-ink: #0B6B36;  --ok-bg: #E7F6EE;
-  --warn: #B45309; --warn-ink: #8A4B08; --warn-bg: #FDF1E3;
-  --bad: #B42318; --bad-ink: #9A1C13; --bad-bg: #FDECEA;
-  --idle-ink: #3E3C58; --idle-bg: #F0EFF6;
+  --bg: #0E1014;
+  --surface: #15181E;
+  --surface-sunken: #111318;
+  --surface-muted: #1C2028;
+  --surface-glass: #15181E;
+  --border: #252A33;
+  --border-soft: #1D2129;
+  --border-strong: #343A46;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --ink: #E5E8EE;
+  --ink-2: #C3C8D3;
+  --muted: #8A92A3;
+  --accent: #6E7BF2;
+  --accent-hover: #5D6AE6;
+  --accent-ink: #A3ACFF;
+  --accent-soft: rgba(110, 123, 242, 0.14);
+  --accent-ring: rgba(110, 123, 242, 0.4);
+  --canvas-bg: #101217;
+  --canvas-grid: #181B22;
+  --link: #3A404D;
+  --link-live: #3ECF8E;
+  --ok: #3ECF8E;   --ok-ink: #5EDCA2;   --ok-bg: rgba(62, 207, 142, 0.12);
+  --warn: #F2A93B; --warn-ink: #F5BD63; --warn-bg: rgba(242, 169, 59, 0.13);
+  --bad: #F0565B;  --bad-ink: #FF7E82;  --bad-bg: rgba(240, 86, 91, 0.13);
+  --idle: #5C6475; --idle-ink: #A4ABBA; --idle-bg: #1E222A;
 
   /* shape */
-  --radius: 0.5rem;
-  --radius-sm: 0.375rem;
-  --control-h: 2.25rem;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --control-h: 1.875rem;
 
+  color-scheme: dark;
   font-family: var(--font-sans);
+  font-size: 0.8125rem;
   line-height: 1.5;
   font-weight: 400;
   color: var(--ink);
@@ -74,10 +94,44 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark is the default; light from the toggle (src/theme.ts) sets
+   data-theme="light". */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F4F5F7;
+  --surface: #FFFFFF;
+  --surface-sunken: #F8F9FA;
+  --surface-muted: #EEF0F3;
+  --surface-glass: #FFFFFF;
+  --border: #E1E4E9;
+  --border-soft: #ECEEF1;
+  --border-strong: #CDD2DA;
+  --overlay: rgba(15, 17, 21, 0.45);
+  --shadow-sm: 0 1px 2px rgba(15, 17, 21, 0.06);
+  --shadow: 0 2px 8px rgba(15, 17, 21, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 17, 21, 0.14);
+  --ink: #12151B;
+  --ink-2: #2C323D;
+  --muted: #5D6575;
+  --accent: #4A57D6;
+  --accent-hover: #3D49BF;
+  --accent-ink: #3A46B8;
+  --accent-soft: #ECEEFC;
+  --accent-ring: #C9CEF5;
+  --canvas-bg: #FAFBFC;
+  --canvas-grid: #EDEFF2;
+  --link: #B9C0CC;
+  --link-live: #12A46B;
+  --ok: #12A46B;   --ok-ink: #0B7049;   --ok-bg: #E4F5EC;
+  --warn: #D98A00; --warn-ink: #8F5A00; --warn-bg: #FCF1DC;
+  --bad: #D9394C;  --bad-ink: #B02334;  --bad-bg: #FBE7EA;
+  --idle: #9AA2B1; --idle-ink: #4B5262; --idle-bg: #EEF0F3;
+}
+
 /* Everything is sized in rem, so the whole UI follows the window:
    16px at 1440px wide, about 17.5px at 1920px, 19.5px at 2560px. */
 html {
-  font-size: clamp(14px, 0.3125vw + 11.5px, 20px);
+  font-size: clamp(14px, 0.15vw + 12px, 16px);
 }
 
 body {
@@ -95,11 +149,12 @@ textarea {
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 a:hover {
-  color: var(--accent-hover);
+  color: var(--accent-ink);
+  text-decoration: underline;
 }
 
 :focus-visible {

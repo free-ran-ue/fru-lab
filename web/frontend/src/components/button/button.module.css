@@ -23,7 +23,7 @@
 .primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #FFFFFF;
+  color: var(--on-accent);
 }
 
 .primary:hover:not(:disabled) {
@@ -45,7 +45,7 @@
 .danger {
   background: var(--bad);
   border-color: var(--bad);
-  color: #FFFFFF;
+  color: var(--on-accent);
 }
 
 .danger:hover:not(:disabled) {

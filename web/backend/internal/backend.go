@@ -175,10 +175,12 @@ func addServices(router *gin.Engine, b *backend) {
 	addRoutes(apiGroup, b.getAccountRoutes())
 	addRoutes(authGroup, b.getDeployRoutes())
 	addRoutes(authGroup, b.getImageRoutes())
+	addRoutes(authGroup, b.getProfileRoutes())
 	// the ue terminal websocket does its own token check (query param, since
 	// a browser can't set an Authorization header on a WS handshake), so it
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
+	addRoutes(apiGroup, b.getStreamRoutes())
 	authGroup.Any("/webconsole/*path", func(c *gin.Context) { b.webconsoleProxy.ServeHTTP(c.Writer, c.Request) })
 }
 

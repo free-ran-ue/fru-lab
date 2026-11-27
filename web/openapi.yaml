@@ -178,10 +178,16 @@ paths:
   /api/deploy/gnb:
     post:
       summary: Deploy gNB
-      description: Fails with 409 if the core network isn't running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+      description: Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn't running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
       operationId: deployGnbUp
       security:
         - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployGnbRequest'
       responses:
         '200':
           description: OK
@@ -596,6 +602,244 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployUeLogsResponse'
 
+  /api/profiles/gnb:
+    get:
+      summary: List the saved gNB profiles
+      operationId: gnbProfileList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GnbProfile'
+    post:
+      summary: Save a new gNB profile
+      operationId: gnbProfileCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: The saved profile, with its id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GnbProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/gnb/render:
+    post:
+      summary: Preview the config file a gNB profile deploys
+      operationId: gnbProfileRender
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderedConfig'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/gnb/{id}:
+    put:
+      summary: Update a gNB profile
+      operationId: gnbProfileUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GnbProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GnbProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Delete a gNB profile
+      operationId: gnbProfileDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue:
+    get:
+      summary: List the saved UE profiles
+      operationId: ueProfileList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UeProfile'
+    post:
+      summary: Save a new UE profile
+      operationId: ueProfileCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: The saved profile, with its id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UeProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue/render:
+    post:
+      summary: Preview the config file a UE profile deploys
+      operationId: ueProfileRender
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderedConfig'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+  /api/profiles/ue/{id}:
+    put:
+      summary: Update a UE profile
+      operationId: ueProfileUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UeProfile'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UeProfile'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Delete a UE profile
+      operationId: ueProfileDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
   /api/images:
     get:
       summary: List the images this app deploys
@@ -782,6 +1026,8 @@ components:
         lastDeployed:
           type: string
           format: date-time
+        gnb:
+          $ref: '#/components/schemas/GnbDeployment'
     ServiceStatus:
       type: object
       required:
@@ -941,3 +1187,111 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageInfo'
+    DeployGnbRequest:
+      type: object
+      properties:
+        profileId:
+          type: string
+          description: A saved gNB profile; empty deploys the lab default.
+    GnbDeployment:
+      type: object
+      required: [profileName, core, amfIp]
+      properties:
+        profileId:
+          type: string
+        profileName:
+          type: string
+        core:
+          type: string
+          enum: [lab, external]
+        amfIp:
+          type: string
+        hostIp:
+          type: string
+    RenderedConfig:
+      type: object
+      required: [yaml]
+      properties:
+        yaml:
+          type: string
+    GnbProfile:
+      type: object
+      required: [name, gnbId, mcc, mnc, tac, sst, core]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gnbId:
+          type: string
+          example: '000314'
+        gnbName:
+          type: string
+        mcc:
+          type: string
+        mnc:
+          type: string
+        tac:
+          type: string
+          example: '000001'
+        sst:
+          type: string
+        sd:
+          type: string
+        core:
+          type: string
+          enum: [lab, external]
+          description: lab dials the free5GC fru-lab deploys; external runs the gNB on the host network and dials amfIp / upfIp.
+        amfIp:
+          type: string
+        amfPort:
+          type: integer
+        upfIp:
+          type: string
+        upfPort:
+          type: integer
+        hostIp:
+          type: string
+          description: The host address the gNB listens on (external core); UEs dial it too.
+        logLevel:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    UeProfile:
+      type: object
+      required: [name, mcc, mnc, msinStart, count, permanentKey, opValue, amf, sqn, sst]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mcc:
+          type: string
+        mnc:
+          type: string
+        msinStart:
+          type: string
+          description: The first UE's MSIN; the others count up from it.
+        count:
+          type: integer
+          minimum: 1
+          maximum: 500
+        permanentKey:
+          type: string
+        opValue:
+          type: string
+          description: OPc
+        amf:
+          type: string
+        sqn:
+          type: string
+        dnn:
+          type: string
+        sst:
+          type: string
+        sd:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time

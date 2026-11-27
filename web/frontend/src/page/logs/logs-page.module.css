@@ -265,7 +265,7 @@
 
 .viewerSource {
   font-weight: 500;
-  color: #FFFFFF;
+  color: var(--chrome-strong);
 }
 
 .viewerMeta {
@@ -289,7 +289,7 @@
   font-family: var(--font-mono);
   font-size: 0.75rem;
   line-height: 1.1875rem;
-  color: #D9D7F0;
+  color: var(--chrome-text);
   white-space: pre;
   width: max-content;
   min-width: 100%;
@@ -314,7 +314,7 @@
   font-family: var(--font-mono);
   font-size: 0.75rem;
   line-height: 1.1875rem;
-  color: #D9D7F0;
+  color: var(--chrome-text);
 }
 
 .stamp {
@@ -333,15 +333,15 @@
 }
 
 .lvInfo {
-  color: #8FE3B0;
+  color: var(--log-info);
 }
 
 .lvWarn {
-  color: #F5C26B;
+  color: var(--log-warn);
 }
 
 .lvErr {
-  color: #FF8E86;
+  color: var(--log-err);
 }
 
 .lvDebug {

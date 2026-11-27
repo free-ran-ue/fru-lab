@@ -1,5 +1,5 @@
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import LoginPage from './page/login/LoginPage'
-import { Navigate, Route, Routes } from 'react-router-dom'
 import DashboardPage from './page/dashboard/DashboardPage'
 import SubscribersPage from './page/subscribers/SubscribersPage'
 import SubscriberFormPage from './page/subscribers/SubscriberFormPage'
@@ -9,101 +9,37 @@ import ImagesPage from './page/images/ImagesPage'
 import CoreNetworkPage from './page/core/CoreNetworkPage'
 import FreeRanPage from './page/ran/FreeRanPage'
 import FreeUePage from './page/ue/FreeUePage'
+import { LabProvider } from './lab/LabContext'
+import { EventsProvider } from './lab/console/EventsContext'
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('token')
-  if (!token) {
-    return <Navigate to="/login" replace />
-  }
-
-  return <>{children}</>
+// Signed in: one lab poller and one set of log streams for every view.
+function SignedIn() {
+  if (!localStorage.getItem('token')) return <Navigate to="/login" replace />
+  return (
+    <LabProvider>
+      <EventsProvider>
+        <Outlet />
+      </EventsProvider>
+    </LabProvider>
+  )
 }
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/"
-        element={(
-          <RequireAuth>
-            <DashboardPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/core-network"
-        element={(
-          <RequireAuth>
-            <CoreNetworkPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/free-ran"
-        element={(
-          <RequireAuth>
-            <FreeRanPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/free-ue"
-        element={(
-          <RequireAuth>
-            <FreeUePage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/core-network/subscribers"
-        element={(
-          <RequireAuth>
-            <SubscribersPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/core-network/subscribers/new"
-        element={(
-          <RequireAuth>
-            <SubscriberFormPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/core-network/subscribers/:ueId/:plmnId/edit"
-        element={(
-          <RequireAuth>
-            <SubscriberFormPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/core-network/subscribers/:ueId/:plmnId"
-        element={(
-          <RequireAuth>
-            <SubscriberViewPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/logs"
-        element={(
-          <RequireAuth>
-            <LogsPage />
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/images"
-        element={(
-          <RequireAuth>
-            <ImagesPage />
-          </RequireAuth>
-        )}
-      />
-      {/* the Status page replaced the System page */}
+      <Route element={<SignedIn />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/core-network" element={<CoreNetworkPage />} />
+        <Route path="/core-network/subscribers" element={<SubscribersPage />} />
+        <Route path="/core-network/subscribers/new" element={<SubscriberFormPage />} />
+        <Route path="/core-network/subscribers/:ueId/:plmnId/edit" element={<SubscriberFormPage />} />
+        <Route path="/core-network/subscribers/:ueId/:plmnId" element={<SubscriberViewPage />} />
+        <Route path="/free-ran" element={<FreeRanPage />} />
+        <Route path="/free-ue" element={<FreeUePage />} />
+        <Route path="/logs" element={<LogsPage />} />
+        <Route path="/images" element={<ImagesPage />} />
+      </Route>
       {/* Subscribers moved under Core Network */}
       <Route path="/subscribers/*" element={<Navigate to="/core-network/subscribers" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

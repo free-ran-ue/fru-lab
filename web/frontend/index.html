@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/frulab-favicon.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>fru Lab</title>
+    <title>fru-lab</title>
+    <script>
+      // Apply the saved light/dark choice before first paint (see src/theme.ts).
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('frulab-theme') === 'light' ? 'light' : 'dark'
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark'
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

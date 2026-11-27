@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AxiosPromise } from 'axios'
-import type { DeployStatusResponse, DeployLogsResponse, MessageResponse } from '../api'
+import type { DeployStatusResponse, DeployLogsResponse, GnbDeployment, MessageResponse } from '../api'
 import type { DeploymentNode, NetworkFunction, NodeStatus } from './types'
 
 const POLL_INTERVAL_MS = 4000
@@ -33,6 +33,11 @@ export function useDeployTarget(
   })
   const [networkFunctions, setNetworkFunctions] = useState<NetworkFunction[]>([])
   const [isActionPending, setIsActionPending] = useState(false)
+  // false until the first status answer, so pages can tell "stopped" from
+  // "not known yet"
+  const [loaded, setLoaded] = useState(false)
+  // the gnb target's deployed profile
+  const [gnbDeployment, setGnbDeployment] = useState<GnbDeployment | null>(null)
   const [logLines, setLogLines] = useState<string[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
 
@@ -54,6 +59,8 @@ export function useDeployTarget(
         ? new Date(response.data.lastDeployed).toLocaleString()
         : '—',
     })
+    setGnbDeployment(response.data.gnb ?? null)
+    setLoaded(true)
   }, [deployApi, id, label, formatSublabel])
 
   useEffect(() => {
@@ -96,5 +103,5 @@ export function useDeployTarget(
     }
   }, [deployApi])
 
-  return { node, networkFunctions, isActionPending, deploy, stop, logLines, isLoadingLogs, fetchLogs }
+  return { node, networkFunctions, isActionPending, loaded, gnbDeployment, deploy, stop, refresh, logLines, isLoadingLogs, fetchLogs }
 }

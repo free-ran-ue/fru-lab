@@ -4,7 +4,8 @@ import { useDeployTarget } from './useDeployTarget'
 
 export function useGnbStatus() {
   const deployApi = useMemo(() => ({
-    up: () => api.deployGnbUp(),
+    // variant is the gNB profile id; empty deploys the lab default
+    up: (profileId?: string) => api.deployGnbUp(profileId ? { profileId } : undefined),
     down: () => api.deployGnbDown(),
     status: () => api.deployGnbStatus(),
     logs: () => api.deployGnbLogs(),

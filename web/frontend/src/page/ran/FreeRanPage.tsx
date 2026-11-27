@@ -1,143 +1,156 @@
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import AppLayout from '../../components/layout/AppLayout'
 import NotificationContainer from '../../components/notifications/NotificationContainer'
 import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
-import SelectedNodePanel, { type DetailRow } from '../../lab/SelectedNodePanel'
-import { StatusTag } from '../../lab/StatusTag'
-import { SLICE1_SD, SLICE2_SD, templateLabel, useLab } from '../../lab/useLab'
-import type { DeploymentNode } from '../../lab/types'
-import styles from '../../lab/lab.module.css'
+import type { GnbProfile } from '../../api'
+import LabCanvas from '../../lab/canvas/LabCanvas'
+import { ID, buildGraph } from '../../lab/canvas/graph'
+import { useEvents } from '../../lab/console/EventsContext'
+import { useLab } from '../../lab/LabContext'
+import { Actions, Button, Dot, Hint, InspectorHead, KV, Section, Tabs, ui } from '../../lab/LabUi'
+import GnbProfilesPanel from '../../lab/profiles/GnbProfilesPanel'
+import { LAB_DEFAULT_GNB, useGnbProfiles, useStoredState } from '../../lab/useProfiles'
+import Workbench, { logSourceFor } from '../../lab/workbench/Workbench'
+import NodeInspector from '../../lab/workbench/NodeInspector'
+import { useConsole } from '../../lab/workbench/Console'
 
-interface GnbRow {
-  name: string
-  sd: string
-  node: DeploymentNode
-  ues: number
-}
-
-// FreeRanPage deploys and stops the free-ran-ue gNB. Its template follows
-// the core's: under ULCL (Two Slice) there is one gNB per slice, and
-// Deploy / Stop act on both.
+// FreeRanPage runs the free-ran-ue gNB from a gNB profile: the lab default
+// or a saved one, on the lab free5GC or on a core outside the lab. Under
+// ULCL (Two Slice) it runs the two built-in slice gNBs instead.
 export default function FreeRanPage() {
-  const navigate = useNavigate()
   const lab = useLab()
+  const { ueLive, events } = useEvents()
   const { gnb, gnbSlice1, gnbSlice2, nodes, isTwoSlice } = lab
+  const gnbProfiles = useGnbProfiles()
+  const con = useConsole()
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
+  const [selected, setSelected] = useState<string | null>(null)
+  const [tab, setTab] = useState<'gnb' | 'profiles'>('gnb')
+  const [profileId, setProfileId] = useStoredState('frulab-gnb-profile', '')
 
-  const node = nodes.gnb
-  const gnbStopped = node.status === 'stopped'
-  const isPending = isTwoSlice ? gnbSlice1.isActionPending || gnbSlice2.isActionPending : gnb.isActionPending
-  const blockedReason = gnbStopped ? lab.blocked.gnbDeploy : lab.blocked.gnbStop
+  const profile: GnbProfile = gnbProfiles.profiles.find((p) => p.id === profileId) ?? LAB_DEFAULT_GNB
+  const gnbStopped = nodes.gnb.status === 'stopped'
+  const pending = isTwoSlice ? gnbSlice1.isActionPending || gnbSlice2.isActionPending : gnb.isActionPending
+  const deployBlocked = (p: GnbProfile) => (isTwoSlice || p.core === 'external' ? undefined : lab.blocked.gnbDeploy)
+  const blocked = gnbStopped ? (isTwoSlice ? lab.blocked.gnbDeploy : deployBlocked(profile)) : lab.blocked.gnbStop
+  const graph = buildGraph(lab, 'ran', 'basic', ueLive)
+  const inUse = gnbStopped || isTwoSlice ? null : (gnb.gnbDeployment?.profileId ?? '')
+  const d = gnb.gnbDeployment
+  const ngSetup = [...events].reverse().find((e) => e.node.startsWith('gnb') && /NG Setup complete|Cannot reach the AMF/.test(e.text))
 
-  const rows: GnbRow[] = isTwoSlice
-    ? [
-      { name: 'gNB slice 1', sd: SLICE1_SD, node: gnbSlice1.node, ues: lab.upUes.filter((r) => r.sd === SLICE1_SD).length },
-      { name: 'gNB slice 2', sd: SLICE2_SD, node: gnbSlice2.node, ues: lab.upUes.filter((r) => r.sd === SLICE2_SD).length },
-    ]
-    : [{ name: 'gNB', sd: '—', node: gnb.node, ues: lab.upUes.length }]
-
-  async function handlePrimary() {
+  async function deploy(id: string) {
     try {
       if (isTwoSlice) {
-        if (!gnbStopped) {
-          await Promise.allSettled([gnbSlice1.stop(), gnbSlice2.stop()])
-          addSuccess('gNB stopped')
-        } else {
-          await Promise.allSettled([gnbSlice1.deploy(), gnbSlice2.deploy()])
-          addSuccess('gNB deploy started')
-        }
-      } else if (!gnbStopped) {
-        await gnb.stop()
-        addSuccess('gNB stopped')
+        await Promise.allSettled([gnbSlice1.deploy(), gnbSlice2.deploy()])
+        addSuccess('The slice gNBs are starting')
       } else {
-        await gnb.deploy()
-        addSuccess('gNB deploy started')
+        setProfileId(id)
+        await gnb.deploy(id || undefined)
+        addSuccess(`gNB is starting with ${gnbProfiles.profiles.find((p) => p.id === id)?.name ?? LAB_DEFAULT_GNB.name}`)
+        setTab('gnb')
+        setSelected(ID.gnb)
+        con.setSource({ target: 'gnb' })
+        con.show('logs')
       }
     } catch (error) {
-      addError(extractErrorMessage(error, 'gNB action failed'))
+      addError(extractErrorMessage(error, 'gNB deploy failed'))
     }
   }
 
-  const primaryLabel = isPending
-    ? (gnbStopped ? 'Deploying…' : 'Stopping…')
-    : (gnbStopped ? 'Deploy gNB' : 'Stop gNB')
+  async function stop() {
+    try {
+      if (isTwoSlice) await Promise.allSettled([gnbSlice1.stop(), gnbSlice2.stop()])
+      else await gnb.stop()
+      addSuccess('gNB stopped')
+    } catch (error) {
+      addError(extractErrorMessage(error, 'Failed to stop gNB'))
+    }
+  }
 
-  const template = isTwoSlice ? 'ulcl-2slice (two slices)' : 'basic'
-  const details: DetailRow[] = [
-    { k: 'Simulator', v: 'free-ran-ue' },
-    { k: 'Template', v: template },
-    { k: 'Core network', v: lab.runningTemplate ? `${templateLabel(lab.runningTemplate)} · ${nodes.core.status}` : 'not deployed' },
-    { k: 'UEs attached', v: String(lab.upUes.length), mono: true },
-    { k: 'Last deployed', v: node.lastDeployed, mono: true },
-  ]
+  const primary = gnbStopped
+    ? <Button kind="primary" busy={pending} disabled={Boolean(blocked)} title={blocked} onClick={() => deploy(profileId)}>{isTwoSlice ? 'Deploy slice gNBs' : `Deploy gNB · ${profile.name}`}</Button>
+    : <Button kind="danger" busy={pending} disabled={Boolean(blocked)} title={blocked} onClick={stop}>Stop gNB{isTwoSlice ? 's' : ''}</Button>
+
+  const showLogs = (id: string) => {
+    const s = logSourceFor(id)
+    if (s) { con.setSource(s); con.show('logs') }
+  }
+
+  const gnbInspector = (
+    <>
+      <InspectorHead icon="gnb" name={isTwoSlice ? 'gNB slices' : 'gNB'} sub="free-ran-ue base station" status={nodes.gnb.status} />
+      <Section title="Run">
+        {!isTwoSlice && gnbStopped && (
+          <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.625rem' }}>
+            <select className={ui.select} style={{ flex: 1 }} value={profileId} onChange={(e) => setProfileId(e.target.value)} aria-label="gNB profile">
+              {[{ ...LAB_DEFAULT_GNB, id: '' }, ...gnbProfiles.profiles].map((p) => <option key={p.id || 'default'} value={p.id ?? ''}>{p.name} · {p.core === 'external' ? `external ${p.amfIp}` : 'lab free5GC'}</option>)}
+            </select>
+            <Button small onClick={() => setTab('profiles')}>Edit</Button>
+          </div>
+        )}
+        <KV rows={isTwoSlice
+          ? [{ k: 'Template', v: 'ULCL (Two Slice)' }, { k: 'slice1', v: gnbSlice1.node.status }, { k: 'slice2', v: gnbSlice2.node.status }, { k: 'UEs attached', v: lab.upUes.length }]
+          : [
+            { k: 'Profile', v: gnbStopped ? profile.name : d?.profileName ?? '—' },
+            { k: 'Core', v: (gnbStopped ? profile.core : d?.core) === 'external' ? `external · ${gnbStopped ? profile.amfIp : d?.amfIp}` : 'lab free5GC' },
+            { k: 'NG Setup', v: gnbStopped ? '—' : ngSetup ? <><Dot status={ngSetup.level === 'error' ? 'unhealthy' : 'running'} /> {ngSetup.level === 'error' ? 'failed' : 'done'}</> : 'waiting' },
+            { k: 'UEs attached', v: lab.upUes.length },
+            { k: 'Last deployed', v: nodes.gnb.lastDeployed },
+          ]} />
+        {blocked && <Hint>{blocked}</Hint>}
+        <Actions>{primary}{!gnbStopped && <Button small onClick={() => showLogs(isTwoSlice ? 'gnb-slice1' : ID.gnb)}>Logs</Button>}</Actions>
+      </Section>
+      {lab.gnbNetworkFunctions.length > 0 && (
+        <Section title="Containers">
+          <ul className={ui.list}>{lab.gnbNetworkFunctions.map((s) => <li key={s.name}><Dot status={s.status} />{s.name}<span>{s.status}</span></li>)}</ul>
+        </Section>
+      )}
+    </>
+  )
+
+  const ownsSelection = !selected || selected === ID.gnb || selected.startsWith('gnb-')
+  const inspector = (
+    <>
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'gnb', label: 'gNB' }, { value: 'profiles', label: `Profiles (${gnbProfiles.profiles.length + 1})` }]} />
+      {tab === 'profiles'
+        ? (
+          <GnbProfilesPanel
+            profiles={gnbProfiles}
+            selectedId={profileId}
+            onSelect={setProfileId}
+            inUse={inUse}
+            deployBlocked={deployBlocked}
+            gnbUp={!gnbStopped}
+            busy={pending}
+            onDeploy={deploy}
+            onNotify={(ok, msg) => (ok ? addSuccess(msg) : addError(msg))}
+            twoSlice={isTwoSlice}
+          />
+        )
+        : ownsSelection ? gnbInspector : <NodeInspector id={selected!} onLogs={() => showLogs(selected!)} />}
+    </>
+  )
 
   return (
-    <AppLayout
-      crumbs={[{ label: 'gNB' }]}
-      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
-    >
-      <section className={styles.pageHead}>
-        <h1 className={styles.title}>free-ran</h1>
-        <span className={styles.subtitle}>free-ran-ue gNB simulator</span>
-        <div className={styles.headActions}>
-          <button type="button" className={styles.btn} onClick={() => navigate(`/logs?target=${isTwoSlice ? 'gnb-slice1' : 'gnb'}`)}>View logs</button>
-          <button
-            type="button"
-            className={`${styles.btn} ${gnbStopped ? styles.btnPrimary : styles.btnDanger}`}
-            onClick={handlePrimary}
-            disabled={isPending || Boolean(blockedReason)}
-            title={blockedReason}
-          >
-            {primaryLabel}
-          </button>
-        </div>
-      </section>
-
-      <section className={styles.meta} aria-label="gNB status">
-        <div><span>Status</span><b><StatusTag status={node.status} /></b></div>
-        <div><span>Template</span><b>{template}<em>follows the core</em></b></div>
-        <div><span>Core network</span><b><StatusTag status={nodes.core.status} /></b></div>
-        <div><span>UEs attached</span><b><span className="num">{lab.upUes.length}</span></b></div>
-      </section>
-
-      <div className={styles.dash}>
-        <div className={styles.dashMain}>
-          <section className={styles.panel} aria-label="gNBs">
-            <div className={styles.ph}>
-              <h2>gNB</h2>
-              <span className={styles.aux}>{isTwoSlice ? 'one gNB per slice' : 'one gNB'}</span>
-            </div>
-            <div className={styles.tableWrap}>
-              <table className={styles.tbl}>
-                <thead>
-                  <tr><th>gNB</th><th>Slice SD</th><th>Status</th><th className={styles.r}>UEs</th><th className={styles.r}>Last deployed</th></tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td className="num">{row.sd}</td>
-                      <td><StatusTag status={row.node.status} /></td>
-                      <td className={`num ${styles.r}`}>{row.ues}</td>
-                      <td className={styles.r}>{row.node.lastDeployed}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-
-        <SelectedNodePanel
-          name="gNB"
-          status={node.status}
-          rows={details}
-          services={lab.gnbNetworkFunctions}
-          hint={blockedReason}
-          actions={null}
-        />
-      </div>
+    <AppLayout crumbs={[{ label: 'gNB' }]} fill overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
+      <Workbench
+        title="free-ran"
+        status={<><span>gNB <b>{nodes.gnb.status}</b></span><span>profile <b>{gnbStopped ? profile.name : d?.profileName ?? '—'}</b></span><span>core <b>{lab.gnbExternal ? `external ${d?.amfIp}` : nodes.core.status}</b></span><span>UEs <b>{lab.upUes.length}</b></span></>}
+        actions={primary}
+        console={con}
+        selectedId={selected}
+        onSelect={(id) => { setSelected(id); setTab('gnb') }}
+        canvas={(
+          <LabCanvas
+            label="The radio side: the UE fleet over Uu to the gNB, and the gNB over N2 and N3 to its core."
+            {...graph}
+            selectedId={selected}
+            onSelect={(id) => { setSelected(id); setTab('gnb'); const s = logSourceFor(id); if (s) con.setSource(s) }}
+          />
+        )}
+        inspector={inspector}
+      />
     </AppLayout>
   )
 }

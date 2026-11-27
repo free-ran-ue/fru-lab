@@ -1,180 +1,116 @@
-import type { ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AppLayout from '../../components/layout/AppLayout'
-import TopologySchematic from '../../lab/TopologySchematic'
-import { StatusSwatch, StatusTag } from '../../lab/StatusTag'
-import { getStatusMeta } from '../../lab/statusMeta'
-import { SLICE1_SD, SLICE2_SD, templateLabel, useLab } from '../../lab/useLab'
-import type { NodeStatus } from '../../lab/types'
-import styles from '../../lab/lab.module.css'
+import LabCanvas from '../../lab/canvas/LabCanvas'
+import { buildGraph } from '../../lab/canvas/graph'
+import { NodeIcon, type IconName } from '../../lab/canvas/icons'
+import { useEvents } from '../../lab/console/EventsContext'
+import { useLab } from '../../lab/LabContext'
+import { Actions, Button, Dot, KV, Section, ui } from '../../lab/LabUi'
+import { templateLabel } from '../../lab/useLab'
+import Workbench, { logSourceFor } from '../../lab/workbench/Workbench'
+import NodeInspector from '../../lab/workbench/NodeInspector'
+import { useConsole } from '../../lab/workbench/Console'
+import empty from './empty-lab.module.css'
 
-const LEGEND: NodeStatus[] = ['running', 'deploying', 'stopped', 'unhealthy']
-// how many UE rows the free-ue column lists before "+N more"
-const UE_PREVIEW = 8
+const STEPS: { n: number; icon: IconName; title: string; text: string; to: string }[] = [
+  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy free5GC from a template: Basic, ULCL or Two Slice. Skip it if your gNB will use a core outside the lab.', to: '/core-network' },
+  { n: 2, icon: 'gnb', title: 'free-ran', text: 'Bring up a gNB from a profile, on the lab free5GC or pointed at any AMF and UPF you can reach.', to: '/free-ran' },
+  { n: 3, icon: 'ue', title: 'free-ue', text: 'Launch UEs from the free5GC subscribers or your own UE profiles, then test their data path.', to: '/free-ue' },
+]
 
-const NODE_PAGE = { core: '/core-network', gnb: '/free-ran', ue: '/free-ue' } as const
-
-interface ColumnProps {
-  title: string
-  to: string
-  status: NodeStatus
-  statusText?: string
-  rows: { k: string; v: ReactNode; mono?: boolean }[]
-  children?: ReactNode
-}
-
-// One read-only column per lab page: its status, key facts, a short list,
-// and a link to the page where it is deployed.
-function Column({ title, to, status, statusText, rows, children }: ColumnProps) {
+// EmptyLab is the overview before anything runs: the three steps.
+function EmptyLab() {
+  const navigate = useNavigate()
   return (
-    <section className={styles.panel} aria-label={title}>
-      <div className={styles.ph}>
-        <h2>{title}</h2>
-        <StatusTag status={status} text={statusText} />
-        <Link to={to} className={styles.open}>Open {title} →</Link>
+    <section className={empty.wrap} aria-label="Get started">
+      <div className={empty.head}>
+        <h1>Nothing is running</h1>
+        <p>Bring the lab up in three steps. The topology, inspector and console appear here as soon as the first piece is deployed.</p>
       </div>
-      <dl className={styles.kv}>
-        {rows.map((row) => (
-          <div key={row.k} className={styles.kvRow}>
-            <dt>{row.k}</dt>
-            <dd className={row.mono ? 'num' : undefined}>{row.v}</dd>
-          </div>
+      <ol className={empty.steps}>
+        {STEPS.map((s) => (
+          <li key={s.n}>
+            <button type="button" className={empty.step} onClick={() => navigate(s.to)}>
+              <span className={empty.num}>{s.n}</span>
+              <span className={empty.icon}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><NodeIcon name={s.icon} x={0} y={0} size={24} /></svg></span>
+              <span className={empty.text}><b>{s.title}</b>{s.text}</span>
+              <span className={empty.go} aria-hidden="true">→</span>
+            </button>
+          </li>
         ))}
-      </dl>
-      {children}
+      </ol>
     </section>
   )
 }
 
-// DashboardPage is the lab at a glance. It deploys nothing: the topology
-// and the three columns follow the Core Network, free-ran and free-ue
-// pages, and each links to its page.
+// DashboardPage is the overview: the whole lab on one topology, read-only.
+// Each node links to the view that manages it; the console follows every
+// component's logs and events.
 export default function DashboardPage() {
   const navigate = useNavigate()
   const lab = useLab()
-  const { free5gc, nodes, ue, ueCounts } = lab
-  const template = lab.runningTemplate ?? 'basic'
-  const nfs = free5gc.networkFunctions
+  const { ueLive, events } = useEvents()
+  const con = useConsole()
+  const [selected, setSelected] = useState<string | null>(null)
+  const { nodes, ueCounts } = lab
 
-  const gnbRows = lab.isTwoSlice
-    ? [
-      { name: 'slice 1', sd: SLICE1_SD, status: lab.gnbSlice1.node.status },
-      { name: 'slice 2', sd: SLICE2_SD, status: lab.gnbSlice2.node.status },
-    ]
-    : [{ name: 'gNB', sd: '—', status: lab.gnb.node.status }]
+  if (!lab.loaded || !(lab.coreUp || lab.gnbUp || lab.ueUp)) {
+    return (
+      <AppLayout crumbs={[{ label: 'Overview' }]}>
+        {lab.loaded ? <EmptyLab /> : <p className={ui.empty}>Checking the lab…</p>}
+      </AppLayout>
+    )
+  }
 
-  // up UEs first, then the rest
-  const ueRows = [...ue.rows].sort((a, b) => Number(a.status === 'stopped') - Number(b.status === 'stopped'))
+  const graph = buildGraph(lab, 'all', 'basic', ueLive)
+  const errors = events.filter((e) => e.level === 'error').slice(-5).reverse()
+  const coreText = lab.gnbExternal && !lab.coreUp ? 'external' : lab.runningTemplate ? templateLabel(lab.runningTemplate) : 'off'
+  const withPdu = lab.ue.rows.filter((r) => r.status === 'running' && ueLive[r.ueId]?.ip).length
+
+  const summary = (
+    <>
+      <Section title="Lab">
+        <KV rows={[
+          { k: 'Core', v: <><Dot status={lab.gnbExternal && !lab.coreUp ? 'running' : nodes.core.status} /> {coreText}</> },
+          { k: 'NFs healthy', v: lab.free5gc.networkFunctions.length ? `${lab.healthyNfs}/${lab.free5gc.networkFunctions.length}` : '—' },
+          { k: 'gNB', v: <><Dot status={nodes.gnb.status} /> {nodes.gnb.status === 'stopped' ? 'off' : lab.isTwoSlice ? '2 slices' : lab.gnb.gnbDeployment?.profileName}</> },
+          { k: 'UEs running', v: `${ueCounts.running} / ${ueCounts.total}` },
+          { k: 'UEs with PDU session', v: withPdu },
+        ]} />
+        <Actions>
+          <Button small onClick={() => navigate('/core-network')}>Core Network</Button>
+          <Button small onClick={() => navigate('/free-ran')}>free-ran</Button>
+          <Button small onClick={() => navigate('/free-ue')}>free-ue</Button>
+        </Actions>
+      </Section>
+      <Section title="Recent errors">
+        {errors.length === 0
+          ? <p className={ui.empty} style={{ padding: 0 }}>None.</p>
+          : <ul className={ui.list}>{errors.map((e) => <li key={e.id}><Dot status="unhealthy" />{e.ue?.id ?? e.node}: {e.text}</li>)}</ul>}
+      </Section>
+      <Section><p className={ui.empty} style={{ padding: 0 }}>Select a node on the topology for its details.</p></Section>
+    </>
+  )
 
   return (
-    <AppLayout crumbs={[{ label: 'Dashboard' }]}>
-      <section className={styles.pageHead}>
-        <h1 className={styles.title}>Lab dashboard</h1>
-        <span className={styles.subtitle}>free5GC core network and the free-ran-ue gNB / UE simulator</span>
-      </section>
-
-      <section className={styles.meta} aria-label="Lab status">
-        <div><span>Core Network</span><b><StatusTag status={nodes.core.status} /><em>{lab.runningTemplate ? templateLabel(template) : 'not deployed'}</em></b></div>
-        <div><span>free-ran</span><b><StatusTag status={nodes.gnb.status} /><em>{lab.isTwoSlice ? 'slice1 + slice2' : 'gNB'}</em></b></div>
-        <div><span>free-ue</span><b><StatusTag status={nodes.ue.status} text={`${ueCounts.running} / ${ueCounts.total}`} /><em>running / subscribers</em></b></div>
-        <div><span>Healthy NFs</span><b><span className="num">{nfs.length ? `${lab.healthyNfs} / ${nfs.length}` : '—'}</span></b></div>
-      </section>
-
-      <section className={styles.panel} aria-label="Network topology">
-        <div className={styles.ph}>
-          <h2>Network topology</h2>
-          {LEGEND.map((status) => (
-            <span key={status} className={styles.legend}><StatusSwatch status={status} />{getStatusMeta(status).text}</span>
-          ))}
-          <span className={styles.aux}>click a node to open its page</span>
-        </div>
-        <TopologySchematic
-          template={template}
-          templateLabel={templateLabel(template)}
-          coreStatus={nodes.core.status}
-          coreNfs={nfs}
-          gnbStatus={nodes.gnb.status}
-          gnbTemplate={lab.isTwoSlice ? 'ulcl-2slice template' : 'basic template'}
-          gnbSlices={lab.gnbSlices}
-          ueStatus={nodes.ue.status}
-          ueRows={ue.rows}
-          selection={null}
-          onSelect={(selection) => navigate(NODE_PAGE[selection.node])}
-        />
-      </section>
-
-      <div className={styles.trio}>
-        <Column
-          title="Core Network"
-          to="/core-network"
-          status={nodes.core.status}
-          rows={[
-            { k: 'Template', v: lab.runningTemplate ? templateLabel(template) : '—' },
-            { k: 'Network functions', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length} healthy` : '—', mono: true },
-            { k: 'Subscribers', v: <Link to="/core-network/subscribers">{ueCounts.total}</Link>, mono: true },
-            { k: 'Last deployed', v: nodes.core.lastDeployed, mono: true },
-          ]}
-        >
-          {nfs.length > 0 && (
-            <table className={styles.tbl}>
-              <thead><tr><th>NF</th><th>Status</th></tr></thead>
-              <tbody>
-                {nfs.map((nf) => (
-                  <tr key={nf.name}><td className="num">{nf.name}</td><td><StatusTag status={nf.status} /></td></tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Column>
-
-        <Column
-          title="free-ran"
-          to="/free-ran"
-          status={nodes.gnb.status}
-          rows={[
-            { k: 'Template', v: lab.isTwoSlice ? 'ulcl-2slice' : 'basic' },
-            { k: 'UEs attached', v: String(lab.upUes.length), mono: true },
-            { k: 'Last deployed', v: nodes.gnb.lastDeployed, mono: true },
-          ]}
-        >
-          <table className={styles.tbl}>
-            <thead><tr><th>gNB</th><th>SD</th><th>Status</th></tr></thead>
-            <tbody>
-              {gnbRows.map((row) => (
-                <tr key={row.name}><td>{row.name}</td><td className="num">{row.sd}</td><td><StatusTag status={row.status} /></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </Column>
-
-        <Column
-          title="free-ue"
-          to="/free-ue"
-          status={nodes.ue.status}
-          statusText={`${ueCounts.running} / ${ueCounts.total}`}
-          rows={[
-            { k: 'Running', v: String(ueCounts.running), mono: true },
-            { k: 'Starting', v: String(ueCounts.starting), mono: true },
-            { k: 'Unhealthy', v: String(ueCounts.unhealthy), mono: true },
-          ]}
-        >
-          {ueRows.length === 0 ? (
-            <p className={styles.more}>No subscribers yet.</p>
-          ) : (
-            <>
-              <table className={styles.tbl}>
-                <thead><tr><th>UE ID</th><th>Status</th></tr></thead>
-                <tbody>
-                  {ueRows.slice(0, UE_PREVIEW).map((row) => (
-                    <tr key={row.ueId}><td className="num">{row.ueId}</td><td><StatusTag status={row.status} /></td></tr>
-                  ))}
-                </tbody>
-              </table>
-              {ueRows.length > UE_PREVIEW && <p className={styles.more}>+{ueRows.length - UE_PREVIEW} more on the free-ue page</p>}
-            </>
-          )}
-        </Column>
-      </div>
+    <AppLayout crumbs={[{ label: 'Overview' }]} fill>
+      <Workbench
+        title="Overview"
+        status={<><span>core <b>{coreText}</b></span><span>gNB <b>{nodes.gnb.status}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
+        console={con}
+        selectedId={selected}
+        onSelect={setSelected}
+        canvas={(
+          <LabCanvas
+            label="The lab: UE fleet over Uu to the gNB, N2 and N3 into the core, N6 out to the data network."
+            {...graph}
+            selectedId={selected}
+            onSelect={(id) => { setSelected(id); const s = logSourceFor(id); if (s) con.setSource(s) }}
+          />
+        )}
+        inspector={selected ? <NodeInspector id={selected} onLogs={() => { const s = logSourceFor(selected); if (s) { con.setSource(s); con.show('logs') } }} /> : summary}
+      />
     </AppLayout>
   )
 }

@@ -5,171 +5,120 @@ import NotificationContainer from '../../components/notifications/NotificationCo
 import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
 import CoreTabs from '../../lab/CoreTabs'
-import SelectedNodePanel, { type DetailRow } from '../../lab/SelectedNodePanel'
-import TopologySchematic from '../../lab/TopologySchematic'
-import { StatusSwatch, StatusTag } from '../../lab/StatusTag'
-import { getStatusMeta } from '../../lab/statusMeta'
+import LabCanvas from '../../lab/canvas/LabCanvas'
+import { ID, buildGraph } from '../../lab/canvas/graph'
+import { useEvents } from '../../lab/console/EventsContext'
+import { useLab } from '../../lab/LabContext'
+import { Actions, Button, Dot, Hint, InspectorHead, KV, Section, Segmented, ui } from '../../lab/LabUi'
 import { FREE5GC_TEMPLATE_OPTIONS, type Free5gcTemplate } from '../../lab/free5gcTemplate'
-import { templateLabel, useLab } from '../../lab/useLab'
-import styles from '../../lab/lab.module.css'
+import { templateLabel } from '../../lab/useLab'
+import { StatusTag } from '../../lab/StatusTag'
+import Workbench, { logSourceFor } from '../../lab/workbench/Workbench'
+import NodeInspector from '../../lab/workbench/NodeInspector'
+import { useConsole } from '../../lab/workbench/Console'
 
-// CoreNetworkPage deploys and stops the free5GC core and shows its network
-// functions. Its Subscribers live in the second tab.
+const SHORT: Record<Free5gcTemplate, string> = { basic: 'Basic', ulcl: 'ULCL', 'ulcl-2slice': 'Two Slice' }
+
+// CoreNetworkPage deploys and stops free5GC. The topology expands the core
+// into its NFs (a preview of the picked template while it is stopped); the
+// inspector holds the deploy controls and each NF's status; the console
+// follows the selected NF's log.
 export default function CoreNetworkPage() {
   const navigate = useNavigate()
   const lab = useLab()
+  const { ueLive } = useEvents()
   const { free5gc, nodes } = lab
+  const con = useConsole()
   const { errors, successes, addError, addSuccess, removeNotification } = useNotifications()
-  // which template to deploy next; once running, the live one is shown
-  const [selectedTemplate, setSelectedTemplate] = useState<Free5gcTemplate>('basic')
-  const [selectedNf, setSelectedNf] = useState<string | null>(null)
+  const [picked, setPicked] = useState<Free5gcTemplate>('basic')
+  const [selected, setSelected] = useState<string | null>(null)
 
-  const core = nodes.core
-  const coreStopped = core.status === 'stopped'
-  const template = lab.runningTemplate ?? selectedTemplate
+  const coreStopped = nodes.core.status === 'stopped'
+  const blocked = coreStopped ? undefined : lab.blocked.coreStop
+  const graph = buildGraph(lab, 'core', picked, ueLive)
   const nfs = free5gc.networkFunctions
-  const nf = nfs.find((n) => n.name === selectedNf) ?? null
-  const blockedReason = coreStopped ? undefined : lab.blocked.coreStop
+  const template = lab.runningTemplate ?? picked
 
-  async function handlePrimary() {
+  async function toggleCore() {
     try {
-      if (!coreStopped) {
-        await free5gc.stop()
-        addSuccess('Core network stopped')
+      if (coreStopped) {
+        await free5gc.deploy(picked)
+        addSuccess(`free5GC ${SHORT[picked]} is starting`)
       } else {
-        await free5gc.deploy(selectedTemplate)
-        addSuccess('Core network deploy started')
+        await free5gc.stop()
+        addSuccess('free5GC stopped')
       }
     } catch (error) {
       addError(extractErrorMessage(error, 'Core network action failed'))
     }
   }
 
-  const primaryLabel = free5gc.isActionPending
-    ? (coreStopped ? 'Deploying…' : 'Stopping…')
-    : (coreStopped ? 'Deploy core' : 'Stop core')
+  const primary = (
+    <Button kind={coreStopped ? 'primary' : 'danger'} busy={free5gc.isActionPending} disabled={Boolean(blocked)} title={blocked} onClick={toggleCore}>
+      {coreStopped ? `Deploy ${SHORT[picked]}` : 'Stop core'}
+    </Button>
+  )
 
-  const rows: DetailRow[] = nf
-    ? [
-      { k: 'Service', v: nf.name.toLowerCase(), mono: true },
-      { k: 'Part of', v: `free5GC · ${templateLabel(template)}` },
-      { k: 'Core status', v: getStatusMeta(core.status).text },
-      { k: 'Last deployed', v: core.lastDeployed, mono: true },
-    ]
-    : [
-      { k: 'Stack', v: 'free5GC' },
-      { k: 'Template', v: templateLabel(template) },
-      { k: 'Network functions', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length} healthy` : '—', mono: true },
-      { k: 'Last deployed', v: core.lastDeployed, mono: true },
-    ]
+  const showLogs = (id: string) => {
+    const s = logSourceFor(id)
+    if (s) { con.setSource(s); con.show('logs') }
+  }
+
+  const coreInspector = (
+    <>
+      <InspectorHead icon="core" name="free5GC" sub="5G core network" status={nodes.core.status} />
+      <Section title="Deployment">
+        {coreStopped && (
+          <div style={{ marginBottom: '0.625rem' }}>
+            <Segmented value={picked} options={FREE5GC_TEMPLATE_OPTIONS.map((o) => ({ value: o.value, label: SHORT[o.value] }))} onChange={setPicked} disabled={free5gc.isActionPending} />
+          </div>
+        )}
+        <KV rows={[
+          { k: 'Template', v: `${templateLabel(template)}${coreStopped ? ' (preview)' : ''}` },
+          { k: 'NFs healthy', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length}` : '—' },
+          { k: 'Last deployed', v: nodes.core.lastDeployed },
+          { k: 'Subscribers', v: <a href="/core-network/subscribers" onClick={(e) => { e.preventDefault(); navigate('/core-network/subscribers') }}>{lab.ue.rows.filter((r) => r.source === 'subscriber').length || 'open'}</a> },
+        ]} />
+        {blocked && <Hint>{blocked}</Hint>}
+        <Actions>{primary}{!coreStopped && <Button small onClick={() => showLogs(ID.core)}>Logs (all NFs)</Button>}</Actions>
+      </Section>
+      {nfs.length > 0 && (
+        <Section title="Network functions" aside={<span>{lab.healthyNfs}/{nfs.length}</span>}>
+          <ul className={ui.list}>
+            {nfs.map((nf) => (
+              <li key={nf.name}>
+                <button type="button" onClick={() => setSelected(ID.nf(nf.name))}><Dot status={nf.status} />{nf.name}<span style={{ marginLeft: 'auto' }}><StatusTag status={nf.status} /></span></button>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+    </>
+  )
+
+  const inspector = !selected || selected === ID.core
+    ? coreInspector
+    : <NodeInspector id={selected} onLogs={() => showLogs(selected)} extra={selected.startsWith('nf:') ? <Section><Button small onClick={() => setSelected(null)}>Back to free5GC</Button></Section> : undefined} />
 
   return (
-    <AppLayout
-      crumbs={[{ label: 'Network functions' }]}
-      overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}
-    >
-      <CoreTabs />
-
-      <section className={styles.pageHead}>
-        <h1 className={styles.title}>Core Network</h1>
-        <span className={styles.subtitle}>free5GC 5G core</span>
-        <div className={styles.headActions}>
-          {coreStopped && (
-            <label className={styles.templatePicker}>
-              <span>Template</span>
-              <select
-                className={styles.select}
-                value={selectedTemplate}
-                onChange={(event) => setSelectedTemplate(event.target.value as Free5gcTemplate)}
-                disabled={free5gc.isActionPending}
-              >
-                {FREE5GC_TEMPLATE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          <button type="button" className={styles.btn} onClick={() => navigate('/logs?target=core')}>View logs</button>
-          <button
-            type="button"
-            className={`${styles.btn} ${coreStopped ? styles.btnPrimary : styles.btnDanger}`}
-            onClick={handlePrimary}
-            disabled={free5gc.isActionPending || Boolean(blockedReason)}
-            title={blockedReason}
-          >
-            {primaryLabel}
-          </button>
-        </div>
-      </section>
-
-      <section className={styles.meta} aria-label="Core network status">
-        <div><span>Status</span><b><StatusTag status={core.status} /></b></div>
-        <div><span>Template</span><b>{templateLabel(template)}{coreStopped && <em>next deploy</em>}</b></div>
-        <div><span>Healthy NFs</span><b><span className="num">{nfs.length ? `${lab.healthyNfs} / ${nfs.length}` : '—'}</span></b></div>
-        <div><span>Subscribers</span><b><span className="num">{lab.ueCounts.total}</span></b></div>
-        <div><span>Last deployed</span><b><span className="num">{core.lastDeployed}</span></b></div>
-      </section>
-
-      <section className={styles.panel} aria-label="Core network topology">
-        <div className={styles.ph}>
-          <h2>Core network topology</h2>
-          {(['running', 'deploying', 'stopped', 'unhealthy'] as const).map((status) => (
-            <span key={status} className={styles.legend}><StatusSwatch status={status} />{getStatusMeta(status).text}</span>
-          ))}
-          <span className={styles.aux}>{coreStopped ? `${templateLabel(template)} template preview` : `selected: ${nf?.name ?? 'free5GC core'}`}</span>
-        </div>
-        <TopologySchematic
-          coreOnly
-          template={template}
-          templateLabel={templateLabel(template)}
-          coreStatus={core.status}
-          coreNfs={nfs}
-          gnbStatus={lab.nodes.gnb.status}
-          gnbTemplate=""
-          gnbSlices={null}
-          ueStatus={lab.nodes.ue.status}
-          ueRows={[]}
-          selection={{ node: 'core', nf: selectedNf, ue: null }}
-          onSelect={(selection) => setSelectedNf(selection.nf)}
-        />
-      </section>
-
-      <div className={styles.dash}>
-        <div className={styles.dashMain}>
-          <section className={styles.panel} aria-label="Network functions">
-            <div className={styles.ph}>
-              <h2>Network functions</h2>
-              <span className={styles.aux}>{nfs.length ? 'select one for details' : ''}</span>
-            </div>
-            {nfs.length === 0 ? (
-              <p className={styles.more}>The core network is not deployed. Pick a template and deploy it.</p>
-            ) : (
-              <div className={styles.nfGrid}>
-                {nfs.map((n) => (
-                  <button
-                    key={n.name}
-                    type="button"
-                    className={styles.nfChip}
-                    aria-pressed={n.name === selectedNf}
-                    onClick={() => setSelectedNf(n.name === selectedNf ? null : n.name)}
-                  >
-                    <b>{n.name}</b>
-                    <StatusTag status={n.status} />
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <SelectedNodePanel
-          name={nf?.name ?? 'free5GC core'}
-          status={nf?.status ?? core.status}
-          rows={rows}
-          hint={blockedReason}
-          actions={nf ? <button type="button" className={styles.btn} onClick={() => setSelectedNf(null)}>Back to core</button> : null}
-        />
-      </div>
+    <AppLayout crumbs={[{ label: 'Network functions' }]} fill overlay={<NotificationContainer errors={errors} successes={successes} onClose={removeNotification} />}>
+      <Workbench
+        title="Core Network"
+        status={<><CoreTabs /><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
+        actions={primary}
+        console={con}
+        selectedId={selected}
+        onSelect={setSelected}
+        canvas={(
+          <LabCanvas
+            label="The free5GC core: control-plane NFs on the SBI bus, AMF, SMF and the UPFs; N2 and N3 from the gNB, N6 to the data network."
+            {...graph}
+            selectedId={selected}
+            onSelect={(id) => { setSelected(id); const s = logSourceFor(id); if (s) con.setSource(s) }}
+          />
+        )}
+        inspector={inspector}
+      />
     </AppLayout>
   )
 }

@@ -9,6 +9,7 @@ import { useGnbSliceStatus } from '../../lab/useGnbSliceStatus'
 import { getStatusMeta } from '../../lab/statusMeta'
 import type { NodeStatus } from '../../lab/types'
 import { useUeInstances } from '../../lab/useUeInstances'
+import { useUeProfiles } from '../../lab/useProfiles'
 import { detectFree5gcTemplate } from '../../lab/free5gcTemplate'
 import styles from './logs-page.module.css'
 
@@ -53,7 +54,8 @@ function sameTarget(a: LogTarget | null, b: LogTarget): boolean {
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const ue = useUeInstances()
+  const ueProfiles = useUeProfiles()
+  const ue = useUeInstances({ profiles: ueProfiles.profiles, useSubscribers: true })
   const free5gc = useFree5gcStatus()
   const gnb = useGnbStatus()
   const gnbSlice1 = useGnbSliceStatus('slice1')

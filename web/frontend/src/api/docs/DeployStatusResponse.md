@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **status** | **string** |  | [default to undefined]
 **services** | [**Array&lt;ServiceStatus&gt;**](ServiceStatus.md) |  | [optional] [default to undefined]
 **lastDeployed** | **string** |  | [optional] [default to undefined]
+**gnb** | [**GnbDeployment**](GnbDeployment.md) |  | [optional] [default to undefined]
 
 ## Example
 
@@ -20,6 +21,7 @@ const instance: DeployStatusResponse = {
     status,
     services,
     lastDeployed,
+    gnb,
 };
 ```
 

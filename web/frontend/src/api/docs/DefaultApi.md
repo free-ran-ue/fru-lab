@@ -21,11 +21,21 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**deployUeLogs**](#deployuelogs) | **GET** /api/deploy/ue/{instance}/logs | Get a UE instance\&#39;s container logs|
 |[**deployUeStatus**](#deployuestatus) | **GET** /api/deploy/ue/{instance}/status | Get a UE instance\&#39;s deploy status|
 |[**deployUeUp**](#deployueup) | **POST** /api/deploy/ue/{instance} | Deploy a UE instance for one subscriber|
+|[**gnbProfileCreate**](#gnbprofilecreate) | **POST** /api/profiles/gnb | Save a new gNB profile|
+|[**gnbProfileDelete**](#gnbprofiledelete) | **DELETE** /api/profiles/gnb/{id} | Delete a gNB profile|
+|[**gnbProfileList**](#gnbprofilelist) | **GET** /api/profiles/gnb | List the saved gNB profiles|
+|[**gnbProfileRender**](#gnbprofilerender) | **POST** /api/profiles/gnb/render | Preview the config file a gNB profile deploys|
+|[**gnbProfileUpdate**](#gnbprofileupdate) | **PUT** /api/profiles/gnb/{id} | Update a gNB profile|
 |[**imageList**](#imagelist) | **GET** /api/images | List the images this app deploys|
 |[**imagePull**](#imagepull) | **POST** /api/images/{key}/pull | Pull an image|
 |[**imageRemove**](#imageremove) | **DELETE** /api/images/{key} | Clear a locally cached image|
 |[**login**](#login) | **POST** /api/login | Login|
 |[**logout**](#logout) | **POST** /api/logout | Logout|
+|[**ueProfileCreate**](#ueprofilecreate) | **POST** /api/profiles/ue | Save a new UE profile|
+|[**ueProfileDelete**](#ueprofiledelete) | **DELETE** /api/profiles/ue/{id} | Delete a UE profile|
+|[**ueProfileList**](#ueprofilelist) | **GET** /api/profiles/ue | List the saved UE profiles|
+|[**ueProfileRender**](#ueprofilerender) | **POST** /api/profiles/ue/render | Preview the config file a UE profile deploys|
+|[**ueProfileUpdate**](#ueprofileupdate) | **PUT** /api/profiles/ue/{id} | Update a UE profile|
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()
@@ -589,24 +599,32 @@ This endpoint does not have any parameters.
 # **deployGnbUp**
 > MessageResponse deployGnbUp()
 
-Fails with 409 if the core network isn\'t running yet - deploy free5gc first. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
+Deploys the gNB with a saved profile, or the lab default without one. A profile on the lab core fails with 409 if free5gc isn\'t running yet; a profile on an external core does not need it. This is the singleton gNB used by the basic/ulcl free5gc templates - see /api/deploy/gnb-slice/{slice} for ulcl-2slice.
 
 ### Example
 
 ```typescript
 import {
     DefaultApi,
-    Configuration
+    Configuration,
+    DeployGnbRequest
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
-const { status, data } = await apiInstance.deployGnbUp();
+let deployGnbRequest: DeployGnbRequest; // (optional)
+
+const { status, data } = await apiInstance.deployGnbUp(
+    deployGnbRequest
+);
 ```
 
 ### Parameters
-This endpoint does not have any parameters.
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **deployGnbRequest** | **DeployGnbRequest**|  | |
 
 
 ### Return type
@@ -619,7 +637,7 @@ This endpoint does not have any parameters.
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 
@@ -893,6 +911,259 @@ const { status, data } = await apiInstance.deployUeUp(
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **gnbProfileCreate**
+> GnbProfile gnbProfileCreate(gnbProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileCreate(
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+
+
+### Return type
+
+**GnbProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The saved profile, with its id |  -  |
+|**400** | Bad Request |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileDelete**
+> MessageResponse gnbProfileDelete()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.gnbProfileDelete(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileList**
+> Array<GnbProfile> gnbProfileList()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.gnbProfileList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<GnbProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileRender**
+> RenderedConfig gnbProfileRender(gnbProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileRender(
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+
+
+### Return type
+
+**RenderedConfig**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **gnbProfileUpdate**
+> GnbProfile gnbProfileUpdate(gnbProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    GnbProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+let gnbProfile: GnbProfile; //
+
+const { status, data } = await apiInstance.gnbProfileUpdate(
+    id,
+    gnbProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **gnbProfile** | **GnbProfile**|  | |
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**GnbProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+|**404** | Not Found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **imageList**
 > ImageListResponse imageList()
 
@@ -1141,6 +1412,259 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**204** | No Content |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileCreate**
+> UeProfile ueProfileCreate(ueProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    UeProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let ueProfile: UeProfile; //
+
+const { status, data } = await apiInstance.ueProfileCreate(
+    ueProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **ueProfile** | **UeProfile**|  | |
+
+
+### Return type
+
+**UeProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The saved profile, with its id |  -  |
+|**400** | Bad Request |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileDelete**
+> MessageResponse ueProfileDelete()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.ueProfileDelete(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileList**
+> Array<UeProfile> ueProfileList()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.ueProfileList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<UeProfile>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileRender**
+> RenderedConfig ueProfileRender(ueProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    UeProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let ueProfile: UeProfile; //
+
+const { status, data } = await apiInstance.ueProfileRender(
+    ueProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **ueProfile** | **UeProfile**|  | |
+
+
+### Return type
+
+**RenderedConfig**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **ueProfileUpdate**
+> UeProfile ueProfileUpdate(ueProfile)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    UeProfile
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+let ueProfile: UeProfile; //
+
+const { status, data } = await apiInstance.ueProfileUpdate(
+    id,
+    ueProfile
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **ueProfile** | **UeProfile**|  | |
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**UeProfile**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+|**404** | Not Found |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

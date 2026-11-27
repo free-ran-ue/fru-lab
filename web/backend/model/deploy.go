@@ -23,6 +23,8 @@ type ResponseDeployStatus struct {
 	Status       string          `json:"status"`
 	Services     []ServiceStatus `json:"services,omitempty"`
 	LastDeployed *time.Time      `json:"lastDeployed,omitempty"`
+	// Gnb is the profile the gNB was last deployed with (gnb target only)
+	Gnb *GnbDeployment `json:"gnb,omitempty"`
 }
 
 type ResponseDeployLogs struct {

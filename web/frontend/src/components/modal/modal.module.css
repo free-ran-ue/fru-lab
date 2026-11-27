@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background-color: rgba(19, 18, 43, 0.5); /* --ink at 50% */
+  background-color: var(--overlay);
   z-index: 1000;
 }
 
