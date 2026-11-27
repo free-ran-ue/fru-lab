@@ -4,6 +4,10 @@ All URIs are relative to *http://127.0.0.1:5000*
 
 |Method | HTTP request | Description|
 |------------- | ------------- | -------------|
+|[**coreNetworkCreate**](#corenetworkcreate) | **POST** /api/core-networks | Save a new core network|
+|[**coreNetworkDelete**](#corenetworkdelete) | **DELETE** /api/core-networks/{id} | Delete a core network|
+|[**coreNetworkList**](#corenetworklist) | **GET** /api/core-networks | List the saved core networks|
+|[**coreNetworkUpdate**](#corenetworkupdate) | **PUT** /api/core-networks/{id} | Update a core network|
 |[**deployFree5gcDown**](#deployfree5gcdown) | **DELETE** /api/deploy/free5gc | Stop free5GC|
 |[**deployFree5gcLogs**](#deployfree5gclogs) | **GET** /api/deploy/free5gc/logs | Get free5GC container logs|
 |[**deployFree5gcStatus**](#deployfree5gcstatus) | **GET** /api/deploy/free5gc/status | Get free5GC deploy status|
@@ -38,6 +42,212 @@ All URIs are relative to *http://127.0.0.1:5000*
 |[**ueProfileList**](#ueprofilelist) | **GET** /api/profiles/ue | List the saved UE profiles|
 |[**ueProfileRender**](#ueprofilerender) | **POST** /api/profiles/ue/render | Preview the config file a UE profile deploys|
 |[**ueProfileUpdate**](#ueprofileupdate) | **PUT** /api/profiles/ue/{id} | Update a UE profile|
+
+# **coreNetworkCreate**
+> CoreNetwork coreNetworkCreate(coreNetwork)
+
+Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    CoreNetwork
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let coreNetwork: CoreNetwork; //
+
+const { status, data } = await apiInstance.coreNetworkCreate(
+    coreNetwork
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **coreNetwork** | **CoreNetwork**|  | |
+
+
+### Return type
+
+**CoreNetwork**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | The saved core network, with its id |  -  |
+|**400** | Bad Request - a field is malformed |  -  |
+|**409** | Conflict - the name is taken |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **coreNetworkDelete**
+> MessageResponse coreNetworkDelete()
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+
+const { status, data } = await apiInstance.coreNetworkDelete(
+    id
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**MessageResponse**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **coreNetworkList**
+> Array<CoreNetwork> coreNetworkList()
+
+5G cores outside the lab that gNBs can attach to; the lab free5GC is not among them.
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+const { status, data } = await apiInstance.coreNetworkList();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**Array<CoreNetwork>**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**401** | Unauthorized |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **coreNetworkUpdate**
+> CoreNetwork coreNetworkUpdate(coreNetwork)
+
+
+### Example
+
+```typescript
+import {
+    DefaultApi,
+    Configuration,
+    CoreNetwork
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new DefaultApi(configuration);
+
+let id: string; // (default to undefined)
+let coreNetwork: CoreNetwork; //
+
+const { status, data } = await apiInstance.coreNetworkUpdate(
+    id,
+    coreNetwork
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **coreNetwork** | **CoreNetwork**|  | |
+| **id** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**CoreNetwork**
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | OK |  -  |
+|**400** | Bad Request |  -  |
+|**404** | No such core network |  -  |
+|**409** | Conflict - the name is taken |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **deployFree5gcDown**
 > MessageResponse deployFree5gcDown()

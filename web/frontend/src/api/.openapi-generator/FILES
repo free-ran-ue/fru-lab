@@ -4,6 +4,8 @@ api.ts
 base.ts
 common.ts
 configuration.ts
+docs/CoreDn.md
+docs/CoreNetwork.md
 docs/DefaultApi.md
 docs/DeployGnbListResponse.md
 docs/DeployLogsResponse.md

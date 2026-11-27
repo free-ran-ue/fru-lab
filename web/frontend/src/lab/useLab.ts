@@ -1,5 +1,6 @@
 import type { GnbDeployment } from '../api'
 import { useFree5gcStatus } from './useFree5gcStatus'
+import { useCoreNetworks } from './useCoreNetworks'
 import { useGnbInstances } from './useGnbInstances'
 import { useUeInstances, type UeRow } from './useUeInstances'
 import { useGnbProfiles, useUeProfiles } from './useProfiles'
@@ -68,6 +69,7 @@ function useLabState() {
   const free5gc = useFree5gcStatus()
   const gnbInstances = useGnbInstances()
   const gnbProfiles = useGnbProfiles()
+  const coreNetworks = useCoreNetworks()
   const ueProfiles = useUeProfiles()
   const ue = useUeInstances({ profiles: ueProfiles.profiles })
   const coreRunning = free5gc.node.status === 'running'
@@ -153,7 +155,7 @@ function useLabState() {
     runningTemplate,
     nodes: { core: free5gc.node, gnb: gnbNode, ue: ueNode },
     coreUp, gnbUp, ueUp, upUes, gnbExternal, loaded,
-    gnbProfiles, ueProfiles, coreRunning,
+    gnbProfiles, ueProfiles, coreRunning, coreNetworks,
     healthyNfs, ueCounts, blocked, gnbStopBlocked,
   }
 }

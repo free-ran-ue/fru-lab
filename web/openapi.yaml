@@ -522,6 +522,122 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployUeLogsResponse'
 
+  /api/core-networks:
+    get:
+      summary: List the saved core networks
+      description: 5G cores outside the lab that gNBs can attach to; the lab free5GC is not among them.
+      operationId: coreNetworkList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoreNetwork'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Save a new core network
+      description: Fails with 409 when the name (compared ignoring case) is the lab core's (free5GC) or another core network's.
+      operationId: coreNetworkCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreNetwork'
+      responses:
+        '200':
+          description: The saved core network, with its id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreNetwork'
+        '400':
+          description: Bad Request - a field is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the name is taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/core-networks/{id}:
+    put:
+      summary: Update a core network
+      operationId: coreNetworkUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreNetwork'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreNetwork'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such core network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the name is taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Delete a core network
+      operationId: coreNetworkDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
   /api/host/interfaces:
     get:
       summary: List the host's network interfaces
@@ -1475,3 +1591,52 @@ components:
           items:
             type: string
           example: [192.168.1.20]
+    CoreNetwork:
+      type: object
+      required: [name, n2Ip, n3Ip, dns]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Unique among the core networks (ignoring case) and not free5GC, the lab core's name. 1-32 letters, digits, spaces, dots, dashes, underscores.
+          example: campus-core
+        n2Ip:
+          type: string
+          description: The AMF's N2 address.
+          example: 192.168.10.5
+        n2Interface:
+          type: string
+          description: The host interface that reaches n2Ip.
+          example: eth0
+        n3Ip:
+          type: string
+          description: The UPF's N3 address.
+          example: 192.168.10.6
+        n3Interface:
+          type: string
+          description: The host interface that reaches n3Ip.
+          example: eth1
+        dns:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CoreDn'
+        enabled:
+          type: boolean
+          description: Switched on, the core counts as part of the lab and the Overview draws it.
+        updatedAt:
+          type: string
+          format: date-time
+    CoreDn:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The DNN, unique within the core.
+          example: internet
+        cidr:
+          type: string
+          description: The address range its UEs get, optional.
+          example: 10.60.0.0/16

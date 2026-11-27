@@ -371,47 +371,136 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
     nodes.push({ id: ID.fleet, ...box, icon: 'fleet', label: 'No UE connected', sub: 'launch UEs on free-ue', ghost: true })
   }
 
-  // ----- cores: the lab free5GC and/or the external core the external
-  // gNBs dial, one node each -----
+  // ----- cores: the lab free5GC once deployed, every enabled core outside
+  // the lab, and (only for an external gNB dialing none of those) a plain
+  // "External core" node -----
+  const enabled = lab.coreNetworks.networks.filter((n) => n.enabled)
   const ext = lab.externalGnbs
-  const showLab = lab.coreUp || gnbs.some((g) => g.core === 'lab') || ext.length === 0
-  const coreX = gnbX + BIG.w + 130
-  const cores: { id: string; box: Box; external: boolean }[] = []
-  const coreCount = (showLab ? 1 : 0) + (ext.length ? 1 : 0)
-  const coreY = (i: number) => midY - BIG.h / 2 + (i - (coreCount - 1) / 2) * (BIG.h + 40)
+  const coreOfGnb = (g: (typeof gnbs)[number]) => {
+    if (g.core !== 'external') return ID.core
+    const amf = lab.gnbs.find((x) => x.id === g.id)?.deployment?.amfIp
+    const n = enabled.find((c) => c.n2Ip === amf)
+    return n ? `core:${n.id}` : ID.externalCore
+  }
+  const orphanExt = ext.some((g) => !enabled.some((c) => c.n2Ip === g.deployment?.amfIp))
+  const showLab = lab.coreUp || gnbs.some((g) => g.core === 'lab') || (enabled.length === 0 && ext.length === 0)
+  type CoreNode = { id: string; box: Box; live: boolean; dashed: boolean; dns: string[] }
+  const specs: { id: string; node: Omit<CanvasNode, 'x' | 'y' | 'w' | 'h' | 'id'>; live: boolean; dashed: boolean; dns: string[] }[] = []
   const nfs = lab.free5gc.networkFunctions
   if (showLab) {
-    const box = { x: coreX, y: coreY(0), ...BIG }
-    nodes.push({
+    specs.push({
       id: ID.core,
-      ...box,
-      icon: 'core',
-      label: 'free5GC core',
-      sub: lab.runningTemplate ? templateLabel(lab.runningTemplate) : 'not deployed',
-      tag: nfs.length ? `${lab.healthyNfs} / ${nfs.length} NF healthy` : undefined,
-      status: coreStatus,
+      node: { icon: 'core', label: 'free5GC', sub: lab.runningTemplate ? templateLabel(lab.runningTemplate) : 'not deployed', tag: nfs.length ? `${lab.healthyNfs} / ${nfs.length} NF healthy` : undefined, status: coreStatus },
+      live: up(coreStatus),
+      dashed: false,
+      dns: ['internet'],
     })
-    cores.push({ id: ID.core, box, external: false })
   }
-  if (ext.length) {
-    const box = { x: coreX, y: coreY(showLab ? 1 : 0), ...BIG }
-    const amfs = [...new Set(ext.map((g) => g.deployment?.amfIp).filter(Boolean))]
-    nodes.push({ id: ID.externalCore, ...box, icon: 'core', label: 'External core', sub: `AMF ${amfs.join(', ')}`, tag: 'outside the lab' })
-    cores.push({ id: ID.externalCore, box, external: true })
+  for (const n of enabled) {
+    specs.push({ id: `core:${n.id}`, node: { icon: 'core', label: n.name, sub: `AMF ${n.n2Ip}`, tag: 'outside the lab' }, live: true, dashed: false, dns: n.dns.map((d) => d.name) })
   }
+  if (orphanExt) {
+    const amfs = [...new Set(ext.filter((g) => !enabled.some((c) => c.n2Ip === g.deployment?.amfIp)).map((g) => g.deployment?.amfIp).filter(Boolean))]
+    specs.push({ id: ID.externalCore, node: { icon: 'core', label: 'External core', sub: `AMF ${amfs.join(', ')}`, tag: 'not in Core Network' }, live: false, dashed: true, dns: [] })
+  }
+  const coreX = gnbX + BIG.w + 130
+  const coreStep = BIG.h + 40
+  const coreTop = midY - (specs.length * coreStep - 40) / 2
+  const cores: CoreNode[] = specs.map((c, i) => {
+    const box = { x: coreX, y: coreTop + i * coreStep, ...BIG }
+    nodes.push({ id: c.id, ...box, ...c.node })
+    return { id: c.id, box, live: c.live, dashed: c.dashed, dns: c.dns }
+  })
   let labelled = false
   for (const g of gnbs) {
-    const c = cores.find((x) => x.external === (g.core === 'external')) ?? cores[0]
-    links.push({ id: `n2n3:${g.id}`, from: g.id, to: c.id, d: hCurve(g.box, c.box), live: up(g.status) && (c.external || up(coreStatus)), dashed: c.external, label: labelled ? undefined : mid(g.box, c.box, true, 'N2 · N3') })
+    const c = cores.find((x) => x.id === coreOfGnb(g)) ?? cores[0]
+    links.push({ id: `n2n3:${g.id}`, from: g.id, to: c.id, d: hCurve(g.box, c.box), live: up(g.status) && c.live, dashed: c.dashed, label: labelled ? undefined : mid(g.box, c.box, true, 'N2 · N3') })
     labelled = true
   }
 
-  // ----- data network -----
-  const dn = { x: coreX + BIG.w + 90, y: midY - 36, w: 150, h: 72 }
-  nodes.push({ id: ID.dn, ...dn, icon: 'cloud', label: 'DN', sub: 'internet' })
-  for (const [i, c] of cores.entries()) {
-    links.push({ id: `n6:${c.id}`, from: c.id, to: ID.dn, d: hCurve(c.box, dn), live: c.external ? false : up(coreStatus), dashed: c.external, label: i === 0 ? mid(c.box, dn, true, 'N6') : undefined })
+  // ----- data networks: each core's own, right of the cores -----
+  const DNB = { w: 150, h: 56 }
+  const dnList = cores.flatMap((c) => c.dns.map((name) => ({ core: c, name })))
+  const dnStep = DNB.h + 20
+  const dnTop = midY - (dnList.length * dnStep - 20) / 2
+  dnList.forEach((d, i) => {
+    const box = { x: coreX + BIG.w + 110, y: dnTop + i * dnStep, ...DNB }
+    const id = `${ID.dn}:${d.core.id}:${d.name}`
+    nodes.push({ id, ...box, icon: 'cloud', label: d.name, sub: 'DN' })
+    links.push({ id: `n6:${d.core.id}:${d.name}`, from: d.core.id, to: id, d: hCurve(d.core.box, box), live: d.core.live, label: i === 0 ? mid(d.core.box, box, true, 'N6') : undefined })
+  })
+
+  return { nodes, links, frames: [], notes: [] }
+}
+
+// one core as the Core Network pages draw it: the core with its N2 (AMF)
+// and N3 (UPF) lines leaving its left edge, labelled with their addresses,
+// the gNBs attached at their far ends, and each data network on the right
+export interface CoreView {
+  id: string
+  name: string
+  sub?: string
+  status?: NodeStatus
+  n2Ip: string
+  n2Interface?: string
+  n3Ip: string
+  n3Interface?: string
+  dns: { name: string }[]
+  // the running gNBs attached to this core
+  gnbs: { id: string; name: string; status: NodeStatus }[]
+}
+
+// buildCoreGraph draws one core with its N2 / N3 / DN links.
+export function buildCoreGraph(core: CoreView): Graph {
+  const nodes: CanvasNode[] = []
+  const links: CanvasLink[] = []
+  const up = core.status === undefined || core.status === 'running'
+  const DNB = { w: 180, h: 56 }
+  const STUB = 240
+  const GAP = 18
+
+  const coreBox = { x: 640, y: 0, ...BIG }
+  nodes.push({ id: core.id, ...coreBox, icon: 'core', label: core.name, sub: core.sub, status: core.status })
+  const coreMid = cy(coreBox)
+
+  // the N2 and N3 lines leave the core's left edge, one above the other,
+  // and meet the gNBs at a junction STUB to the left
+  const x0 = coreBox.x
+  const jx = x0 - STUB
+  const y2 = coreMid - GAP
+  const y3 = coreMid + GAP
+  const tag = (kind: string, ip: string, ifc?: string) => [kind, ip, ifc].filter(Boolean).join(' · ')
+  links.push({ id: 'n2', from: `${core.id}:n2`, to: core.id, d: `M${jx} ${y2}H${x0}`, live: up && core.gnbs.length > 0, label: { x: (jx + x0) / 2, y: y2 - 7, text: tag('N2', core.n2Ip, core.n2Interface) } })
+  links.push({ id: 'n3', from: `${core.id}:n3`, to: core.id, d: `M${jx} ${y3}H${x0}`, live: up && core.gnbs.length > 0, label: { x: (jx + x0) / 2, y: y3 + 15, text: tag('N3', core.n3Ip, core.n3Interface) } })
+
+  // the gNBs attached, at the lines' far end
+  const gx = jx - 110 - BIG.w
+  const gStep = BIG.h + 30
+  const gTop = coreMid - (Math.max(1, core.gnbs.length) * gStep - 30) / 2
+  const curve = (x1: number, ya: number, x2: number, yb: number) => {
+    const dx = Math.max(30, (x2 - x1) / 2)
+    return `M${x1} ${ya}C${x1 + dx} ${ya} ${x2 - dx} ${yb} ${x2} ${yb}`
   }
+  core.gnbs.forEach((g, i) => {
+    const box = { x: gx, y: gTop + i * gStep, ...BIG }
+    nodes.push({ id: g.id, ...box, icon: 'gnb', label: g.name, status: g.status })
+    const live = up && g.status === 'running'
+    const right = box.x + box.w
+    links.push({ id: `${g.id}:n2`, from: g.id, to: core.id, d: curve(right, cy(box) - 10, jx, y2), live })
+    links.push({ id: `${g.id}:n3`, from: g.id, to: core.id, d: curve(right, cy(box) + 10, jx, y3), live })
+  })
+  if (core.gnbs.length === 0) {
+    nodes.push({ id: `${core.id}:nognb`, x: gx, y: coreMid - BIG.h / 2, ...BIG, icon: 'gnb', label: 'No gNB attached', sub: 'deploy one on free-ran', ghost: true })
+  }
+
+  // data networks, right of the core
+  const dStep = DNB.h + 24
+  const dTop = coreMid - (core.dns.length * dStep - 24) / 2
+  core.dns.forEach((dn, i) => {
+    const box = { x: coreBox.x + BIG.w + 150, y: dTop + i * dStep, ...DNB }
+    nodes.push({ id: `${core.id}:dn:${dn.name}`, ...box, icon: 'cloud', label: dn.name, sub: 'DN' })
+    links.push({ id: `n6:${dn.name}`, from: core.id, to: `${core.id}:dn:${dn.name}`, d: hCurve(coreBox, box), live: up, label: i === 0 ? mid(coreBox, box, true, 'N6') : undefined })
+  })
 
   return { nodes, links, frames: [], notes: [] }
 }

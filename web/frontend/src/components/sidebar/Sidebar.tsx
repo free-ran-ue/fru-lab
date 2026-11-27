@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useTheme } from '../../theme'
+import { useLab } from '../../lab/LabContext'
 import styles from './sidebar.module.css'
 
 // The cube from the fru-lab logo.
@@ -40,13 +41,25 @@ const ITEMS: NavItem[] = [
     to: '/', label: 'Overview', icon: ICONS.overview, end: true,
     children: [{ to: '/', label: 'Topology', end: true }, { to: '/events', label: 'Events' }, { to: '/logs', label: 'Logs' }],
   },
-  {
-    to: '/core-network', label: 'Core Network (free5GC)', icon: ICONS.core,
-    children: [{ to: '/core-network', label: 'Network functions', end: true }, { to: '/core-network/subscribers', label: 'Subscribers' }],
-  },
+  // its sub-pages are filled in with the saved core networks (coreItem)
+  { to: '/core-network', label: 'Core Network', icon: ICONS.core },
   { to: '/free-ran', label: 'free-ran (gNB)', icon: ICONS.ran },
   { to: '/free-ue', label: 'free-ue (UE)', icon: ICONS.ue },
 ]
+
+// coreItem is Core Network with a sub-page per core: the list, the lab
+// free5GC (its Subscribers are a tab of its page), then every saved core
+// outside the lab.
+function coreItem(base: NavItem, cores: { id?: string; name: string }[]): NavItem {
+  return {
+    ...base,
+    children: [
+      { to: '/core-network', label: 'Networks', end: true },
+      { to: '/core-network/lab', label: 'free5GC' },
+      ...cores.filter((c) => c.id).map((c) => ({ to: `/core-network/n/${c.id}`, label: c.name })),
+    ],
+  }
+}
 
 const TOOLS: NavItem[] = [
   { to: '/images', label: 'Images', icon: ICONS.images },
@@ -84,6 +97,7 @@ function Item({ to, label, icon, end, children }: NavItem) {
 // theme and log-out buttons at the bottom, each an icon with its label.
 // Below 700px it collapses to icons only.
 export default function Sidebar({ onLogout }: SidebarProps) {
+  const lab = useLab()
   const [theme, toggleTheme] = useTheme()
   const themeLabel = theme === 'dark' ? 'Light theme' : 'Dark theme'
   return (
@@ -94,7 +108,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       </Link>
       <nav className={styles.group} aria-label="Lab">
         <span className={styles.heading}>Lab</span>
-        {ITEMS.map((i) => <Item key={i.to} {...i} />)}
+        {ITEMS.map((i) => <Item key={i.to} {...(i.to === '/core-network' ? coreItem(i, lab.coreNetworks.networks) : i)} />)}
       </nav>
       <nav className={styles.group} aria-label="Tools">
         <span className={styles.heading}>Tools</span>

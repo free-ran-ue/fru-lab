@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import LabCoreTabs from '../../lab/core/LabCoreTabs'
 import AppLayout from '../../components/layout/AppLayout'
 import { useNotifications } from '../../hooks/useNotifications'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
@@ -108,7 +109,7 @@ export default function SubscriberFormPage() {
       try {
         const failures = await createMany(bulkIds)
         if (failures.length === 0) {
-          navigate('/core-network/subscribers')
+          navigate('/core-network/lab/subscribers')
           return
         }
         setBulkFailures(failures)
@@ -128,7 +129,7 @@ export default function SubscriberFormPage() {
         await webconsoleApi.postSubscriberByID(subscription.ueId, subscription.plmnID, subscription)
         addSuccess(`Created ${subscription.ueId}`)
       }
-      navigate('/core-network/subscribers')
+      navigate('/core-network/lab/subscribers')
     } catch (error) {
       addError(extractWebconsoleErrorMessage(error, 'Failed to save subscriber'))
     } finally {
@@ -153,9 +154,10 @@ export default function SubscriberFormPage() {
 
   const title = isEditMode ? 'Edit subscriber' : isBulk ? `Add ${count} subscribers` : 'Add subscriber'
   const crumbs = [
-    { label: 'Subscribers', to: '/core-network/subscribers' },
+    { label: 'free5GC', to: '/core-network/lab' },
+    { label: 'Subscribers', to: '/core-network/lab/subscribers' },
     ...(isEditMode
-      ? [{ label: <span className="num">{editUeId}</span>, to: `/core-network/subscribers/${encodeURIComponent(editUeId!)}/${encodeURIComponent(editPlmnId!)}` }, { label: 'Edit' }]
+      ? [{ label: <span className="num">{editUeId}</span>, to: `/core-network/lab/subscribers/${encodeURIComponent(editUeId!)}/${encodeURIComponent(editPlmnId!)}` }, { label: 'Edit' }]
       : [{ label: isBulk ? `New (${count})` : 'New' }]),
   ]
   const header = (
@@ -174,13 +176,14 @@ export default function SubscriberFormPage() {
   if (isEditMode && (isLoading || loadError)) {
     return (
       <AppLayout crumbs={crumbs}>
+        <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs /></div>
         {header}
         <section className={styles.panel}>
           <p className={styles.emptyState}>{isLoading ? 'Loading subscriber…' : loadError}</p>
         </section>
         {loadError && (
           <div>
-            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')}>Back to subscribers</button>
+            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/lab/subscribers')}>Back to subscribers</button>
           </div>
         )}
       </AppLayout>
@@ -188,10 +191,8 @@ export default function SubscriberFormPage() {
   }
 
   return (
-    <AppLayout
-      crumbs={crumbs}
-     
-    >
+    <AppLayout crumbs={crumbs}>
+      <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs /></div>
       {header}
 
         <form onSubmit={handleSubmit} className={styles.form}>
@@ -492,7 +493,7 @@ export default function SubscriberFormPage() {
           )}
 
           <div className={styles.actionsRow}>
-            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')} disabled={isSaving}>
+            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/lab/subscribers')} disabled={isSaving}>
               {bulkFailures.length > 0 ? 'Back to subscribers' : 'Cancel'}
             </button>
             <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={isSaving || (isBulk && typeof bulkIds === 'string')}>

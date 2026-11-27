@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import LabCoreTabs from '../../lab/core/LabCoreTabs'
 import AppLayout from '../../components/layout/AppLayout'
 import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
 import { fromSubscription, snssaiKey, type SubscriberFormState } from './subscriberForm'
@@ -77,7 +78,8 @@ export default function SubscriberViewPage() {
   })
 
   return (
-    <AppLayout crumbs={[{ label: 'Subscribers', to: '/core-network/subscribers' }, { label: <span className="num">{ueId}</span> }]}>
+    <AppLayout crumbs={[{ label: 'free5GC', to: '/core-network/lab' }, { label: 'Subscribers', to: '/core-network/lab/subscribers' }, { label: <span className="num">{ueId}</span> }]}>
+      <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs /></div>
       <section className={styles.pageHeader}>
         <div className={styles.titleBlock}>
           <h1 className={`${styles.title} num`}>{ueId}</h1>
@@ -87,12 +89,12 @@ export default function SubscriberViewPage() {
           </p>
         </div>
         <div className={styles.headerActions}>
-          <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')}>Back</button>
+          <button type="button" className={styles.btn} onClick={() => navigate('/core-network/lab/subscribers')}>Back</button>
           {!isLoading && !loadError && form && (
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}
+              onClick={() => navigate(`/core-network/lab/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}
             >
               Edit
             </button>

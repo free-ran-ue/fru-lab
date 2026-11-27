@@ -23,6 +23,45 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+export interface CoreDn {
+    /**
+     * The DNN, unique within the core.
+     */
+    'name': string;
+    /**
+     * The address range its UEs get, optional.
+     */
+    'cidr'?: string;
+}
+export interface CoreNetwork {
+    'id'?: string;
+    /**
+     * Unique among the core networks (ignoring case) and not free5GC, the lab core\'s name. 1-32 letters, digits, spaces, dots, dashes, underscores.
+     */
+    'name': string;
+    /**
+     * The AMF\'s N2 address.
+     */
+    'n2Ip': string;
+    /**
+     * The host interface that reaches n2Ip.
+     */
+    'n2Interface'?: string;
+    /**
+     * The UPF\'s N3 address.
+     */
+    'n3Ip': string;
+    /**
+     * The host interface that reaches n3Ip.
+     */
+    'n3Interface'?: string;
+    'dns': Array<CoreDn>;
+    /**
+     * Switched on, the core counts as part of the lab and the Overview draws it.
+     */
+    'enabled'?: boolean;
+    'updatedAt'?: string;
+}
 export interface DeployGnbListResponse {
     'instances': Array<GnbInstance>;
 }
@@ -256,6 +295,160 @@ export interface UeProfile {
  */
 export const DefaultApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
+        /**
+         * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s.
+         * @summary Save a new core network
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkCreate: async (coreNetwork: CoreNetwork, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'coreNetwork' is not null or undefined
+            assertParamExists('coreNetworkCreate', 'coreNetwork', coreNetwork)
+            const localVarPath = `/api/core-networks`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(coreNetwork, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Delete a core network
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('coreNetworkDelete', 'id', id)
+            const localVarPath = `/api/core-networks/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 5G cores outside the lab that gNBs can attach to; the lab free5GC is not among them.
+         * @summary List the saved core networks
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/core-networks`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary Update a core network
+         * @param {string} id 
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkUpdate: async (id: string, coreNetwork: CoreNetwork, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('coreNetworkUpdate', 'id', id)
+            // verify required parameter 'coreNetwork' is not null or undefined
+            assertParamExists('coreNetworkUpdate', 'coreNetwork', coreNetwork)
+            const localVarPath = `/api/core-networks/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(coreNetwork, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
         /**
          * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
@@ -1540,6 +1733,58 @@ export const DefaultApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = DefaultApiAxiosParamCreator(configuration)
     return {
         /**
+         * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s.
+         * @summary Save a new core network
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkCreate(coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CoreNetwork>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkCreate(coreNetwork, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Delete a core network
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 5G cores outside the lab that gNBs can attach to; the lab free5GC is not among them.
+         * @summary List the saved core networks
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<CoreNetwork>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary Update a core network
+         * @param {string} id 
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkUpdate(id: string, coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CoreNetwork>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkUpdate(id, coreNetwork, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkUpdate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
@@ -1986,6 +2231,46 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
     const localVarFp = DefaultApiFp(configuration)
     return {
         /**
+         * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s.
+         * @summary Save a new core network
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkCreate(coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): AxiosPromise<CoreNetwork> {
+            return localVarFp.coreNetworkCreate(coreNetwork, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Delete a core network
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.coreNetworkDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 5G cores outside the lab that gNBs can attach to; the lab free5GC is not among them.
+         * @summary List the saved core networks
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkList(options?: RawAxiosRequestConfig): AxiosPromise<Array<CoreNetwork>> {
+            return localVarFp.coreNetworkList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary Update a core network
+         * @param {string} id 
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkUpdate(id: string, coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): AxiosPromise<CoreNetwork> {
+            return localVarFp.coreNetworkUpdate(id, coreNetwork, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
@@ -2327,6 +2612,50 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
  * DefaultApi - object-oriented interface
  */
 export class DefaultApi extends BaseAPI {
+    /**
+     * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s.
+     * @summary Save a new core network
+     * @param {CoreNetwork} coreNetwork 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkCreate(coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkCreate(coreNetwork, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Delete a core network
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 5G cores outside the lab that gNBs can attach to; the lab free5GC is not among them.
+     * @summary List the saved core networks
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Update a core network
+     * @param {string} id 
+     * @param {CoreNetwork} coreNetwork 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkUpdate(id: string, coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkUpdate(id, coreNetwork, options).then((request) => request(this.axios, this.basePath));
+    }
+
     /**
      * Fails with 409 if gNB is still running - gNB must be stopped first.
      * @summary Stop free5GC

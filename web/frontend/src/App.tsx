@@ -8,6 +8,8 @@ import LogsPage from './page/overview/LogsPage'
 import EventsPage from './page/overview/EventsPage'
 import ImagesPage from './page/images/ImagesPage'
 import CoreNetworkPage from './page/core/CoreNetworkPage'
+import CoreNetworksPage from './page/core/CoreNetworksPage'
+import ExternalCorePage from './page/core/ExternalCorePage'
 import FreeRanPage from './page/ran/FreeRanPage'
 import FreeUePage from './page/ue/FreeUePage'
 import { LabProvider } from './lab/LabContext'
@@ -31,11 +33,13 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<SignedIn />}>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/core-network" element={<CoreNetworkPage />} />
-        <Route path="/core-network/subscribers" element={<SubscribersPage />} />
-        <Route path="/core-network/subscribers/new" element={<SubscriberFormPage />} />
-        <Route path="/core-network/subscribers/:ueId/:plmnId/edit" element={<SubscriberFormPage />} />
-        <Route path="/core-network/subscribers/:ueId/:plmnId" element={<SubscriberViewPage />} />
+        <Route path="/core-network" element={<CoreNetworksPage />} />
+        <Route path="/core-network/lab" element={<CoreNetworkPage />} />
+        <Route path="/core-network/n/:id" element={<ExternalCorePage />} />
+        <Route path="/core-network/lab/subscribers" element={<SubscribersPage />} />
+        <Route path="/core-network/lab/subscribers/new" element={<SubscriberFormPage />} />
+        <Route path="/core-network/lab/subscribers/:ueId/:plmnId/edit" element={<SubscriberFormPage />} />
+        <Route path="/core-network/lab/subscribers/:ueId/:plmnId" element={<SubscriberViewPage />} />
         <Route path="/free-ran" element={<FreeRanPage />} />
         {/* profiles are edited on the free-ran / free-ue pages themselves */}
         <Route path="/free-ran/profiles" element={<Navigate to="/free-ran" replace />} />
@@ -46,7 +50,8 @@ export default function App() {
         <Route path="/images" element={<ImagesPage />} />
       </Route>
       {/* Subscribers moved under Core Network */}
-      <Route path="/subscribers/*" element={<Navigate to="/core-network/subscribers" replace />} />
+      <Route path="/subscribers/*" element={<Navigate to="/core-network/lab/subscribers" replace />} />
+      <Route path="/core-network/subscribers/*" element={<Navigate to="/core-network/lab/subscribers" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

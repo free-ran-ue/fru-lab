@@ -19,7 +19,7 @@ import NodeInspector from '../../lab/workbench/NodeInspector'
 import empty from './empty-lab.module.css'
 
 const STEPS: { n: number; icon: IconName; title: string; text: string; to: string }[] = [
-  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy free5GC from a template: Basic or ULCL. Skip it if your gNB will use a core outside the lab.', to: '/core-network' },
+  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy the lab free5GC from a template (Basic or ULCL), or add a core outside the lab under Core Network.', to: '/core-network' },
   { n: 2, icon: 'gnb', title: 'free-ran', text: 'Save gNB profiles and bring up as many gNBs as you need, on the lab free5GC or pointed at any AMF and UPF you can reach.', to: '/free-ran' },
   { n: 3, icon: 'ue', title: 'free-ue', text: 'Launch a UE from each UE profile onto the gNB you pick, then test its data path.', to: '/free-ue' },
 ]
@@ -111,7 +111,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked])
 
-  if (!lab.loaded || !(lab.coreUp || lab.gnbUp || lab.ueUp)) {
+  if (!lab.loaded || !(lab.coreUp || lab.gnbUp || lab.ueUp || lab.coreNetworks.networks.some((n) => n.enabled))) {
     return (
       <AppLayout crumbs={[{ label: 'Overview' }]}>
         {lab.loaded ? <EmptyLab /> : <p className={ui.empty}>Checking the lab…</p>}
@@ -142,7 +142,7 @@ export default function DashboardPage() {
           { k: 'UEs with PDU session', v: withPdu },
         ]} />
         <Actions>
-          <Button small onClick={() => navigate('/core-network')}>Core Network</Button>
+          <Button small onClick={() => navigate('/core-network/lab')}>free5GC</Button>
           <Button small onClick={() => navigate('/free-ran')}>free-ran</Button>
           <Button small onClick={() => navigate('/free-ue')}>free-ue</Button>
         </Actions>
@@ -160,7 +160,7 @@ export default function DashboardPage() {
     <AppLayout crumbs={[{ label: 'Overview' }]} fill>
       <Workbench
         title="Overview"
-        actions={<Button kind="danger" busy={Boolean(tearing)} title="Stop every UE, every gNB and the core" onClick={tearDown}>{tearing ?? 'Tear down'}</Button>}
+        actions={(lab.coreUp || lab.gnbUp || lab.ueUp || tearing) ? <Button kind="danger" busy={Boolean(tearing)} title="Stop every UE, every gNB and the core" onClick={tearDown}>{tearing ?? 'Tear down'}</Button> : undefined}
         status={<><span>core <b>{coreText}</b></span><span>gNBs <b>{lab.gnbs.length}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
         canvas={(
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

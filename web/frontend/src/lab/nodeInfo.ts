@@ -23,7 +23,22 @@ export interface NodeInfo {
 // nodeInfo describes a canvas node (by its graph id) for the floating card.
 export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
   const core = lab.nodes.core
-  if (id === ID.externalCore || (id === ID.core && lab.gnbExternal && !lab.coreUp)) {
+  // an enabled core outside the lab (Core Network)
+  if (id.startsWith('core:')) {
+    const n = lab.coreNetworks.networks.find((c) => `core:${c.id}` === id)
+    if (!n) return null
+    const on = lab.externalGnbs.filter((g) => g.deployment?.amfIp === n.n2Ip)
+    return {
+      kind: 'core', icon: 'core', name: n.name, sub: 'core network outside the lab', page: `/core-network/n/${n.id}`,
+      rows: [
+        { k: 'N2 (AMF)', v: n.n2Interface ? `${n.n2Ip} · ${n.n2Interface}` : n.n2Ip },
+        { k: 'N3 (UPF)', v: n.n3Interface ? `${n.n3Ip} · ${n.n3Interface}` : n.n3Ip },
+        { k: 'Data networks', v: n.dns.map((d) => d.name).join(', ') },
+        { k: 'gNBs on it', v: on.map((g) => g.profileName).join(', ') || '—' },
+      ],
+    }
+  }
+  if (id === ID.externalCore) {
     const ext = lab.externalGnbs
     return {
       kind: 'core', icon: 'core', name: 'External core', sub: 'a 5G core outside the lab', page: '/free-ran',
@@ -37,7 +52,7 @@ export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
   if (id === ID.core) {
     const nfs = lab.free5gc.networkFunctions
     return {
-      kind: 'core', icon: 'core', name: 'free5GC core', sub: '5G core network', status: core.status, page: '/core-network',
+      kind: 'core', icon: 'core', name: 'free5GC', sub: 'the lab 5G core', status: core.status, page: '/core-network/lab',
       rows: [
         { k: 'Template', v: lab.runningTemplate ? templateLabel(lab.runningTemplate) : '—' },
         { k: 'Network functions', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length} healthy` : '—' },
@@ -50,7 +65,7 @@ export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
     const name = id.slice(3)
     const nf = lab.free5gc.networkFunctions.find((n) => n.name === name)
     return {
-      kind: 'nf', icon: 'nf', name, sub: 'free5GC network function', status: nf?.status ?? 'stopped', nf: name, page: '/core-network',
+      kind: 'nf', icon: 'nf', name, sub: 'free5GC network function', status: nf?.status ?? 'stopped', nf: name, page: '/core-network/lab',
       rows: [
         { k: 'Service', v: name.toLowerCase() },
         { k: 'Core', v: core.status },
@@ -105,8 +120,9 @@ export function nodeInfo(lab: Lab, id: string): NodeInfo | null {
       ],
     }
   }
-  if (id === ID.dn) {
-    return { kind: 'dn', icon: 'cloud', name: 'Data network', sub: 'where UE traffic leaves the core over N6', rows: [] }
+  if (id === ID.dn || id.startsWith(`${ID.dn}:`)) {
+    const dnn = id === ID.dn ? 'Data network' : id.slice(id.lastIndexOf(':') + 1)
+    return { kind: 'dn', icon: 'cloud', name: dnn, sub: 'a data network: where UE traffic leaves the core over N6', rows: [] }
   }
   return null
 }

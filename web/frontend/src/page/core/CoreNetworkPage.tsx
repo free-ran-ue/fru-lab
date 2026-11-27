@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import LabCoreTabs from '../../lab/core/LabCoreTabs'
 import AppLayout from '../../components/layout/AppLayout'
 import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
 import LabCanvas from '../../lab/canvas/LabCanvas'
-import { ID, buildGraph } from '../../lab/canvas/graph'
-import { useEvents } from '../../lab/console/EventsContext'
+import { ID, buildCoreGraph } from '../../lab/canvas/graph'
+import { LAB_CORE } from '../../lab/useCoreNetworks'
 import { useLab } from '../../lab/LabContext'
 import { Actions, Button, Dot, Hint, InspectorHead, KV, Section, Segmented, ui } from '../../lab/LabUi'
 import { FREE5GC_TEMPLATE_OPTIONS, type Free5gcTemplate } from '../../lab/free5gcTemplate'
@@ -24,7 +25,6 @@ const SHORT: Record<Free5gcTemplate, string> = { basic: 'Basic', ulcl: 'ULCL' }
 export default function CoreNetworkPage() {
   const navigate = useNavigate()
   const lab = useLab()
-  const { ueLive } = useEvents()
   const { free5gc, nodes } = lab
   const { addError, addSuccess } = useNotifications()
   const [picked, setPicked] = useState<Free5gcTemplate>('basic')
@@ -32,7 +32,14 @@ export default function CoreNetworkPage() {
 
   const coreStopped = nodes.core.status === 'stopped'
   const blocked = coreStopped ? undefined : lab.blocked.coreStop
-  const graph = buildGraph(lab, 'core', picked, ueLive)
+  // the core as one node: N2 / N3 to the lab gNBs, N6 to its data network
+  const graph = buildCoreGraph({
+    ...LAB_CORE,
+    id: ID.core,
+    sub: `${templateLabel(lab.runningTemplate ?? picked)}${coreStopped ? ' · stopped' : ''}`,
+    status: nodes.core.status,
+    gnbs: lab.gnbs.filter((g) => g.core === 'lab').map((g) => ({ id: g.id, name: g.profileName, status: g.status })),
+  })
   const nfs = free5gc.networkFunctions
   const template = lab.runningTemplate ?? picked
 
@@ -73,7 +80,7 @@ export default function CoreNetworkPage() {
           { k: 'Template', v: `${templateLabel(template)}${coreStopped ? ' (preview)' : ''}` },
           { k: 'NFs healthy', v: nfs.length ? `${lab.healthyNfs} / ${nfs.length}` : '—' },
           { k: 'Last deployed', v: nodes.core.lastDeployed },
-          { k: 'Subscribers', v: <a href="/core-network/subscribers" onClick={(e) => { e.preventDefault(); navigate('/core-network/subscribers') }}>open</a> },
+          { k: 'Subscribers', v: <a href="/core-network/lab/subscribers" onClick={(e) => { e.preventDefault(); navigate('/core-network/lab/subscribers') }}>open</a> },
         ]} />
         {blocked && <Hint>{blocked}</Hint>}
         <Actions>{primary}{!coreStopped && <Button small onClick={() => showLogs(ID.core)}>Logs (all NFs)</Button>}</Actions>
@@ -92,18 +99,19 @@ export default function CoreNetworkPage() {
     </>
   )
 
-  const inspector = !selected || selected === ID.core
+  // the core, its N2 / N3 endpoints and its DN all show the core's panel
+  const inspector = !selected || selected === ID.core || selected.startsWith(`${ID.core}:`)
     ? coreInspector
     : <NodeInspector id={selected} onLogs={() => showLogs(selected)} extra={selected.startsWith('nf:') ? <Section><Button small onClick={() => setSelected(null)}>Back to free5GC</Button></Section> : undefined} />
 
   return (
-    <AppLayout crumbs={[{ label: 'Network functions' }]} fill>
+    <AppLayout crumbs={[{ label: 'free5GC' }]} fill>
       <Workbench
-        title="Core Network"
-        status={<><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
+        title="free5GC"
+        status={<><LabCoreTabs /><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
         canvas={(
           <LabCanvas
-            label="The free5GC core: control-plane NFs on the SBI bus, AMF, SMF and the UPFs."
+            label="The lab free5GC as one node: N2 and N3 from the lab gNBs, N6 to its data network."
             {...graph}
             selectedId={selected}
             onSelect={setSelected}
