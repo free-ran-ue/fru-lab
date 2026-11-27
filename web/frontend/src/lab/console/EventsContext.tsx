@@ -3,7 +3,8 @@ import { useLab } from '../LabContext'
 import { parseEvent, type LabEvent, type UeStage } from './events'
 import { openLogStream, sourceKey, type LogSource } from './stream'
 
-const MAX_EVENTS = 3000
+// enough for a long-running lab's whole history (they are small)
+const MAX_EVENTS = 20000
 // the most UE log streams followed at once
 const MAX_UE_STREAMS = 60
 
@@ -55,7 +56,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     }
     for (const [key, src] of want) {
       if (streams.current.has(key)) continue
-      streams.current.set(key, openLogStream(src, 300, (line) => {
+      streams.current.set(key, // the whole log since the container started, so the timeline holds
+      // every event, not just those since the page opened
+      openLogStream(src, 'all', (line) => {
         const ev = parseEvent(src, line)
         if (!ev || seen.current.has(ev.id)) return
         seen.current.add(ev.id)

@@ -41,7 +41,8 @@ func (f *funcLogConsumer) Err(container, message string) { f.emit(container, mes
 func (f *funcLogConsumer) Status(_, _ string)            {}
 
 // FollowLogs streams a target's (or, for target "ue", one UE instance's)
-// logs to onLine: the last `tail` lines, then every new one, until ctx
+// logs to onLine: the last `tail` lines (all of them when tail < 0), then
+// every new one, until ctx
 // ends.
 func (c *composeContext) FollowLogs(ctx context.Context, target, instance string, services []string, tail int, onLine func(LogLine)) error {
 	var name string
@@ -62,6 +63,10 @@ func (c *composeContext) FollowLogs(ctx context.Context, target, instance string
 	opts.Services = services
 	opts.Follow = true
 	opts.Timestamps = true
+	// a negative tail is every line since the container started
 	opts.Tail = fmt.Sprint(tail)
+	if tail < 0 {
+		opts.Tail = "all"
+	}
 	return c.service.Logs(ctx, name, &funcLogConsumer{onLine: onLine}, opts)
 }

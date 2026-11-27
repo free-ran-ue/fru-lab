@@ -25,3 +25,12 @@ func TestValidStreamTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestParseTail(t *testing.T) {
+	cases := map[string]int{"all": -1, "0": 0, "300": 300, "5000": 5000, "5001": 200, "-3": 200, "x": 200}
+	for q, want := range cases {
+		if got := parseTail(q); got != want {
+			t.Errorf("parseTail(%q) = %d, want %d", q, got, want)
+		}
+	}
+}

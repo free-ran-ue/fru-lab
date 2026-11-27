@@ -27,10 +27,11 @@ export function wsUrl(path: string, params: Record<string, string | number | und
   return `${apiBaseUrl.replace(/^http/, 'ws')}/api${path}?${q}`
 }
 
-// openLogStream follows a source's logs (the last `tail` lines first) and
+// openLogStream follows a source's logs (the last `tail` lines first, or
+// every line since the container started for 'all') and
 // reconnects after a drop until it is closed. It returns the close
 // function.
-export function openLogStream(src: LogSource, tail: number, onLine: (l: LogLine) => void, onState?: (s: 'open' | 'closed' | 'error', detail?: string) => void): () => void {
+export function openLogStream(src: LogSource, tail: number | 'all', onLine: (l: LogLine) => void, onState?: (s: 'open' | 'closed' | 'error', detail?: string) => void): () => void {
   let socket: WebSocket | null = null
   let disposed = false
   let retry: number | undefined

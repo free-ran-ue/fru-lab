@@ -308,3 +308,40 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
 }
+
+/* a text button, e.g. "all 120 →" beside a section title */
+.linkBtn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+/* the Overview's event list: scrolls on its own */
+.eventList {
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
+.eventText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-sans, inherit);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eventText b {
+  color: var(--ink);
+  font-weight: 600;
+}
