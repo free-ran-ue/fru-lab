@@ -8,6 +8,7 @@ docs/CoreDn.md
 docs/CoreNetwork.md
 docs/DefaultApi.md
 docs/DeployGnbListResponse.md
+docs/DeployGnbRequest.md
 docs/DeployLogsResponse.md
 docs/DeployStatusResponse.md
 docs/DeployUeListResponse.md

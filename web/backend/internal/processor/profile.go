@@ -76,7 +76,7 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 	}
 	switch p.Core {
 	case model.GnbCoreLab:
-		p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostIp, p.HostInterface = "", 0, "", 0, "", ""
+		p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostIp, p.HostInterface, p.CoreNetwork = "", 0, "", 0, "", "", ""
 		if p.N2Ip == "" {
 			return bad("n2Ip is required on the lab core: set the N2 IP (%s - %s)", flctx.GnbN2IpFirst, flctx.GnbN2IpLast)
 		}
@@ -93,12 +93,22 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 		if p.UpfPort == 0 {
 			p.UpfPort = 2152
 		}
-		for _, f := range []struct{ name, ip string }{{"amfIp", p.AmfIp}, {"upfIp", p.UpfIp}} {
-			if net.ParseIP(f.ip) == nil {
-				return bad("%s must be an IP address", f.name)
+		p.HostInterface = strings.TrimSpace(p.HostInterface)
+		// on a saved core network the AMF / UPF come from that core on
+		// deploy, and the host interface defaults to the core's N2 one
+		if p.CoreNetwork != "" {
+			p.AmfIp, p.UpfIp = "", ""
+			if p.HostInterface == "" {
+				p.HostIp = ""
+				break
+			}
+		} else {
+			for _, f := range []struct{ name, ip string }{{"amfIp", p.AmfIp}, {"upfIp", p.UpfIp}} {
+				if net.ParseIP(f.ip) == nil {
+					return bad("%s must be an IP address", f.name)
+				}
 			}
 		}
-		p.HostInterface = strings.TrimSpace(p.HostInterface)
 		if p.HostInterface == "" {
 			return bad("hostInterface is required on an external core")
 		}

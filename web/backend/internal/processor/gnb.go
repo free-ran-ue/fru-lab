@@ -137,8 +137,75 @@ func checkHostAddress(name, ip string) *model.ErrorDetail {
 	return conflict("%s is not an address of host interface %s", ip, name)
 }
 
-// DeployGnbProfileUp deploys the gNB of gNB profile profileID.
-func (p *Processor) DeployGnbProfileUp(ctx context.Context, profileID string) (*model.ResponseDeployAction, *model.ErrorDetail) {
+// firstIPv4 is the first IPv4 address of host interface name, "" if none.
+func firstIPv4(name string) string {
+	ifc, err := net.InterfaceByName(name)
+	if err != nil {
+		return ""
+	}
+	addrs, err := ifc.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil {
+			return n.IP.String()
+		}
+	}
+	return ""
+}
+
+// onCore points prof at another core for one deploy: "lab" is the lab
+// free5GC (the profile then needs its N2 IP), anything else a saved core
+// network, whose N2 / N3 addresses become the AMF and UPF the gNB dials.
+// The gNB listens on the profile's host interface, or else on the core's
+// N2 interface.
+func (p *Processor) onCore(prof *model.GnbProfile, core string) *model.ErrorDetail {
+	switch core {
+	case "":
+		return nil
+	case "lab":
+		prof.Core = model.GnbCoreLab
+		prof.AmfIp, prof.AmfPort, prof.UpfIp, prof.UpfPort = "", 0, "", 0
+		prof.HostInterface, prof.HostIp = "", ""
+		return nil
+	}
+	n, err := p.FlContext.GetCoreNetwork(core)
+	if err != nil {
+		return internal(err)
+	}
+	if n == nil {
+		return notFound("core network", core)
+	}
+	if !n.Enabled {
+		return conflict("core network %s is disabled; enable it on Core Network first", n.Name)
+	}
+	wasExternal := prof.Core == model.GnbCoreExternal
+	prof.Core = model.GnbCoreExternal
+	prof.AmfIp, prof.UpfIp = n.N2Ip, n.N3Ip
+	if prof.AmfPort == 0 || !wasExternal {
+		prof.AmfPort = 38412
+	}
+	if prof.UpfPort == 0 || !wasExternal {
+		prof.UpfPort = 2152
+	}
+	if !wasExternal || prof.HostInterface == "" || prof.HostIp == "" {
+		prof.HostInterface = n.N2Interface
+		prof.HostIp = ""
+		if n.N2Interface != "" {
+			prof.HostIp = firstIPv4(n.N2Interface)
+		}
+	}
+	if prof.HostInterface == "" || prof.HostIp == "" {
+		return conflict("gNB %s has no host address to reach core %s: set the N2 interface on the core, or a host interface on an external-core gNB profile", prof.Name, n.Name)
+	}
+	prof.N2Ip = ""
+	return nil
+}
+
+// DeployGnbProfileUp deploys the gNB of gNB profile profileID, on the
+// profile's core or on `core` (see onCore).
+func (p *Processor) DeployGnbProfileUp(ctx context.Context, profileID, core string) (*model.ResponseDeployAction, *model.ErrorDetail) {
 	if !reProfileID.MatchString(profileID) {
 		return nil, notFound("gNB profile", profileID)
 	}
@@ -148,6 +215,13 @@ func (p *Processor) DeployGnbProfileUp(ctx context.Context, profileID string) (*
 	}
 	if prof == nil {
 		return nil, notFound("gNB profile", profileID)
+	}
+	// no core picked for this deploy: the profile's saved core network
+	if core == "" {
+		core = prof.CoreNetwork
+	}
+	if detail := p.onCore(prof, core); detail != nil {
+		return nil, detail
 	}
 	if detail := normalizeGnbProfile(prof); detail != nil {
 		detail.HttpStatus = http.StatusConflict
@@ -278,6 +352,14 @@ func (p *Processor) DeployUeProfileUp(ctx context.Context, profileID, gnb string
 		return nil, internal(err)
 	} else if running {
 		return nil, conflict("UE %s (%s) is already running; stop it first", prof.Name, instance)
+	}
+	// no gNB picked for this deploy: the profile's preset one; "auto"
+	// skips the preset and picks by SD
+	switch {
+	case gnb == "auto":
+		gnb = ""
+	case gnb == "" && prof.GnbProfileID != "":
+		gnb = flctx.GnbInstanceTarget(prof.GnbProfileID)
 	}
 	return p.deployUe(ctx, instance, gnb, &flctx.UeInstanceConfig{
 		Mcc: prof.Mcc, Mnc: prof.Mnc, Msin: prof.Msin,

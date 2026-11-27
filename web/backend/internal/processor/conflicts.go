@@ -123,7 +123,7 @@ func gnbConflicts(prof *model.GnbProfile, saved []model.GnbProfile) []model.Prof
 		if byN2 == nil && prof.Core != model.GnbCoreExternal && o.Core != model.GnbCoreExternal && o.N2Ip == prof.N2Ip {
 			byN2 = o
 		}
-		if byHost == nil && prof.Core == model.GnbCoreExternal && o.Core == model.GnbCoreExternal && o.HostIp == prof.HostIp {
+		if byHost == nil && prof.Core == model.GnbCoreExternal && o.Core == model.GnbCoreExternal && prof.HostIp != "" && o.HostIp == prof.HostIp {
 			byHost = o
 		}
 	}

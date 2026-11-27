@@ -17,6 +17,7 @@ Name | Type | Description | Notes
 **dnn** | **string** |  | [optional] [default to undefined]
 **sst** | **string** |  | [default to undefined]
 **sd** | **string** |  | [optional] [default to undefined]
+**gnbProfileId** | **string** | The gNB profile this UE attaches to when a deploy names no gNB; empty picks a running gNB by SD. | [optional] [default to undefined]
 **updatedAt** | **string** |  | [optional] [default to undefined]
 
 ## Example
@@ -37,6 +38,7 @@ const instance: UeProfile = {
     dnn,
     sst,
     sd,
+    gnbProfileId,
     updatedAt,
 };
 ```

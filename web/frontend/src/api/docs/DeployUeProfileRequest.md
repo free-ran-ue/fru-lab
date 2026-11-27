@@ -5,7 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**gnb** | **string** | The gNB target to attach to (gnb-&lt;profileId&gt;); empty lets fru-lab pick. | [optional] [default to undefined]
+**gnb** | **string** | The gNB target to attach to (gnb-&lt;profileId&gt;); empty uses the UE profile\&#39;s gnbProfileId, else lets fru-lab pick by SD; auto always lets fru-lab pick. | [optional] [default to undefined]
 
 ## Example
 

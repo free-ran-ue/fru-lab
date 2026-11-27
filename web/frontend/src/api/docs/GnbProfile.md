@@ -22,6 +22,7 @@ Name | Type | Description | Notes
 **n2Ip** | **string** | Lab core only - the gNB\&#39;s N2/N3 address on the lab\&#39;s cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core\&#39;s). Unique among the gNB profiles. | [optional] [default to undefined]
 **hostInterface** | **string** | External core only - the host interface the gNB listens on (see /api/host/interfaces). | [optional] [default to undefined]
 **hostIp** | **string** | External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles. | [optional] [default to undefined]
+**coreNetwork** | **string** | External core only - a saved core network\&#39;s id. Its N2 / N3 addresses become the AMF / UPF on deploy (amfIp / upfIp are then left empty), and hostInterface may be left empty for the core\&#39;s N2 interface. Deploys without a core of their own go there. | [optional] [default to undefined]
 **logLevel** | **string** |  | [optional] [default to undefined]
 **updatedAt** | **string** |  | [optional] [default to undefined]
 
@@ -48,6 +49,7 @@ const instance: GnbProfile = {
     n2Ip,
     hostInterface,
     hostIp,
+    coreNetwork,
     logLevel,
     updatedAt,
 };

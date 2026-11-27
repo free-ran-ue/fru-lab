@@ -215,6 +215,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployGnbRequest'
       responses:
         '200':
           description: OK
@@ -1473,6 +1479,9 @@ components:
         hostIp:
           type: string
           description: External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
+        coreNetwork:
+          type: string
+          description: External core only - a saved core network's id. Its N2 / N3 addresses become the AMF / UPF on deploy (amfIp / upfIp are then left empty), and hostInterface may be left empty for the core's N2 interface. Deploys without a core of their own go there.
         logLevel:
           type: string
         updatedAt:
@@ -1508,6 +1517,9 @@ components:
           type: string
         sd:
           type: string
+        gnbProfileId:
+          type: string
+          description: The gNB profile this UE attaches to when a deploy names no gNB; empty picks a running gNB by SD.
         updatedAt:
           type: string
           format: date-time
@@ -1546,7 +1558,7 @@ components:
       properties:
         gnb:
           type: string
-          description: The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+          description: The gNB target to attach to (gnb-<profileId>); empty uses the UE profile's gnbProfileId, else lets fru-lab pick by SD; auto always lets fru-lab pick.
     ProfileCheckResult:
       type: object
       required: [conflicts]
@@ -1640,3 +1652,9 @@ components:
           type: string
           description: The address range its UEs get, optional.
           example: 10.60.0.0/16
+    DeployGnbRequest:
+      type: object
+      properties:
+        core:
+          type: string
+          description: The core this deploy attaches to - empty keeps the profile's, lab is the lab free5GC, anything else an enabled core network's id (its N2 / N3 addresses become the AMF and UPF; the gNB listens on the profile's host interface, else the core's N2 interface).

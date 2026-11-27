@@ -1,0 +1,29 @@
+/* The gNB / UE list toolbar: two rows, the same on both pages. */
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.75rem;
+}
+
+.find {
+  flex: 0 1 10rem;
+  min-width: 5rem;
+}
+
+.push {
+  flex: 1 1 auto;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.75rem;
+}

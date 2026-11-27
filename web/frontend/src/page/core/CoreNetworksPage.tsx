@@ -121,7 +121,7 @@ export default function CoreNetworksPage() {
   if (adding) {
     detail = (
       <>
-        <DetailHeader icon="core" name="New core network" sub="a core outside the lab" />
+        <DetailHeader icon="core" name="New core network" sub="a core outside the lab" actions={<Button small onClick={() => setAdding(false)}>Cancel</Button>} />
         <CoreNetworkForm value={NEW_CORE} takenNames={networks.map((n) => n.name)} onSave={onSave} />
       </>
     )

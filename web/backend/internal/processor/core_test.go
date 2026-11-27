@@ -50,3 +50,36 @@ func TestCoreNameTaken(t *testing.T) {
 		t.Error("a free name was taken")
 	}
 }
+
+func TestOnCoreLab(t *testing.T) {
+	prof := model.GnbProfile{Name: "g", Core: model.GnbCoreExternal, AmfIp: "1.2.3.4", AmfPort: 38412, UpfIp: "1.2.3.5", UpfPort: 2152, HostInterface: "eth0", HostIp: "1.2.3.6", N2Ip: "10.0.1.20"}
+	if d := (&Processor{}).onCore(&prof, "lab"); d != nil {
+		t.Fatalf("lab override failed: %v", d)
+	}
+	if prof.Core != model.GnbCoreLab || prof.AmfIp != "" || prof.HostIp != "" || prof.N2Ip != "10.0.1.20" {
+		t.Fatalf("lab override left %+v", prof)
+	}
+	same := model.GnbProfile{Core: model.GnbCoreLab, N2Ip: "10.0.1.21"}
+	if d := (&Processor{}).onCore(&same, ""); d != nil || same.N2Ip != "10.0.1.21" {
+		t.Fatal("an empty core changed the profile")
+	}
+}
+
+func TestNormalizeGnbOnSavedCore(t *testing.T) {
+	p := model.GnbProfile{Name: "g", GnbID: "000314", Mcc: "208", Mnc: "93", Tac: "000001", Sst: "1", Core: model.GnbCoreExternal, CoreNetwork: "abcdefabcdef", AmfIp: "9.9.9.9"}
+	if d := normalizeGnbProfile(&p); d != nil {
+		t.Fatalf("a gNB on a saved core needs no AMF / UPF / host: %v", d.Detail)
+	}
+	if p.AmfIp != "" {
+		t.Error("the AMF was kept; it comes from the core on deploy")
+	}
+	p.HostInterface = "eth0"
+	p.HostIp = "nope"
+	if normalizeGnbProfile(&p) == nil {
+		t.Error("a bad host IP with a host interface was accepted")
+	}
+	lab := model.GnbProfile{Name: "g", GnbID: "000314", Mcc: "208", Mnc: "93", Tac: "000001", Sst: "1", Core: model.GnbCoreLab, N2Ip: "10.0.1.20", CoreNetwork: "abcdefabcdef"}
+	if d := normalizeGnbProfile(&lab); d != nil || lab.CoreNetwork != "" {
+		t.Errorf("a lab gNB kept a core network: %v %q", d, lab.CoreNetwork)
+	}
+}

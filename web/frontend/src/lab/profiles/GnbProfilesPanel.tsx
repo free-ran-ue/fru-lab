@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { GnbProfile, HostInterface } from '../../api'
 import { api, extractErrorMessage } from '../../apiClient'
-import { Button, Segmented } from '../LabUi'
+import { Button } from '../LabUi'
+import { useLab } from '../LabContext'
 import type { LabGnb } from '../useLab'
 import { LAB_DEFAULT_GNB, useGnbProfiles } from '../useProfiles'
 import { ConflictNote, Field, ps, useConfigPreview, useProfileCheck, Yaml } from './parts'
@@ -66,6 +67,17 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
   }, [selectedId, saved])
 
   const set = (patch: Partial<GnbProfile>) => setDraft((d) => ({ ...d, ...patch }))
+  // the core this gNB deploys onto by default: the lab free5GC or a saved
+  // core network (cores are added on Core Network, not here). A profile
+  // from before, with its AMF / UPF typed in, shows them until it is moved
+  // to a saved core.
+  const cores = useLab().coreNetworks.networks
+  const onSaved = draft.core === 'external' && draft.coreNetwork ? cores.find((n) => n.id === draft.coreNetwork) : undefined
+  const coreChoice = draft.core !== 'external' ? 'lab' : draft.coreNetwork ? draft.coreNetwork : 'manual'
+  function pickCore(v: string) {
+    if (v === 'lab') set({ core: 'lab', coreNetwork: undefined, amfIp: undefined, amfPort: undefined, upfIp: undefined, upfPort: undefined, hostInterface: undefined, hostIp: undefined, n2Ip: draft.n2Ip ?? LAB_DEFAULT_GNB.n2Ip })
+    else set({ core: 'external', coreNetwork: v, amfIp: undefined, upfIp: undefined, n2Ip: undefined })
+  }
   const conflict = check.byField
 
   // external core: the interface the gNB listens on, then one of its addresses
@@ -111,28 +123,33 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
         <div className={ps.grid}>
           <Field wide label="Profile name" value={draft.name} onChange={(v) => set({ name: v })} conflict={conflict('name')} />
           <div className={`${ps.field} ${ps.wide}`}>
-            <label>Core network</label>
-            <Segmented
-              value={draft.core}
-              options={[{ value: 'lab', label: 'Lab free5GC' }, { value: 'external', label: 'External core' }]}
-              onChange={(v) => set(v === 'external'
-                ? { core: v, amfIp: draft.amfIp ?? '', amfPort: draft.amfPort ?? 38412, upfIp: draft.upfIp ?? '', upfPort: draft.upfPort ?? 2152, n2Ip: undefined }
-                : { core: v, amfIp: undefined, amfPort: undefined, upfIp: undefined, upfPort: undefined, hostInterface: undefined, hostIp: undefined, n2Ip: draft.n2Ip ?? LAB_DEFAULT_GNB.n2Ip })}
-            />
+            <label htmlFor="gnb-core">Core network</label>
+            <select id="gnb-core" className={ps.input} value={coreChoice} onChange={(e) => pickCore(e.target.value)}>
+              <option value="lab">free5GC (the lab core)</option>
+              {cores.map((n) => <option key={n.id} value={n.id}>{n.name} · AMF {n.n2Ip}{n.enabled ? '' : ' · disabled'}</option>)}
+              {coreChoice === 'manual' && <option value="manual" disabled>Typed-in AMF {draft.amfIp || ''} (pick a saved core instead)</option>}
+            </select>
+            <span className={ps.fieldHint}>Where this gNB deploys by default (and with Deploy selected); a row's Deploy can still pick another. To add a core outside the lab, use Core Network → Networks.</span>
           </div>
           {!external && (
             <Field wide label="N2 IP" value={draft.n2Ip ?? ''} onChange={(v) => set({ n2Ip: v })} pattern={IP} conflict={conflict('n2Ip')} hint="The gNB's N2/N3 address on the lab network: 10.0.1.20 - 10.0.1.254. The address UEs dial is assigned on deploy." />
           )}
+          {onSaved && (
+            <>
+              <div className={ps.field}><label>AMF (N2)</label><span className={ps.readonly}>{onSaved.n2Ip}</span></div>
+              <div className={ps.field}><label>UPF (N3)</label><span className={ps.readonly}>{onSaved.n3Ip}</span></div>
+            </>
+          )}
           {external && (
             <>
-              <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} conflict={conflict('amfIp')} />
-              <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} conflict={conflict('amfPort')} />
-              <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} conflict={conflict('upfIp')} />
-              <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} conflict={conflict('upfPort')} />
+              {!onSaved && <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} conflict={conflict('amfIp')} />}
+              {!onSaved && <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} conflict={conflict('amfPort')} />}
+              {!onSaved && <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} conflict={conflict('upfIp')} />}
+              {!onSaved && <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} conflict={conflict('upfPort')} />}
               <div className={ps.field}>
                 <label htmlFor="gnb-iface">Host interface</label>
                 <select id="gnb-iface" className={`${ps.input} ${ifaceMissing || conflict('hostInterface') ? ps.inputBad : ''}`} value={draft.hostInterface ?? ''} onChange={(e) => pickInterface(e.target.value)}>
-                  <option value="">{hosts.loaded ? 'pick an interface' : 'loading…'}</option>
+                  <option value="">{!hosts.loaded ? 'loading…' : onSaved ? `the core's N2 interface${onSaved.n2Interface ? ` (${onSaved.n2Interface})` : ''}` : 'pick an interface'}</option>
                   {hosts.list.map((h) => <option key={h.name} value={h.name}>{h.name} · {h.addresses.join(', ')}</option>)}
                   {ifaceMissing && <option value={draft.hostInterface}>{draft.hostInterface} (not on this host)</option>}
                 </select>

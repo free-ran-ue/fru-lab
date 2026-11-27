@@ -39,7 +39,7 @@ interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean; c
 const ITEMS: NavItem[] = [
   {
     to: '/', label: 'Overview', icon: ICONS.overview, end: true,
-    children: [{ to: '/', label: 'Topology', end: true }, { to: '/events', label: 'Events' }, { to: '/logs', label: 'Logs' }],
+    children: [{ to: '/events', label: 'Events' }, { to: '/logs', label: 'Logs' }],
   },
   // its sub-pages are filled in with the saved core networks (coreItem)
   { to: '/core-network', label: 'Core Network', icon: ICONS.core },
@@ -47,14 +47,13 @@ const ITEMS: NavItem[] = [
   { to: '/free-ue', label: 'free-ue (UE)', icon: ICONS.ue },
 ]
 
-// coreItem is Core Network with a sub-page per core: the list, the lab
-// free5GC (its Subscribers are a tab of its page), then every saved core
-// outside the lab.
+// coreItem is Core Network (itself the list of cores) with a sub-page per
+// core: the lab free5GC (its Subscribers are a tab of its page), then
+// every saved core outside the lab.
 function coreItem(base: NavItem, cores: { id?: string; name: string }[]): NavItem {
   return {
     ...base,
     children: [
-      { to: '/core-network', label: 'Networks', end: true },
       { to: '/core-network/lab', label: 'free5GC' },
       ...cores.filter((c) => c.id).map((c) => ({ to: `/core-network/n/${c.id}`, label: c.name })),
     ],
@@ -66,21 +65,22 @@ const TOOLS: NavItem[] = [
 ]
 
 const cls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.active : ''}`
-const parentCls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.parentActive : ''}`
 const subCls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${styles.sub} ${isActive ? styles.active : ''}`
 
 interface SidebarProps {
   onLogout?: () => void
 }
 
-// Item is one view; a view with sub-pages lists them under it.
+// Item is one view; a view with sub-pages lists them under it. The view's
+// own row opens its own page (lit while it is open) and stays half-lit
+// while one of its sub-pages is.
 function Item({ to, label, icon, end, children }: NavItem) {
   const { pathname } = useLocation()
-  // a view with sub-pages is lit while any of them is open
-  const inGroup = children?.some((c) => (c.end ? pathname === c.to : pathname.startsWith(c.to)))
+  const here = end ? pathname === to : pathname === to || pathname === `${to}/`
+  const inGroup = !here && children?.some((c) => (c.end ? pathname === c.to : pathname.startsWith(c.to)))
   return (
     <>
-      <NavLink to={children ? children[0].to : to} end={end} className={children ? () => parentCls({ isActive: Boolean(inGroup) }) : cls} title={label}>
+      <NavLink to={to} end className={() => (children ? `${styles.item} ${here ? styles.active : inGroup ? styles.parentActive : ''}` : cls({ isActive: here || (!end && pathname.startsWith(`${to}/`)) }))} title={label}>
         {icon}
         <span className={styles.label}>{label}</span>
       </NavLink>

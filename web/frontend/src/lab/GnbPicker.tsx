@@ -8,6 +8,8 @@ export interface PickItem {
   value: string
   label: string
   sub?: string
+  // why it cannot be picked now, if it cannot
+  disabled?: string
 }
 
 interface PickProps {
@@ -61,8 +63,8 @@ export function PickMenu({ label, title, items, small = true, busy, blocked, onP
         <div ref={menu} className={styles.menu} role="menu" style={{ top: at.y, left: at.x }}>
           <p className={styles.title}>{title}</p>
           {items.map((it) => (
-            <button key={it.value} type="button" role="menuitem" className={styles.item} onClick={() => { setAt(null); onPick(it.value) }}>
-              <b>{it.label}</b>{it.sub && <span>{it.sub}</span>}
+            <button key={it.value} type="button" role="menuitem" className={styles.item} disabled={Boolean(it.disabled)} title={it.disabled} onClick={() => { setAt(null); onPick(it.value) }}>
+              <b>{it.label}</b>{(it.disabled || it.sub) && <span>{it.disabled ?? it.sub}</span>}
             </button>
           ))}
         </div>,
@@ -78,18 +80,47 @@ interface Props {
   busy?: boolean
   // why it cannot deploy now, if it cannot
   blocked?: string
-  // '' is Auto: the backend picks a running gNB by the UE's SD
+  // the UE profile's preset gNB, offered first ('' picks it); without one,
+  // '' is Auto
+  own?: { name: string; blocked?: string }
+  // '' is the preset (or Auto without one), 'auto' picks by SD, else a gNB
   onPick: (gnb: string) => void
 }
 
 // DeployMenu is a UE's Deploy button: pressing it opens the list of gNBs
 // to deploy onto ("Auto" first, then every running gNB), and picking one
 // deploys.
-export function DeployMenu({ label = 'Deploy', small = true, busy, blocked, onPick }: Props) {
+export function DeployMenu({ label = 'Deploy', small = true, busy, blocked, own, onPick }: Props) {
   const lab = useLab()
   const items: PickItem[] = [
-    { value: '', label: 'Auto', sub: "a running gNB with the UE's SD" },
+    ...(own ? [{ value: '', label: "Profile's gNB", sub: own.name, disabled: own.blocked }] : []),
+    { value: own ? 'auto' : '', label: 'Auto', sub: "a running gNB with the UE's SD" },
     ...lab.gnbs.filter((g) => g.status === 'running').map((g) => ({ value: g.id, label: g.profileName, sub: [g.sd && `SD ${g.sd}`, g.deployment?.n2Ip || g.deployment?.hostIp].filter(Boolean).join(' · ') })),
   ]
   return <PickMenu label={label} title="Deploy onto" items={items} small={small} busy={busy} blocked={blocked} onPick={onPick} />
+}
+
+interface CoreMenuProps {
+  label?: string
+  small?: boolean
+  busy?: boolean
+  blocked?: string
+  // the profile's own core, shown as the first choice ("" picks it); none
+  // for several profiles at once
+  own?: { text: string; blocked?: string }
+  onPick: (core: string) => void
+}
+
+// CoreMenu is a gNB's Deploy button: it opens the cores to deploy onto -
+// the profile's own core first, then free5GC, then every enabled core
+// network - and picking one deploys.
+export function CoreMenu({ label = 'Deploy', small = true, busy, blocked, own, onPick }: CoreMenuProps) {
+  const lab = useLab()
+  const labDown = lab.nodes.core.status !== 'running' ? 'free5GC is not running' : undefined
+  const items: PickItem[] = [
+    own ? { value: '', label: "Profile's core", sub: own.text, disabled: own.blocked } : { value: '', label: "Each profile's own core" },
+    { value: 'lab', label: 'free5GC', sub: 'the lab core', disabled: labDown },
+    ...lab.coreNetworks.networks.filter((n) => n.enabled && n.id).map((n) => ({ value: n.id!, label: n.name, sub: `AMF ${n.n2Ip}` })),
+  ]
+  return <PickMenu label={label} title="Deploy onto core" items={items} small={small} busy={busy} blocked={blocked} onPick={onPick} />
 }

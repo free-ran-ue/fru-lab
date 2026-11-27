@@ -88,3 +88,10 @@ type GnbInstance struct {
 type ResponseDeployGnbList struct {
 	Instances []GnbInstance `json:"instances"`
 }
+
+// RequestDeployGnbProfile picks the core a gNB deploy attaches to: empty
+// keeps the profile's, "lab" is the lab free5GC, anything else a saved
+// core network's id.
+type RequestDeployGnbProfile struct {
+	Core string `json:"core"`
+}

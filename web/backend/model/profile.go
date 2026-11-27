@@ -35,7 +35,10 @@ type GnbProfile struct {
 	// listens on
 	HostInterface string `json:"hostInterface,omitempty"`
 	HostIp        string `json:"hostIp,omitempty"`
-	LogLevel      string `json:"logLevel"`
+	// external core: a saved core network this gNB attaches to; its AMF /
+	// UPF addresses are taken from that core on deploy
+	CoreNetwork string `json:"coreNetwork,omitempty"`
+	LogLevel    string `json:"logLevel"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -54,6 +57,9 @@ type UeProfile struct {
 	Dnn          string `json:"dnn"`
 	Sst          string `json:"sst"`
 	Sd           string `json:"sd"`
+	// the gNB profile this UE attaches to unless a deploy says otherwise;
+	// empty picks a running gNB by SD
+	GnbProfileID string `json:"gnbProfileId,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
 }

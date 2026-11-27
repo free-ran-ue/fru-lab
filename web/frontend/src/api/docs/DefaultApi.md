@@ -610,16 +610,19 @@ Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs
 ```typescript
 import {
     DefaultApi,
-    Configuration
+    Configuration,
+    DeployGnbRequest
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new DefaultApi(configuration);
 
 let profileId: string; // (default to undefined)
+let deployGnbRequest: DeployGnbRequest; // (optional)
 
 const { status, data } = await apiInstance.deployGnbUp(
-    profileId
+    profileId,
+    deployGnbRequest
 );
 ```
 
@@ -627,6 +630,7 @@ const { status, data } = await apiInstance.deployGnbUp(
 
 |Name | Type | Description  | Notes|
 |------------- | ------------- | ------------- | -------------|
+| **deployGnbRequest** | **DeployGnbRequest**|  | |
 | **profileId** | [**string**] |  | defaults to undefined|
 
 
@@ -640,7 +644,7 @@ const { status, data } = await apiInstance.deployGnbUp(
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 

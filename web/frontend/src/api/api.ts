@@ -65,6 +65,12 @@ export interface CoreNetwork {
 export interface DeployGnbListResponse {
     'instances': Array<GnbInstance>;
 }
+export interface DeployGnbRequest {
+    /**
+     * The core this deploy attaches to - empty keeps the profile\'s, lab is the lab free5GC, anything else an enabled core network\'s id (its N2 / N3 addresses become the AMF and UPF; the gNB listens on the profile\'s host interface, else the core\'s N2 interface).
+     */
+    'core'?: string;
+}
 export interface DeployLogsResponse {
     'target': string;
     'lines': Array<string>;
@@ -85,7 +91,7 @@ export interface DeployUeLogsResponse {
 }
 export interface DeployUeProfileRequest {
     /**
-     * The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+     * The gNB target to attach to (gnb-<profileId>); empty uses the UE profile\'s gnbProfileId, else lets fru-lab pick by SD; auto always lets fru-lab pick.
      */
     'gnb'?: string;
 }
@@ -179,6 +185,10 @@ export interface GnbProfile {
      * External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
      */
     'hostIp'?: string;
+    /**
+     * External core only - a saved core network\'s id. Its N2 / N3 addresses become the AMF / UPF on deploy (amfIp / upfIp are then left empty), and hostInterface may be left empty for the core\'s N2 interface. Deploys without a core of their own go there.
+     */
+    'coreNetwork'?: string;
     'logLevel'?: string;
     'updatedAt'?: string;
 }
@@ -287,6 +297,10 @@ export interface UeProfile {
     'dnn'?: string;
     'sst': string;
     'sd'?: string;
+    /**
+     * The gNB profile this UE attaches to when a deploy names no gNB; empty picks a running gNB by SD.
+     */
+    'gnbProfileId'?: string;
     'updatedAt'?: string;
 }
 
@@ -707,10 +721,11 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
          * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
          * @summary Deploy the gNB of one gNB profile
          * @param {string} profileId 
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbUp: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        deployGnbUp: async (profileId: string, deployGnbRequest?: DeployGnbRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'profileId' is not null or undefined
             assertParamExists('deployGnbUp', 'profileId', profileId)
             const localVarPath = `/api/deploy/gnbs/{profileId}`
@@ -730,11 +745,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
+            localVarHeaderParameter['Content-Type'] = 'application/json';
             localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deployGnbRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1876,11 +1893,12 @@ export const DefaultApiFp = function(configuration?: Configuration) {
          * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
          * @summary Deploy the gNB of one gNB profile
          * @param {string} profileId 
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(profileId, options);
+        async deployGnbUp(profileId: string, deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(profileId, deployGnbRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbUp']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -2341,11 +2359,12 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
          * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
          * @summary Deploy the gNB of one gNB profile
          * @param {string} profileId 
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbUp(profileId, options).then((request) => request(axios, basePath));
+        deployGnbUp(profileId: string, deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbUp(profileId, deployGnbRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2734,11 +2753,12 @@ export class DefaultApi extends BaseAPI {
      * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
      * @summary Deploy the gNB of one gNB profile
      * @param {string} profileId 
+     * @param {DeployGnbRequest} [deployGnbRequest] 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbUp(profileId: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbUp(profileId, options).then((request) => request(this.axios, this.basePath));
+    public deployGnbUp(profileId: string, deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbUp(profileId, deployGnbRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

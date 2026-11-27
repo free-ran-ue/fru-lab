@@ -14,6 +14,8 @@ import GnbProfilesPanel from '../../lab/profiles/GnbProfilesPanel'
 import { BulkCreate } from '../../lab/profiles/parts'
 import type { LabGnb } from '../../lab/useLab'
 import { useStoredState } from '../../lab/useProfiles'
+import { CoreMenu } from '../../lab/GnbPicker'
+import ListToolbar from '../../lab/workbench/ListToolbar'
 import { compareValues } from '../../lab/sort'
 import Workbench from '../../lab/workbench/Workbench'
 import { logsHref } from '../../lab/workbench/logSources'
@@ -26,12 +28,13 @@ type Tab = 'status' | 'config'
 // copy of a saved one)
 type View = { kind: 'profile'; id: string } | { kind: 'new'; from?: string }
 
-const coreOf = (p: GnbProfile) => (p.core === 'external' ? `external ${p.amfIp ?? ''}` : 'lab free5GC')
 const addrOf = (p: GnbProfile) => (p.core === 'external' ? p.hostIp : p.n2Ip) || '—'
 
 // FreeRanPage is everything about gNBs on one page. Every gNB profile is
 // one gNB and one row. Actions sit in two fixed places only:
-//   list toolbar   New, Bulk create, find (the whole list)
+//   list toolbar   the shared ListToolbar: New, Bulk create, find,
+//                  All / Running; Deploy / Delete selected; Start all
+//                  stopped (onto a picked core), Stop all
 //   detail header  Deploy / Stop, Logs, Duplicate, Delete (one gNB)
 // and each row ends with its Deploy / Stop. The detail pane has a Status
 // tab (the running gNB) and a Config tab (the profile, Save at its top).
@@ -46,11 +49,15 @@ export default function FreeRanPage() {
   const [view, setView] = useState<View | null>(null)
   const [tab, setTab] = useState<Tab>('status')
   const [find, setFind] = useState('')
+  const [show, setShow] = useStoredState<'all' | 'running'>('frulab-gnb-show', 'all')
   // the rows ticked for Delete selected
   const [ticked, setTicked] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
 
   const profiles = gnbProfiles.profiles
+  // the core a profile deploys onto by default
+  const savedCore = (p: GnbProfile) => (p.coreNetwork ? lab.coreNetworks.networks.find((n) => n.id === p.coreNetwork) : undefined)
+  const coreOf = (p: GnbProfile) => (p.core !== 'external' ? 'free5GC' : p.coreNetwork ? (savedCore(p)?.name ?? 'a deleted core') : `external ${p.amfIp ?? ''}`)
   const runningOf = (id?: string) => lab.gnbs.find((g) => g.profileId === id)
   // a UE that failed to register is up but not connected
   const connected = (id: string) => lab.upUes.filter((r) => ueGnbId(lab, r) === id && ueLive[r.ueId]?.stage !== 'failed')
@@ -71,13 +78,21 @@ export default function FreeRanPage() {
     setStoredId(id)
   }
 
-  const deployBlocked = (p: GnbProfile) => (p.core !== 'external' ? lab.blocked.gnbDeploy : undefined)
+  // why deploying `p` onto its own core cannot happen now, if it cannot
+  const deployBlocked = (p: GnbProfile) => {
+    if (p.core !== 'external') return lab.blocked.gnbDeploy
+    if (!p.coreNetwork) return undefined
+    const n = savedCore(p)
+    return !n ? 'Its core network was deleted' : !n.enabled ? `Core network ${n.name} is disabled` : undefined
+  }
 
-  async function deploy(p: GnbProfile) {
+  // core: '' keeps the profile's, 'lab' is free5GC, else a core network id
+  const coreName = (core: string) => (core === 'lab' ? 'free5GC' : lab.coreNetworks.networks.find((n) => n.id === core)?.name)
+  async function deploy(p: GnbProfile, core = '') {
     if (!p.id) return
     try {
-      await gnbInstances.deploy(p.id)
-      addSuccess(`gNB ${p.name} is starting`)
+      await gnbInstances.deploy(p.id, core)
+      addSuccess(`gNB ${p.name} is starting${core ? ` on ${coreName(core)}` : ''}`)
       pick(p.id)
       setTab('status')
     } catch (error) {
@@ -103,6 +118,35 @@ export default function FreeRanPage() {
     } catch (error) {
       addError(extractErrorMessage(error, 'Failed to delete the profile'))
     }
+  }
+
+  // Deploy selected / Start all stopped: those profiles, one after
+  // another, onto `core`
+  const [deployingMany, setDeployingMany] = useState<string | null>(null)
+  const [stoppingAll, setStoppingAll] = useState(false)
+  async function deployTicked(core: string) {
+    await deployMany(profiles.filter((p) => p.id && ticked.has(p.id) && !runningOf(p.id)), core)
+  }
+  async function deployMany(targets: GnbProfile[], core: string) {
+    let failed = 0
+    for (const [i, p] of targets.entries()) {
+      setDeployingMany(`Deploying ${i + 1}/${targets.length}…`)
+      try { await gnbInstances.deploy(p.id!, core) } catch (error) { failed += 1; addError(extractErrorMessage(error, `gNB ${p.name} failed to deploy`)) }
+    }
+    setDeployingMany(null)
+    setTicked(new Set())
+    if (targets.length > failed) addSuccess(`Started ${targets.length - failed} of ${targets.length} gNB${targets.length === 1 ? '' : 's'}${core ? ` on ${coreName(core)}` : ''}`)
+  }
+
+  // Stop all: every running gNB (each UE on them must be stopped first)
+  async function stopAllGnbs() {
+    setStoppingAll(true)
+    let failed = 0
+    for (const g of lab.gnbs) {
+      try { await g.stop() } catch (error) { failed += 1; addError(extractErrorMessage(error, `Failed to stop ${g.name}`)) }
+    }
+    setStoppingAll(false)
+    if (lab.gnbs.length > failed) addSuccess(`Stopped ${lab.gnbs.length - failed} gNB${lab.gnbs.length - failed === 1 ? '' : 's'}`)
   }
 
   // Delete selected: the ticked profiles (running ones can't be ticked)
@@ -138,12 +182,12 @@ export default function FreeRanPage() {
       const blocked = lab.gnbStopBlocked(g.id)
       return <Button kind="danger" small busy={g.pending} disabled={Boolean(blocked)} title={blocked} onClick={() => stop(g)}>Stop</Button>
     }
-    const blocked = deployBlocked(p)
-    return <Button kind="primary" small busy={Boolean(p.id && gnbInstances.pending[p.id])} disabled={Boolean(blocked)} title={blocked} onClick={() => deploy(p)}>Deploy</Button>
+    // Deploy opens the cores to deploy onto, the profile's own first
+    return <CoreMenu busy={Boolean(p.id && gnbInstances.pending[p.id])} own={{ text: coreOf(p), blocked: deployBlocked(p) }} onPick={(core) => deploy(p, core)} />
   }
 
   // top to bottom by profile name, A to Z, until a header is clicked
-  const shown = [...profiles].sort((a, b) => compareValues(a.name, b.name, 'asc')).filter((p) => !find || `${p.name} ${p.n2Ip ?? ''} ${p.hostIp ?? ''} ${p.gnbId}`.toLowerCase().includes(find.toLowerCase()))
+  const shown = [...profiles].sort((a, b) => compareValues(a.name, b.name, 'asc')).filter((p) => (show === 'all' || runningOf(p.id)) && (!find || `${p.name} ${p.n2Ip ?? ''} ${p.hostIp ?? ''} ${p.gnbId}`.toLowerCase().includes(find.toLowerCase())))
 
   const list = (
     <ItemList
@@ -160,12 +204,23 @@ export default function FreeRanPage() {
       onChecked={setTicked}
       defaultSort={{ key: '0', dir: 'asc' }}
       head={(
-        <>
-          <Button kind="primary" small onClick={() => setView({ kind: 'new' })}>+ New</Button>
-          <BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; gNB ID and N2 IP count up to the next free value` : 'Select a profile to copy'} onCreate={bulk} />
-          <input className={ui.select} style={{ flex: '1 1 7rem', minWidth: 0 }} placeholder="find" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Find a gNB" />
-          {ticked.size > 0 && <Button kind="danger" small busy={deleting} onClick={removeTicked}>Delete selected ({ticked.size})</Button>}
-        </>
+        <ListToolbar
+          onNew={() => setView({ kind: 'new' })}
+          bulk={<BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; gNB ID and N2 IP count up to the next free value` : 'Select a profile to copy'} onCreate={bulk} />}
+          find={find}
+          onFind={setFind}
+          findLabel="Find a gNB"
+          show={show}
+          onShow={setShow}
+          counts={{ all: profiles.length, running: lab.gnbs.length }}
+          ticked={ticked.size}
+          deploySelected={<Button kind="primary" small busy={Boolean(deployingMany)} title="Each onto its profile's core" onClick={() => deployTicked('')}>{deployingMany ?? `Deploy selected (${ticked.size})`}</Button>}
+          onDeleteSelected={removeTicked}
+          deleting={deleting}
+          startAll={<Button kind="primary" small busy={Boolean(deployingMany)} disabled={profiles.every((p) => !p.id || runningOf(p.id))} title="Each onto its profile's core" onClick={() => deployMany(profiles.filter((p) => p.id && !runningOf(p.id)), '')}>Start all stopped</Button>}
+          onStopAll={stopAllGnbs}
+          stopAll={{ disabled: lab.gnbs.length === 0 || lab.ueUp, busy: stoppingAll, title: lab.ueUp ? 'Stop the UEs first (free-ue)' : undefined }}
+        />
       )}
       empty={profiles.length ? 'Nothing matches.' : 'No gNB profiles yet. Press + New: every profile is one gNB.'}
     />
@@ -178,6 +233,7 @@ export default function FreeRanPage() {
       return (
         <Section title="Will deploy with">
           <KV rows={[
+            { k: 'Core', v: coreOf(p) },
             { k: 'gNB ID', v: p.gnbId },
             { k: p.core === 'external' ? 'Host IP (N2/N3)' : 'N2 IP', v: addrOf(p) },
             ...(p.core === 'external' && p.hostInterface ? [{ k: 'Host interface', v: p.hostInterface }] : []),
@@ -243,7 +299,7 @@ export default function FreeRanPage() {
     const from = current.from ? profiles.find((p) => p.id === current.from) : undefined
     detail = (
       <>
-        <DetailHeader icon="gnb" name="New gNB profile" sub={from ? `copy of ${from.name}` : 'from the lab defaults'} />
+        <DetailHeader icon="gnb" name="New gNB profile" sub={from ? `copy of ${from.name}` : 'from the lab defaults'} actions={<Button small onClick={() => setView(current.from ? { kind: 'profile', id: current.from } : null)}>Cancel</Button>} />
         <GnbProfilesPanel
           key={`new-${current.from ?? ''}`}
           profiles={gnbProfiles}

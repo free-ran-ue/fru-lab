@@ -98,6 +98,14 @@ export default function UeProfilesPanel({ lab, selectedId, onSelect, onNotify, c
           <Field label="DNN" value={draft.dnn ?? ''} onChange={(v) => set({ dnn: v })} conflict={conflict('dnn')} />
           <Field label="SST" value={draft.sst} onChange={(v) => set({ sst: v })} pattern={/^\d{1,3}$/} conflict={conflict('sst')} />
           <Field label="SD" value={draft.sd ?? ''} onChange={(v) => set({ sd: v })} pattern={/^([0-9a-fA-F]{6})?$/} hint="Auto picks a gNB with this SD" conflict={conflict('sd')} />
+          <div className={`${ps.field} ${ps.wide}`}>
+            <label htmlFor="ue-gnb">gNB</label>
+            <select id="ue-gnb" className={ps.input} value={draft.gnbProfileId ?? ''} onChange={(e) => set({ gnbProfileId: e.target.value || undefined })}>
+              <option value="">Auto: a running gNB with this SD</option>
+              {lab.gnbProfiles.profiles.map((g) => <option key={g.id} value={g.id}>{g.name}{g.sd ? ` · SD ${g.sd}` : ''}</option>)}
+            </select>
+            <span className={ps.fieldHint}>Where this UE deploys by default (and with Deploy selected); a row's Deploy can still pick another.</span>
+          </div>
         </div>
       </div>
 

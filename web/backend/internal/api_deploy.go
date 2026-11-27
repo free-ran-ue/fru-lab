@@ -190,7 +190,12 @@ func (b *backend) handleDeployGnbList(c *gin.Context) {
 }
 
 func (b *backend) handleDeployGnbUp(c *gin.Context) {
-	response, errDetail := b.Processor.DeployGnbProfileUp(c.Request.Context(), c.Param("profileId"))
+	var req model.RequestDeployGnbProfile
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, model.ResponseDeployAction{Message: "Invalid request body"})
+		return
+	}
+	response, errDetail := b.Processor.DeployGnbProfileUp(c.Request.Context(), c.Param("profileId"), req.Core)
 	if errDetail != nil {
 		b.DeployLog.Warnf("Deploy up failed for %s: %s", c.ClientIP(), errDetail.Detail)
 		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
