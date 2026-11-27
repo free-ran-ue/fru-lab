@@ -6,7 +6,8 @@ export type UeStage = 'connecting' | 'connected' | 'registered' | 'pdu' | 'ready
 export interface LabEvent {
   id: string
   t: number
-  // the node it is about, as a canvas id ("gnb", "core", "ue:imsi-…")
+  // the node it is about, as a canvas id ("gnb-…", "core", "core:<id>" for
+  // a free5GC core network, "ue:imsi-…")
   node: string
   level: EventLevel
   text: string
@@ -63,7 +64,8 @@ export function parseEvent(src: LogSource, l: LogLine): LabEvent | null {
   const id = `${src.target}:${src.instance ?? ''}:${l.t}:${l.line.length}:${msg.slice(0, 40)}`
 
   let rules: Rule[] = []
-  let node = 'core'
+  // the lab free5GC is 'core'; a free5GC core network core:<id>
+  let node = src.target.startsWith('core-') ? `core:${src.target.slice(5)}` : 'core'
   if (src.target === 'ue') { rules = UE; node = `ue:${ueOf(src)}` }
   else if (src.target.startsWith('gnb')) { rules = GNB; node = src.target }
   else if (src.service === 'amf' || tags.includes('[AMF]')) rules = AMF

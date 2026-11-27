@@ -75,7 +75,8 @@ export const useGnbProfiles = () => useProfilesOf(gnbApi)
 export const useUeProfiles = () => useProfilesOf(ueApi)
 
 // LAB_DEFAULT_GNB holds the lab's usual gNB values: a brand-new gNB
-// profile starts from them (nothing deploys without a saved profile).
+// profile starts from them (nothing deploys without a saved profile). It
+// has no n2Ip: on the lab free5GC the N2/N3 address is assigned on deploy.
 export const LAB_DEFAULT_GNB: GnbProfile = {
   name: 'New gNB profile',
   gnbId: '000314',
@@ -86,7 +87,6 @@ export const LAB_DEFAULT_GNB: GnbProfile = {
   sst: '1',
   sd: '010203',
   core: 'lab',
-  n2Ip: '10.0.1.20',
   logLevel: 'info',
 }
 

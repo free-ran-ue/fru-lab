@@ -7,8 +7,9 @@ export interface LogLine {
   err?: boolean
 }
 
-// a gNB streams as its instance name, gnb-<profileId>
-export type StreamTarget = 'free5gc' | 'ue' | `gnb-${string}`
+// a gNB streams as its instance name, gnb-<profileId>; a free5GC core
+// network as core-<coreNetworkId>
+export type StreamTarget = 'free5gc' | 'ue' | `gnb-${string}` | `core-${string}`
 
 export interface LogSource {
   target: StreamTarget

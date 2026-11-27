@@ -7,7 +7,7 @@ import { NodeIcon, type IconName } from '../../lab/canvas/icons'
 import { useEvents } from '../../lab/console/EventsContext'
 import { useLab } from '../../lab/LabContext'
 import { Actions, Button, Dot, KV, Section, ui } from '../../lab/LabUi'
-import { templateLabel } from '../../lab/useLab'
+import { isFree5gcCore, templateLabel } from '../../lab/useLab'
 import Workbench from '../../lab/workbench/Workbench'
 import { logsHref } from '../../lab/workbench/logSources'
 import TerminalDock from '../../lab/workbench/TerminalDock'
@@ -19,7 +19,7 @@ import NodeInspector from '../../lab/workbench/NodeInspector'
 import empty from './empty-lab.module.css'
 
 const STEPS: { n: number; icon: IconName; title: string; text: string; to: string }[] = [
-  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy free5GC from a template: Basic or ULCL. Skip it if your gNB will use a core outside the lab.', to: '/core-network' },
+  { n: 1, icon: 'core', title: 'Core Network', text: 'Deploy the lab free5GC from a template (Basic or ULCL), add more free5GC cores on this host, or add a core outside the lab under Core Network.', to: '/core-network' },
   { n: 2, icon: 'gnb', title: 'free-ran', text: 'Save gNB profiles and bring up as many gNBs as you need, on the lab free5GC or pointed at any AMF and UPF you can reach.', to: '/free-ran' },
   { n: 3, icon: 'ue', title: 'free-ue', text: 'Launch a UE from each UE profile onto the gNB you pick, then test its data path.', to: '/free-ue' },
 ]
@@ -71,16 +71,23 @@ export default function DashboardPage() {
   const [tearing, setTearing] = useState<string | null>(null)
 
   // Tear down stops the whole lab in the order the backend requires: every
-  // UE, then every gNB, then the core
+  // UE, then every gNB, then the lab core and every free5GC core network
   async function tearDown() {
     const ues = lab.upUes.length
     const gnbs = lab.gnbs
-    const what = [ues && `${ues} UE${ues === 1 ? '' : 's'}`, gnbs.length && `${gnbs.length} gNB${gnbs.length === 1 ? '' : 's'}`, lab.coreUp && 'the free5GC core'].filter(Boolean).join(', ')
+    const cores = lab.upCores
+    const what = [
+      ues && `${ues} UE${ues === 1 ? '' : 's'}`,
+      gnbs.length && `${gnbs.length} gNB${gnbs.length === 1 ? '' : 's'}`,
+      lab.coreUp && 'the free5GC core',
+      cores.length && `the free5GC core network${cores.length === 1 ? '' : 's'} ${cores.map((c) => c.name).join(', ')}`,
+    ].filter(Boolean).join(', ')
     if (!await confirm({ title: 'Tear down the whole lab?', message: <>This stops {what}, in that order. Their profiles stay; deploy them again any time.</>, confirmLabel: 'Tear down', danger: true })) return
     try {
       if (ues) { setTearing('Stopping UEs…'); await lab.ue.stopAll() }
       for (const g of gnbs) { setTearing(`Stopping ${g.profileName}…`); await g.stop() }
       if (lab.coreUp) { setTearing('Stopping the core…'); await lab.free5gc.stop() }
+      for (const c of cores) { setTearing(`Stopping ${c.name}…`); await c.stop() }
       setSessions([])
       addSuccess('The lab is torn down')
     } catch (error) {
@@ -111,7 +118,8 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked])
 
-  if (!lab.loaded || !(lab.coreUp || lab.gnbUp || lab.ueUp)) {
+  const coresUp = lab.upCores.length > 0
+  if (!lab.loaded || !(lab.coreUp || coresUp || lab.gnbUp || lab.ueUp || lab.coreNetworks.networks.some((n) => n.enabled && !isFree5gcCore(n)))) {
     return (
       <AppLayout crumbs={[{ label: 'Overview' }]}>
         {lab.loaded ? <EmptyLab /> : <p className={ui.empty}>Checking the lab…</p>}
@@ -137,12 +145,13 @@ export default function DashboardPage() {
         <KV rows={[
           { k: 'Core', v: <><Dot status={lab.gnbExternal && !lab.coreUp ? 'running' : nodes.core.status} /> {coreText}</> },
           { k: 'NFs healthy', v: lab.free5gc.networkFunctions.length ? `${lab.healthyNfs}/${lab.free5gc.networkFunctions.length}` : '—' },
+          ...lab.upCores.map((c) => ({ k: c.name, v: <><Dot status={c.status} /> {c.template ? templateLabel(c.template) : c.status}{c.networkFunctions.length ? ` · ${c.healthyNfs}/${c.networkFunctions.length} NF` : ''}</> })),
           { k: 'gNBs running', v: lab.gnbs.length },
           { k: 'UEs connected', v: `${ueCounts.running} / ${ueCounts.total}` },
           { k: 'UEs with PDU session', v: withPdu },
         ]} />
         <Actions>
-          <Button small onClick={() => navigate('/core-network')}>Core Network</Button>
+          <Button small onClick={() => navigate('/core-network/lab')}>free5GC</Button>
           <Button small onClick={() => navigate('/free-ran')}>free-ran</Button>
           <Button small onClick={() => navigate('/free-ue')}>free-ue</Button>
         </Actions>
@@ -160,8 +169,8 @@ export default function DashboardPage() {
     <AppLayout crumbs={[{ label: 'Overview' }]} fill>
       <Workbench
         title="Overview"
-        actions={<Button kind="danger" busy={Boolean(tearing)} title="Stop every UE, every gNB and the core" onClick={tearDown}>{tearing ?? 'Tear down'}</Button>}
-        status={<><span>core <b>{coreText}</b></span><span>gNBs <b>{lab.gnbs.length}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
+        actions={(lab.coreUp || coresUp || lab.gnbUp || lab.ueUp || tearing) ? <Button kind="danger" busy={Boolean(tearing)} title="Stop every UE, every gNB and every core fru-lab deployed" onClick={tearDown}>{tearing ?? 'Tear down'}</Button> : undefined}
+        status={<><span>core <b>{coreText}</b></span>{coresUp && <span>free5GC cores <b>{lab.upCores.length}</b></span>}<span>gNBs <b>{lab.gnbs.length}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
         canvas={(
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ position: 'relative', flex: '1 1 auto', minHeight: 0 }}>

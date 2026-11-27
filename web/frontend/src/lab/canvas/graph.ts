@@ -1,7 +1,7 @@
 import type { Free5gcTemplate } from '../free5gcTemplate'
 import type { NodeStatus } from '../types'
 import type { Lab, LabGnb } from '../useLab'
-import { templateLabel } from '../useLab'
+import { isFree5gcCore, templateLabel } from '../useLab'
 import type { UeRow } from '../useUeInstances'
 import type { CanvasFrame, CanvasLink, CanvasNode } from './LabCanvas'
 import type { UeLive } from '../console/EventsContext'
@@ -318,7 +318,9 @@ export function ueGnbId(lab: Lab, row: UeRow): string {
 const MAX_OVERVIEW_UES = 24
 const RADIO_GAP = 150
 
-const gnbSub = (g: LabGnb) => (g.core === 'external' ? `external · AMF ${g.deployment?.amfIp ?? ''}` : 'lab free5GC')
+const gnbSub = (g: LabGnb, lab: Lab) => (g.coreNetwork
+  ? (lab.coreNetworks.networks.find((n) => n.id === g.coreNetwork)?.name ?? 'a deleted core')
+  : g.core === 'external' ? `external · AMF ${g.deployment?.amfIp ?? ''}` : 'lab free5GC')
 
 // buildOverviewGraph is the overview map: every connected UE on the radio
 // to its gNB, every running gNB, the core(s) as one node each and the data
@@ -327,91 +329,245 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
   const nodes: CanvasNode[] = []
   const links: CanvasLink[] = []
   const coreStatus = lab.nodes.core.status
-
-  // ----- gNBs: one node per running gNB -----
-  const gnbX = UE.w + RADIO_GAP
   const upUes = lab.upUes
-  const gnbStep = BIG.h + 60
-  const shownGnbs = lab.gnbs.length ? lab.gnbs : [null]
-  const gnbs = shownGnbs.map((g, i) => {
-    const box = { x: gnbX, y: i * gnbStep, ...BIG }
-    if (!g) {
-      nodes.push({ id: ID.gnbNone, ...box, icon: 'gnb', label: 'gNB', sub: 'not deployed', tag: '0 UE connected', status: 'stopped', ghost: true })
-      return { id: ID.gnbNone, box, status: 'stopped' as NodeStatus, core: 'lab' as const }
-    }
-    const attached = upUes.filter((r) => ueGnbId(lab, r) === g.id && ueLive[r.ueId]?.stage !== 'failed').length
-    nodes.push({ id: g.id, ...box, icon: 'gnb', label: g.profileName, sub: gnbSub(g), tag: `${attached} UE connected`, status: g.status })
-    return { id: g.id, box, status: g.status, core: g.core }
-  })
-  const gnbTop = gnbs[0].box.y
-  const gnbBottom = gnbs[gnbs.length - 1].box.y + BIG.h
-  const midY = (gnbTop + gnbBottom) / 2
 
-  // ----- UEs: one node per connected UE, on the radio to its gNB -----
-  const hidden = Math.max(0, upUes.length - MAX_OVERVIEW_UES)
-  const shown = hidden ? upUes.slice(0, MAX_OVERVIEW_UES - 1) : upUes
-  const drawn = shown.length + (hidden ? 1 : 0)
-  const step = UE.h + UE_GAP
-  const top = midY - (Math.max(1, drawn) * step - UE_GAP) / 2
-  shown.forEach((row, i) => {
-    const box = { x: 0, y: top + i * step, ...UE }
-    const id = ID.ue(row.ueId)
-    const live = ueLive[row.ueId]
-    const tag = live?.stage ? [STAGE_LABEL[live.stage], live.stage !== 'failed' ? live.ip : undefined].filter(Boolean).join(' · ') : undefined
-    nodes.push({ id, ...box, icon: 'ue', label: row.ueId.replace(/^imsi-/, ''), status: live?.stage === 'failed' && row.status === 'running' ? 'unhealthy' : row.status, tag, compact: true })
-    const g = gnbs.find((x) => x.id === ueGnbId(lab, row)) ?? gnbs[0]
-    links.push({ id: `uu:${row.ueId}`, from: id, to: g.id, d: hCurve(box, g.box), live: up(row.status) && up(g.status), radio: true })
-  })
-  if (hidden) {
-    const box = { x: 0, y: top + shown.length * step, ...UE }
-    nodes.push({ id: ID.fleet, ...box, icon: 'fleet', label: `+${hidden + 1} more UEs`, tag: 'see free-ue', compact: true })
-  }
-  if (drawn === 0) {
-    const box = { x: UE.w - BIG.w, y: midY - BIG.h / 2, ...BIG }
-    nodes.push({ id: ID.fleet, ...box, icon: 'fleet', label: 'No UE connected', sub: 'launch UEs on free-ue', ghost: true })
-  }
-
-  // ----- cores: the lab free5GC and/or the external core the external
-  // gNBs dial, one node each -----
+  // ----- which cores show: the lab free5GC once deployed, every free5GC
+  // core network that is up (or has a gNB on it), every enabled core
+  // outside the lab, and (only for an external gNB dialing none of those)
+  // a plain "External core" node -----
+  const enabled = lab.coreNetworks.networks.filter((n) => n.enabled && !isFree5gcCore(n))
+  const shownCores = lab.free5gcCores.filter((c) => c.status !== 'stopped' || c.gnbs.length > 0)
   const ext = lab.externalGnbs
-  const showLab = lab.coreUp || gnbs.some((g) => g.core === 'lab') || ext.length === 0
-  const coreX = gnbX + BIG.w + 130
-  const cores: { id: string; box: Box; external: boolean }[] = []
-  const coreCount = (showLab ? 1 : 0) + (ext.length ? 1 : 0)
-  const coreY = (i: number) => midY - BIG.h / 2 + (i - (coreCount - 1) / 2) * (BIG.h + 40)
+  // an external gNB's core: the one recorded on it, else the enabled one
+  // whose AMF it dials
+  const extCoreOf = (g: LabGnb) => {
+    const n = g.coreNetwork ? enabled.find((c) => c.id === g.coreNetwork) : enabled.find((c) => c.n2Ip && c.n2Ip === g.deployment?.amfIp)
+    return n ? `core:${n.id}` : ID.externalCore
+  }
+  const coreOfGnb = (g: LabGnb) => {
+    if (g.coreNetwork && shownCores.some((c) => c.id === g.coreNetwork)) return `core:${g.coreNetwork}`
+    if (g.core !== 'external') return ID.core
+    return extCoreOf(g)
+  }
+  const orphans = ext.filter((g) => extCoreOf(g) === ID.externalCore)
+  const showLab = lab.coreUp || lab.gnbs.some((g) => g.core === 'lab' && !g.coreNetwork) || (enabled.length === 0 && ext.length === 0 && shownCores.length === 0)
+  type Spec = { id: string; node: Omit<CanvasNode, 'x' | 'y' | 'w' | 'h' | 'id'>; live: boolean; dashed: boolean; dns: string[] }
+  const specs: Spec[] = []
   const nfs = lab.free5gc.networkFunctions
   if (showLab) {
-    const box = { x: coreX, y: coreY(0), ...BIG }
-    nodes.push({
+    specs.push({
       id: ID.core,
-      ...box,
-      icon: 'core',
-      label: 'free5GC core',
-      sub: lab.runningTemplate ? templateLabel(lab.runningTemplate) : 'not deployed',
-      tag: nfs.length ? `${lab.healthyNfs} / ${nfs.length} NF healthy` : undefined,
-      status: coreStatus,
+      node: { icon: 'core', label: 'free5GC', sub: lab.runningTemplate ? templateLabel(lab.runningTemplate) : 'not deployed', tag: nfs.length ? `${lab.healthyNfs} / ${nfs.length} NF healthy` : undefined, status: coreStatus },
+      live: up(coreStatus),
+      dashed: false,
+      dns: ['internet'],
     })
-    cores.push({ id: ID.core, box, external: false })
   }
-  if (ext.length) {
-    const box = { x: coreX, y: coreY(showLab ? 1 : 0), ...BIG }
-    const amfs = [...new Set(ext.map((g) => g.deployment?.amfIp).filter(Boolean))]
-    nodes.push({ id: ID.externalCore, ...box, icon: 'core', label: 'External core', sub: `AMF ${amfs.join(', ')}`, tag: 'outside the lab' })
-    cores.push({ id: ID.externalCore, box, external: true })
+  for (const c of shownCores) {
+    const cnfs = c.networkFunctions
+    specs.push({
+      id: `core:${c.id}`,
+      node: { icon: 'core', label: c.name, sub: c.template ? templateLabel(c.template) : 'not deployed', tag: cnfs.length ? `${c.healthyNfs} / ${cnfs.length} NF healthy` : 'free5GC on this host', status: c.status },
+      live: up(c.status),
+      dashed: false,
+      dns: c.network.dns.length ? c.network.dns.map((d) => d.name) : ['internet'],
+    })
   }
-  let labelled = false
-  for (const g of gnbs) {
-    const c = cores.find((x) => x.external === (g.core === 'external')) ?? cores[0]
-    links.push({ id: `n2n3:${g.id}`, from: g.id, to: c.id, d: hCurve(g.box, c.box), live: up(g.status) && (c.external || up(coreStatus)), dashed: c.external, label: labelled ? undefined : mid(g.box, c.box, true, 'N2 · N3') })
-    labelled = true
+  for (const n of enabled) {
+    specs.push({ id: `core:${n.id}`, node: { icon: 'core', label: n.name, sub: `AMF ${n.n2Ip ?? ''}`, tag: 'outside the lab' }, live: true, dashed: false, dns: n.dns.map((d) => d.name) })
+  }
+  if (orphans.length) {
+    const amfs = [...new Set(orphans.map((g) => g.deployment?.amfIp).filter(Boolean))]
+    specs.push({ id: ID.externalCore, node: { icon: 'core', label: 'External core', sub: `AMF ${amfs.join(', ')}`, tag: 'not in Core Network' }, live: false, dashed: true, dns: [] })
   }
 
-  // ----- data network -----
-  const dn = { x: coreX + BIG.w + 90, y: midY - 36, w: 150, h: 72 }
-  nodes.push({ id: ID.dn, ...dn, icon: 'cloud', label: 'DN', sub: 'internet' })
-  for (const [i, c] of cores.entries()) {
-    links.push({ id: `n6:${c.id}`, from: c.id, to: ID.dn, d: hCurve(c.box, dn), live: c.external ? false : up(coreStatus), dashed: c.external, label: i === 0 ? mid(c.box, dn, true, 'N6') : undefined })
+  // ----- lanes: every core is an invisible row, left to right its UEs,
+  // its gNBs, the core, and its own data networks; each UE sits level with
+  // its gNB, so no link crosses another row -----
+  const gnbX = UE.w + RADIO_GAP
+  const coreX = gnbX + BIG.w + 130
+  const dnX = coreX + BIG.w + 110
+  const STEP = UE.h + UE_GAP
+  const SLOT_GAP = 30
+  const LANE_GAP = 60
+  const DNB = { w: 150, h: 56 }
+  const DN_STEP = DNB.h + 20
+
+  const hidden = Math.max(0, upUes.length - MAX_OVERVIEW_UES)
+  const shownUes = hidden ? upUes.slice(0, MAX_OVERVIEW_UES - 1) : upUes
+  const laneOf = (g: LabGnb) => (specs.some((c) => c.id === coreOfGnb(g)) ? coreOfGnb(g) : specs[0].id)
+  const lanes = specs.map((c) => ({ spec: c, gnbs: lab.gnbs.filter((g) => laneOf(g) === c.id) }))
+  const firstGnb = lanes.find((l) => l.gnbs.length)?.gnbs[0]
+  // each UE under its gNB (a UE whose gNB is not drawn joins the first one)
+  const uesOf = (g: LabGnb) => shownUes.filter((r) => (lab.gnbs.some((x) => x.id === ueGnbId(lab, r)) ? ueGnbId(lab, r) === g.id : g === firstGnb))
+  // the "+N more" node goes under the last gNB that has UEs
+  const moreGnb = hidden ? [...lab.gnbs].reverse().find((g) => uesOf(g).length) ?? firstGnb : undefined
+  const ueCount = (g: LabGnb) => uesOf(g).length + (g === moreGnb ? 1 : 0)
+  // the lane's own data networks (a DN shared with another lane is placed
+  // between them below)
+  const dnKey = (n: string) => n.toLowerCase()
+  const sharedDn = (key: string) => specs.filter((c) => c.dns.some((n) => dnKey(n) === key)).length > 1
+
+  let y = 0
+  type Placed = { id: string; box: Box; live: boolean; dashed: boolean; dns: string[]; mid: number }
+  const placed: Placed[] = []
+  const gnbBoxes = new Map<string, Box>()
+  for (const lane of lanes) {
+    const ownDns = lane.spec.dns.filter((n) => !sharedDn(dnKey(n)))
+    // a gNB's slot is as tall as its UE column (at least a gNB)
+    const slots = lane.gnbs.map((g) => Math.max(BIG.h, ueCount(g) * STEP - UE_GAP))
+    const gnbsH = lane.gnbs.length ? slots.reduce((a, b) => a + b, 0) + SLOT_GAP * (lane.gnbs.length - 1) : BIG.h
+    const laneH = Math.max(BIG.h, gnbsH, ownDns.length * DN_STEP - 20)
+    const laneMid = y + laneH / 2
+
+    // the core, level with the middle of its lane
+    const coreBox = { x: coreX, y: laneMid - BIG.h / 2, ...BIG }
+    nodes.push({ id: lane.spec.id, ...coreBox, ...lane.spec.node })
+    placed.push({ id: lane.spec.id, box: coreBox, live: lane.spec.live, dashed: lane.spec.dashed, dns: lane.spec.dns, mid: laneMid })
+
+    // its gNBs, each centred in its slot, its UEs level with it
+    let gy = laneMid - gnbsH / 2
+    lane.gnbs.forEach((g, i) => {
+      const slotMid = gy + slots[i] / 2
+      const box = { x: gnbX, y: slotMid - BIG.h / 2, ...BIG }
+      gnbBoxes.set(g.id, box)
+      const ues = uesOf(g)
+      const attached = upUes.filter((r) => ueGnbId(lab, r) === g.id && ueLive[r.ueId]?.stage !== 'failed').length
+      nodes.push({ id: g.id, ...box, icon: 'gnb', label: g.profileName, sub: gnbSub(g, lab), tag: `${attached} UE connected`, status: g.status })
+      const count = ueCount(g)
+      const top = slotMid - (count * STEP - UE_GAP) / 2
+      ues.forEach((row, j) => {
+        const ub = { x: 0, y: top + j * STEP, ...UE }
+        const id = ID.ue(row.ueId)
+        const live = ueLive[row.ueId]
+        const tag = live?.stage ? [STAGE_LABEL[live.stage], live.stage !== 'failed' ? live.ip : undefined].filter(Boolean).join(' · ') : undefined
+        nodes.push({ id, ...ub, icon: 'ue', label: row.ueId.replace(/^imsi-/, ''), status: live?.stage === 'failed' && row.status === 'running' ? 'unhealthy' : row.status, tag, compact: true })
+        links.push({ id: `uu:${row.ueId}`, from: id, to: g.id, d: hCurve(ub, box), live: up(row.status) && up(g.status), radio: true, label: mid(ub, box, true, 'Uu') })
+      })
+      if (g === moreGnb) {
+        nodes.push({ id: ID.fleet, x: 0, y: top + ues.length * STEP, ...UE, icon: 'fleet', label: `+${hidden + 1} more UEs`, tag: 'see free-ue', compact: true })
+      }
+      gy += slots[i] + SLOT_GAP
+    })
+    // no gNB yet: a faded placeholder in the first lane
+    if (lane === lanes[0] && lab.gnbs.length === 0) {
+      const box = { x: gnbX, y: laneMid - BIG.h / 2, ...BIG }
+      gnbBoxes.set(ID.gnbNone, box)
+      nodes.push({ id: ID.gnbNone, ...box, icon: 'gnb', label: 'gNB', sub: 'not deployed', tag: '0 UE connected', status: 'stopped', ghost: true })
+    }
+    y += laneH + LANE_GAP
   }
+  if (upUes.length === 0) {
+    const mid0 = placed[0].mid
+    nodes.push({ id: ID.fleet, x: UE.w - BIG.w, y: mid0 - BIG.h / 2, ...BIG, icon: 'fleet', label: 'No UE connected', sub: 'launch UEs on free-ue', ghost: true })
+  }
+
+  // gNB to core, within the lane
+  for (const g of lab.gnbs) {
+    const c = placed.find((x) => x.id === laneOf(g)) ?? placed[0]
+    const box = gnbBoxes.get(g.id)!
+    links.push({ id: `n2n3:${g.id}`, from: g.id, to: c.id, d: hCurve(box, c.box), live: up(g.status) && c.live, dashed: c.dashed, label: mid(box, c.box, true, 'N2 · N3') })
+  }
+
+  // ----- data networks: one node per DN name. A lane's own DNs stay in its
+  // row; a DN shared by several cores sits level with the middle of them.
+  // Then they are pushed apart top to bottom so none overlap -----
+  const keys = [...new Set(placed.flatMap((c) => c.dns.map(dnKey)))]
+  const wants = keys.map((key) => {
+    const on = placed.filter((c) => c.dns.some((n) => dnKey(n) === key))
+    let target: number
+    if (on.length > 1) target = on.reduce((t, c) => t + c.mid, 0) / on.length
+    else {
+      const own = on[0].dns.filter((n) => !sharedDn(dnKey(n))).map(dnKey)
+      const j = own.indexOf(key)
+      target = on[0].mid + (j - (own.length - 1) / 2) * DN_STEP
+    }
+    const label = on[0].dns.find((n) => dnKey(n) === key) ?? key
+    return { key, label, on, target }
+  }).sort((a, b) => a.target - b.target)
+  let floor = -Infinity
+  for (const w of wants) {
+    const top = Math.max(w.target - DNB.h / 2, floor)
+    floor = top + DN_STEP
+    const box = { x: dnX, y: top, ...DNB }
+    const id = `${ID.dn}:${w.key}`
+    nodes.push({ id, ...box, icon: 'cloud', label: w.label, sub: w.on.length > 1 ? `DN · ${w.on.length} cores` : 'DN' })
+    for (const c of w.on) {
+      links.push({ id: `n6:${c.id}:${w.key}`, from: c.id, to: id, d: hCurve(c.box, box), live: c.live, label: mid(c.box, box, true, 'N6') })
+    }
+  }
+
+  return { nodes, links, frames: [], notes: [] }
+}
+
+// one core as the Core Network pages draw it: the core with its N2 (AMF)
+// and N3 (UPF) lines leaving its left edge, labelled with their addresses,
+// the gNBs attached at their far ends, and each data network on the right
+export interface CoreView {
+  id: string
+  name: string
+  sub?: string
+  status?: NodeStatus
+  n2Ip: string
+  n2Interface?: string
+  n3Ip: string
+  n3Interface?: string
+  dns: { name: string }[]
+  // the running gNBs attached to this core
+  gnbs: { id: string; name: string; status: NodeStatus }[]
+}
+
+// buildCoreGraph draws one core with its N2 / N3 / DN links.
+export function buildCoreGraph(core: CoreView): Graph {
+  const nodes: CanvasNode[] = []
+  const links: CanvasLink[] = []
+  const up = core.status === undefined || core.status === 'running'
+  const DNB = { w: 180, h: 56 }
+  const STUB = 240
+  const GAP = 18
+
+  const coreBox = { x: 640, y: 0, ...BIG }
+  nodes.push({ id: core.id, ...coreBox, icon: 'core', label: core.name, sub: core.sub, status: core.status })
+  const coreMid = cy(coreBox)
+
+  // the N2 and N3 lines leave the core's left edge, one above the other,
+  // and meet the gNBs at a junction STUB to the left
+  const x0 = coreBox.x
+  const jx = x0 - STUB
+  const y2 = coreMid - GAP
+  const y3 = coreMid + GAP
+  const tag = (kind: string, ip: string, ifc?: string) => [kind, ip, ifc].filter(Boolean).join(' · ')
+  links.push({ id: 'n2', from: `${core.id}:n2`, to: core.id, d: `M${jx} ${y2}H${x0}`, live: up && core.gnbs.length > 0, label: { x: (jx + x0) / 2, y: y2 - 7, text: tag('N2', core.n2Ip, core.n2Interface) } })
+  links.push({ id: 'n3', from: `${core.id}:n3`, to: core.id, d: `M${jx} ${y3}H${x0}`, live: up && core.gnbs.length > 0, label: { x: (jx + x0) / 2, y: y3 + 15, text: tag('N3', core.n3Ip, core.n3Interface) } })
+
+  // the gNBs attached, at the lines' far end
+  const gx = jx - 110 - BIG.w
+  const gStep = BIG.h + 30
+  const gTop = coreMid - (Math.max(1, core.gnbs.length) * gStep - 30) / 2
+  const curve = (x1: number, ya: number, x2: number, yb: number) => {
+    const dx = Math.max(30, (x2 - x1) / 2)
+    return `M${x1} ${ya}C${x1 + dx} ${ya} ${x2 - dx} ${yb} ${x2} ${yb}`
+  }
+  core.gnbs.forEach((g, i) => {
+    const box = { x: gx, y: gTop + i * gStep, ...BIG }
+    nodes.push({ id: g.id, ...box, icon: 'gnb', label: g.name, status: g.status })
+    const live = up && g.status === 'running'
+    const right = box.x + box.w
+    links.push({ id: `${g.id}:n2`, from: g.id, to: core.id, d: curve(right, cy(box) - 10, jx, y2), live })
+    links.push({ id: `${g.id}:n3`, from: g.id, to: core.id, d: curve(right, cy(box) + 10, jx, y3), live })
+  })
+  if (core.gnbs.length === 0) {
+    nodes.push({ id: `${core.id}:nognb`, x: gx, y: coreMid - BIG.h / 2, ...BIG, icon: 'gnb', label: 'No gNB attached', sub: 'deploy one on free-ran', ghost: true })
+  }
+
+  // data networks, right of the core
+  const dStep = DNB.h + 24
+  const dTop = coreMid - (core.dns.length * dStep - 24) / 2
+  core.dns.forEach((dn, i) => {
+    const box = { x: coreBox.x + BIG.w + 150, y: dTop + i * dStep, ...DNB }
+    nodes.push({ id: `${core.id}:dn:${dn.name}`, ...box, icon: 'cloud', label: dn.name, sub: 'DN' })
+    links.push({ id: `n6:${dn.name}`, from: core.id, to: `${core.id}:dn:${dn.name}`, d: hCurve(coreBox, box), live: up, label: i === 0 ? mid(coreBox, box, true, 'N6') : undefined })
+  })
 
   return { nodes, links, frames: [], notes: [] }
 }

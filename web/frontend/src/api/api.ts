@@ -23,8 +23,86 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+export interface CoreDeployStatus {
+    'coreId': string;
+    'status': string;
+    'services'?: Array<ServiceStatus>;
+    'lastDeployed'?: string;
+    /**
+     * The template it runs (basic / ulcl); empty while stopped.
+     */
+    'template'?: string;
+}
+export interface CoreDn {
+    /**
+     * The DNN, unique within the core.
+     */
+    'name': string;
+    /**
+     * The address range its UEs get, optional.
+     */
+    'cidr'?: string;
+}
+export interface CoreNetwork {
+    'id'?: string;
+    /**
+     * Unique among the core networks (ignoring case) and not free5GC, the lab core\'s name. 1-32 letters, digits, spaces, dots, dashes, underscores.
+     */
+    'name': string;
+    /**
+     * external is a core outside fru-lab (n2Ip / n3Ip / interfaces given); free5gc is another free5GC fru-lab deploys on this host, whose addresses fru-lab assigns (n2Ip, n3Ip, n2Interface, n3Interface, slot, webconsolePort are then read-only, filled in on save, and dns is always [internet]). The kind cannot change after the first save.
+     */
+    'kind'?: CoreNetworkKindEnum;
+    /**
+     * kind free5gc - 1 to 9, unique; picks its networks (cn-ran 10.0.(100+slot).0/24, SBI 10.0.(110+slot).0/24), its container name prefix and its webconsole port.
+     */
+    'slot'?: number;
+    /**
+     * kind free5gc - the host port its webconsole is published on (deploy.webconsole.port + slot). The browser reaches it at /api/core-networks/{id}/webconsole/..., which proxies it like /api/webconsole does for the lab free5GC.
+     */
+    'webconsolePort'?: number;
+    /**
+     * The AMF\'s N2 address. Required for kind external; assigned for kind free5gc (10.0.(100+slot).3).
+     */
+    'n2Ip'?: string;
+    /**
+     * The host interface that reaches n2Ip.
+     */
+    'n2Interface'?: string;
+    /**
+     * The UPF\'s N3 address. Required for kind external; assigned for kind free5gc (10.0.(100+slot).5).
+     */
+    'n3Ip'?: string;
+    /**
+     * The host interface that reaches n3Ip.
+     */
+    'n3Interface'?: string;
+    'dns': Array<CoreDn>;
+    /**
+     * Switched on, the core counts as part of the lab and the Overview draws it.
+     */
+    'enabled'?: boolean;
+    'updatedAt'?: string;
+}
+
+export const CoreNetworkKindEnum = {
+    External: 'external',
+    Free5gc: 'free5gc',
+} as const;
+
+export type CoreNetworkKindEnum = typeof CoreNetworkKindEnum[keyof typeof CoreNetworkKindEnum];
+
+export interface DeployCoreListResponse {
+    'cores': Array<CoreDeployStatus>;
+}
 export interface DeployGnbListResponse {
     'instances': Array<GnbInstance>;
+}
+export interface DeployGnbRequest {
+    /**
+     * The core this deploy attaches to - empty keeps the profile\'s, lab is the lab free5GC, anything else an enabled external core network\'s id (its N2 / N3 addresses become the AMF and UPF; the gNB listens on the profile\'s typed-in hostIp on the core\'s N2 interface), or a running free5gc core network\'s id (the gNB joins its cn-ran network at an assigned address).
+     */
+    'core'?: string;
 }
 export interface DeployLogsResponse {
     'target': string;
@@ -46,7 +124,7 @@ export interface DeployUeLogsResponse {
 }
 export interface DeployUeProfileRequest {
     /**
-     * The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+     * The gNB target to attach to (gnb-<profileId>); empty uses the UE profile\'s gnbProfileId, else lets fru-lab pick by SD; auto always lets fru-lab pick.
      */
     'gnb'?: string;
 }
@@ -90,6 +168,10 @@ export interface GnbDeployment {
      * Where UEs dial it (ran-ue), picked by fru-lab; the host address on an external core.
      */
     'ranIp'?: string;
+    /**
+     * The core network it attached to (a core network id); empty for the lab free5GC.
+     */
+    'coreNetwork'?: string;
 }
 
 export const GnbDeploymentCoreEnum = {
@@ -129,7 +211,7 @@ export interface GnbProfile {
     'upfIp'?: string;
     'upfPort'?: number;
     /**
-     * Lab core only - the gNB\'s N2/N3 address on the lab\'s cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core\'s). Unique among the gNB profiles.
+     * Ignored - on the lab free5GC or a free5gc core network the gNB\'s N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core\'s cn-ran network) and shows in GnbDeployment.n2Ip.
      */
     'n2Ip'?: string;
     /**
@@ -137,9 +219,13 @@ export interface GnbProfile {
      */
     'hostInterface'?: string;
     /**
-     * External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
+     * External core only - the IPv4 address the gNB listens on, typed in; UEs dial it too. On a saved external core network it must be an address of that core\'s n2Interface (which becomes hostInterface). Unique among the external gNB profiles.
      */
     'hostIp'?: string;
+    /**
+     * A saved core network\'s id - the core this gNB deploys onto when a deploy names none. Kind free5gc - the gNB joins that core\'s cn-ran network (core stays lab, addresses assigned). Kind external - core is external, its N2 / N3 addresses become the AMF / UPF and its n2Interface the host interface; hostIp is typed in.
+     */
+    'coreNetwork'?: string;
     'logLevel'?: string;
     'updatedAt'?: string;
 }
@@ -175,6 +261,57 @@ export interface ImageInfo {
 }
 export interface ImageListResponse {
     'images'?: Array<ImageInfo>;
+}
+export interface IpamLease {
+    'addr': string;
+    /**
+     * Who holds it - a deploy target (gnb-<profileId>, ue-<imsi>, core-<id>) with an optional /<role>.
+     */
+    'owner': string;
+    'role'?: string;
+    'since'?: string;
+    /**
+     * A running container holds it right now (false is a lease kept for a stopped owner so it gets the same address back).
+     */
+    'live'?: boolean;
+}
+export interface IpamPool {
+    /**
+     * cn-ran (the lab free5GC\'s), cn-ran-<coreId>, sbi, sbi-<coreId>, ran-ue
+     */
+    'id': string;
+    /**
+     * The Docker network it is.
+     */
+    'network': string;
+    'subnet': string;
+    'purpose': string;
+    /**
+     * The core network it belongs to; empty for the lab free5GC\'s and the shared ones.
+     */
+    'coreId'?: string;
+    'reserved': Array<IpamReserved>;
+    'ranges': Array<IpamRange>;
+    'leases': Array<IpamLease>;
+}
+export interface IpamRange {
+    /**
+     * gnb-n2 (gNB N2/N3 addresses), gnb-ran (where UEs dial a gNB), docker (what Docker hands out itself, e.g. to UEs)
+     */
+    'name': string;
+    'first': string;
+    'last': string;
+}
+export interface IpamReserved {
+    'addr': string;
+    /**
+     * gateway, amf, upf, i-upf, psa-upf, smf, nrf, ... (a core NF\'s fixed address)
+     */
+    'role': string;
+}
+export interface IpamView {
+    'pools': Array<IpamPool>;
+    'warnings': Array<string>;
 }
 export interface LoginRequest {
     'username': string;
@@ -248,6 +385,10 @@ export interface UeProfile {
     'dnn'?: string;
     'sst': string;
     'sd'?: string;
+    /**
+     * The gNB profile this UE attaches to when a deploy names no gNB; empty picks a running gNB by SD.
+     */
+    'gnbProfileId'?: string;
     'updatedAt'?: string;
 }
 
@@ -256,6 +397,311 @@ export interface UeProfile {
  */
 export const DefaultApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
+        /**
+         * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s, or (kind free5gc) when all 9 slots are taken.
+         * @summary Save a new core network
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkCreate: async (coreNetwork: CoreNetwork, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'coreNetwork' is not null or undefined
+            assertParamExists('coreNetworkCreate', 'coreNetwork', coreNetwork)
+            const localVarPath = `/api/core-networks`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(coreNetwork, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * A free5gc core network cannot be deleted while it is deployed (409).
+         * @summary Delete a core network
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkDelete: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('coreNetworkDelete', 'id', id)
+            const localVarPath = `/api/core-networks/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 5G cores besides the lab free5GC that gNBs can attach to - external ones and free5gc ones fru-lab deploys on this host; the lab free5GC is not among them.
+         * @summary List the saved core networks
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/core-networks`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The kind cannot change (400); a kind left out keeps the saved one. A free5gc core keeps its slot.
+         * @summary Update a core network
+         * @param {string} id 
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkUpdate: async (id: string, coreNetwork: CoreNetwork, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('coreNetworkUpdate', 'id', id)
+            // verify required parameter 'coreNetwork' is not null or undefined
+            assertParamExists('coreNetworkUpdate', 'coreNetwork', coreNetwork)
+            const localVarPath = `/api/core-networks/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(coreNetwork, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 409 while a gNB attached to it runs.
+         * @summary Stop a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreDown: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('deployCoreDown', 'id', id)
+            const localVarPath = `/api/deploy/cores/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * One entry per core network of kind free5gc (the extra free5GC instances on this host). The lab\'s own free5GC stays under /api/deploy/free5gc.
+         * @summary List the status of every free5GC core network
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreList: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/deploy/cores`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * The live log stream is /api/stream/logs?target=core-<id> (service= narrows it to one NF).
+         * @summary Get the logs of a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreLogs: async (id: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('deployCoreLogs', 'id', id)
+            const localVarPath = `/api/deploy/cores/{id}/logs`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Brings up the free5GC of core network id (kind free5gc) from a template on its own networks - a cn-ran network 10.0.(100+slot).0/24 with the AMF at .3 and the UPF at .5 (as the lab free5GC on 10.0.1.0/24), an internal SBI network, and its webconsole on host port deploy.webconsole.port + slot. 409 if it already runs or the core is not of kind free5gc.
+         * @summary Deploy a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreUp: async (id: string, requestDeployFree5gc?: RequestDeployFree5gc, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('deployCoreUp', 'id', id)
+            const localVarPath = `/api/deploy/cores/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestDeployFree5gc, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
         /**
          * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
@@ -511,13 +957,14 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab. On the lab free5GC or a free5gc core network its N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core\'s cn-ran network, shown in GnbDeployment.n2Ip); on an external core it is the profile\'s typed-in hostIp, which must be an address of the core\'s n2Interface (or of hostInterface for an external core given by address). Fails with 409 if it already runs, if its free5GC core (lab or free5gc core network) is not running, if its external core network is disabled or has no n2Interface, if the hostIp is missing or not on that interface, or if a running gNB already uses its gNB ID or host address.
          * @summary Deploy the gNB of one gNB profile
          * @param {string} profileId 
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbUp: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        deployGnbUp: async (profileId: string, deployGnbRequest?: DeployGnbRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'profileId' is not null or undefined
             assertParamExists('deployGnbUp', 'profileId', profileId)
             const localVarPath = `/api/deploy/gnbs/{profileId}`
@@ -537,11 +984,13 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
+            localVarHeaderParameter['Content-Type'] = 'application/json';
             localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deployGnbRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1196,6 +1645,40 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
+         * Every address pool fru-lab manages (each core\'s cn-ran and SBI networks, the shared ran-ue network) with its reserved addresses, its dynamic ranges and its current leases, reconciled with Docker; plus any warning found (an address held outside fru-lab\'s leases, a host network overlapping a pool).
+         * @summary The lab\'s address plan and who holds what
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ipamView: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/ipam`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
@@ -1540,6 +2023,110 @@ export const DefaultApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = DefaultApiAxiosParamCreator(configuration)
     return {
         /**
+         * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s, or (kind free5gc) when all 9 slots are taken.
+         * @summary Save a new core network
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkCreate(coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CoreNetwork>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkCreate(coreNetwork, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkCreate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * A free5gc core network cannot be deleted while it is deployed (409).
+         * @summary Delete a core network
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkDelete(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkDelete(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 5G cores besides the lab free5GC that gNBs can attach to - external ones and free5gc ones fru-lab deploys on this host; the lab free5GC is not among them.
+         * @summary List the saved core networks
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<CoreNetwork>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The kind cannot change (400); a kind left out keeps the saved one. A free5gc core keeps its slot.
+         * @summary Update a core network
+         * @param {string} id 
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async coreNetworkUpdate(id: string, coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CoreNetwork>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.coreNetworkUpdate(id, coreNetwork, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.coreNetworkUpdate']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 409 while a gNB attached to it runs.
+         * @summary Stop a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployCoreDown(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployCoreDown(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployCoreDown']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * One entry per core network of kind free5gc (the extra free5GC instances on this host). The lab\'s own free5GC stays under /api/deploy/free5gc.
+         * @summary List the status of every free5GC core network
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployCoreList(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployCoreListResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployCoreList(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployCoreList']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * The live log stream is /api/stream/logs?target=core-<id> (service= narrows it to one NF).
+         * @summary Get the logs of a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployCoreLogs(id: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeployLogsResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployCoreLogs(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployCoreLogs']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Brings up the free5GC of core network id (kind free5gc) from a template on its own networks - a cn-ran network 10.0.(100+slot).0/24 with the AMF at .3 and the UPF at .5 (as the lab free5GC on 10.0.1.0/24), an internal SBI network, and its webconsole on host port deploy.webconsole.port + slot. 409 if it already runs or the core is not of kind free5gc.
+         * @summary Deploy a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deployCoreUp(id: string, requestDeployFree5gc?: RequestDeployFree5gc, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployCoreUp(id, requestDeployFree5gc, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployCoreUp']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
@@ -1628,14 +2215,15 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab. On the lab free5GC or a free5gc core network its N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core\'s cn-ran network, shown in GnbDeployment.n2Ip); on an external core it is the profile\'s typed-in hostIp, which must be an address of the core\'s n2Interface (or of hostInterface for an external core given by address). Fails with 409 if it already runs, if its free5GC core (lab or free5gc core network) is not running, if its external core network is disabled or has no n2Interface, if the hostIp is missing or not on that interface, or if a running gNB already uses its gNB ID or host address.
          * @summary Deploy the gNB of one gNB profile
          * @param {string} profileId 
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(profileId, options);
+        async deployGnbUp(profileId: string, deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<MessageResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deployGnbUp(profileId, deployGnbRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['DefaultApi.deployGnbUp']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1861,6 +2449,18 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Every address pool fru-lab manages (each core\'s cn-ran and SBI networks, the shared ran-ue network) with its reserved addresses, its dynamic ranges and its current leases, reconciled with Docker; plus any warning found (an address held outside fru-lab\'s leases, a host network overlapping a pool).
+         * @summary The lab\'s address plan and who holds what
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async ipamView(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<IpamView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.ipamView(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.ipamView']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
@@ -1986,6 +2586,86 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
     const localVarFp = DefaultApiFp(configuration)
     return {
         /**
+         * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s, or (kind free5gc) when all 9 slots are taken.
+         * @summary Save a new core network
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkCreate(coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): AxiosPromise<CoreNetwork> {
+            return localVarFp.coreNetworkCreate(coreNetwork, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * A free5gc core network cannot be deleted while it is deployed (409).
+         * @summary Delete a core network
+         * @param {string} id 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkDelete(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.coreNetworkDelete(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 5G cores besides the lab free5GC that gNBs can attach to - external ones and free5gc ones fru-lab deploys on this host; the lab free5GC is not among them.
+         * @summary List the saved core networks
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkList(options?: RawAxiosRequestConfig): AxiosPromise<Array<CoreNetwork>> {
+            return localVarFp.coreNetworkList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The kind cannot change (400); a kind left out keeps the saved one. A free5gc core keeps its slot.
+         * @summary Update a core network
+         * @param {string} id 
+         * @param {CoreNetwork} coreNetwork 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        coreNetworkUpdate(id: string, coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig): AxiosPromise<CoreNetwork> {
+            return localVarFp.coreNetworkUpdate(id, coreNetwork, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 409 while a gNB attached to it runs.
+         * @summary Stop a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreDown(id: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployCoreDown(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * One entry per core network of kind free5gc (the extra free5GC instances on this host). The lab\'s own free5GC stays under /api/deploy/free5gc.
+         * @summary List the status of every free5GC core network
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreList(options?: RawAxiosRequestConfig): AxiosPromise<DeployCoreListResponse> {
+            return localVarFp.deployCoreList(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * The live log stream is /api/stream/logs?target=core-<id> (service= narrows it to one NF).
+         * @summary Get the logs of a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreLogs(id: string, options?: RawAxiosRequestConfig): AxiosPromise<DeployLogsResponse> {
+            return localVarFp.deployCoreLogs(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Brings up the free5GC of core network id (kind free5gc) from a template on its own networks - a cn-ran network 10.0.(100+slot).0/24 with the AMF at .3 and the UPF at .5 (as the lab free5GC on 10.0.1.0/24), an internal SBI network, and its webconsole on host port deploy.webconsole.port + slot. 409 if it already runs or the core is not of kind free5gc.
+         * @summary Deploy a free5GC core network
+         * @param {string} id A core network of kind free5gc.
+         * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deployCoreUp(id: string, requestDeployFree5gc?: RequestDeployFree5gc, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployCoreUp(id, requestDeployFree5gc, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Fails with 409 if gNB is still running - gNB must be stopped first.
          * @summary Stop free5GC
          * @param {*} [options] Override http request option.
@@ -2053,14 +2733,15 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deployGnbLogs(profileId, options).then((request) => request(axios, basePath));
         },
         /**
-         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+         * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab. On the lab free5GC or a free5gc core network its N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core\'s cn-ran network, shown in GnbDeployment.n2Ip); on an external core it is the profile\'s typed-in hostIp, which must be an address of the core\'s n2Interface (or of hostInterface for an external core given by address). Fails with 409 if it already runs, if its free5GC core (lab or free5gc core network) is not running, if its external core network is disabled or has no n2Interface, if the hostIp is missing or not on that interface, or if a running gNB already uses its gNB ID or host address.
          * @summary Deploy the gNB of one gNB profile
          * @param {string} profileId 
+         * @param {DeployGnbRequest} [deployGnbRequest] 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        deployGnbUp(profileId: string, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
-            return localVarFp.deployGnbUp(profileId, options).then((request) => request(axios, basePath));
+        deployGnbUp(profileId: string, deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig): AxiosPromise<MessageResponse> {
+            return localVarFp.deployGnbUp(profileId, deployGnbRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2232,6 +2913,15 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.imageRemove(key, options).then((request) => request(axios, basePath));
         },
         /**
+         * Every address pool fru-lab manages (each core\'s cn-ran and SBI networks, the shared ran-ue network) with its reserved addresses, its dynamic ranges and its current leases, reconciled with Docker; plus any warning found (an address held outside fru-lab\'s leases, a host network overlapping a pool).
+         * @summary The lab\'s address plan and who holds what
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        ipamView(options?: RawAxiosRequestConfig): AxiosPromise<IpamView> {
+            return localVarFp.ipamView(options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Login
          * @param {LoginRequest} loginRequest 
@@ -2328,6 +3018,94 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
  */
 export class DefaultApi extends BaseAPI {
     /**
+     * Fails with 409 when the name (compared ignoring case) is the lab core\'s (free5GC) or another core network\'s, or (kind free5gc) when all 9 slots are taken.
+     * @summary Save a new core network
+     * @param {CoreNetwork} coreNetwork 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkCreate(coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkCreate(coreNetwork, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * A free5gc core network cannot be deleted while it is deployed (409).
+     * @summary Delete a core network
+     * @param {string} id 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkDelete(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkDelete(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 5G cores besides the lab free5GC that gNBs can attach to - external ones and free5gc ones fru-lab deploys on this host; the lab free5GC is not among them.
+     * @summary List the saved core networks
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The kind cannot change (400); a kind left out keeps the saved one. A free5gc core keeps its slot.
+     * @summary Update a core network
+     * @param {string} id 
+     * @param {CoreNetwork} coreNetwork 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public coreNetworkUpdate(id: string, coreNetwork: CoreNetwork, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).coreNetworkUpdate(id, coreNetwork, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 409 while a gNB attached to it runs.
+     * @summary Stop a free5GC core network
+     * @param {string} id A core network of kind free5gc.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployCoreDown(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployCoreDown(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * One entry per core network of kind free5gc (the extra free5GC instances on this host). The lab\'s own free5GC stays under /api/deploy/free5gc.
+     * @summary List the status of every free5GC core network
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployCoreList(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployCoreList(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * The live log stream is /api/stream/logs?target=core-<id> (service= narrows it to one NF).
+     * @summary Get the logs of a free5GC core network
+     * @param {string} id A core network of kind free5gc.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployCoreLogs(id: string, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployCoreLogs(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Brings up the free5GC of core network id (kind free5gc) from a template on its own networks - a cn-ran network 10.0.(100+slot).0/24 with the AMF at .3 and the UPF at .5 (as the lab free5GC on 10.0.1.0/24), an internal SBI network, and its webconsole on host port deploy.webconsole.port + slot. 409 if it already runs or the core is not of kind free5gc.
+     * @summary Deploy a free5GC core network
+     * @param {string} id A core network of kind free5gc.
+     * @param {RequestDeployFree5gc} [requestDeployFree5gc] 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deployCoreUp(id: string, requestDeployFree5gc?: RequestDeployFree5gc, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployCoreUp(id, requestDeployFree5gc, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * Fails with 409 if gNB is still running - gNB must be stopped first.
      * @summary Stop free5GC
      * @param {*} [options] Override http request option.
@@ -2402,14 +3180,15 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile\'s n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+     * Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab. On the lab free5GC or a free5gc core network its N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core\'s cn-ran network, shown in GnbDeployment.n2Ip); on an external core it is the profile\'s typed-in hostIp, which must be an address of the core\'s n2Interface (or of hostInterface for an external core given by address). Fails with 409 if it already runs, if its free5GC core (lab or free5gc core network) is not running, if its external core network is disabled or has no n2Interface, if the hostIp is missing or not on that interface, or if a running gNB already uses its gNB ID or host address.
      * @summary Deploy the gNB of one gNB profile
      * @param {string} profileId 
+     * @param {DeployGnbRequest} [deployGnbRequest] 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public deployGnbUp(profileId: string, options?: RawAxiosRequestConfig) {
-        return DefaultApiFp(this.configuration).deployGnbUp(profileId, options).then((request) => request(this.axios, this.basePath));
+    public deployGnbUp(profileId: string, deployGnbRequest?: DeployGnbRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).deployGnbUp(profileId, deployGnbRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -2596,6 +3375,16 @@ export class DefaultApi extends BaseAPI {
      */
     public imageRemove(key: string, options?: RawAxiosRequestConfig) {
         return DefaultApiFp(this.configuration).imageRemove(key, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Every address pool fru-lab manages (each core\'s cn-ran and SBI networks, the shared ran-ue network) with its reserved addresses, its dynamic ranges and its current leases, reconciled with Docker; plus any warning found (an address held outside fru-lab\'s leases, a host network overlapping a pool).
+     * @summary The lab\'s address plan and who holds what
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public ipamView(options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).ipamView(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

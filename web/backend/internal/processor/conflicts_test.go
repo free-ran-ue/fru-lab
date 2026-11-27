@@ -34,10 +34,12 @@ func TestGnbConflicts(t *testing.T) {
 	if c := got["gnbId"]; c.Suggestion != "000316" || !strings.Contains(c.Message, "Lab gNB") {
 		t.Errorf("gnbId: %+v", c)
 	}
-	if c := got["n2Ip"]; c.Suggestion != "10.0.1.22" || !strings.Contains(c.Message, "Lab gNB") {
-		t.Errorf("n2Ip: %+v", c)
+	// N2 IPs are assigned on deploy: two profiles carrying the same old
+	// n2Ip do not clash
+	if _, ok := got["n2Ip"]; ok {
+		t.Errorf("n2Ip conflict: %+v", got["n2Ip"])
 	}
-	if len(got) != 3 {
+	if len(got) != 2 {
 		t.Errorf("conflicts %+v", got)
 	}
 
@@ -105,13 +107,6 @@ func TestConflictDetail(t *testing.T) {
 	}
 }
 
-func TestNextFreeN2IpWraps(t *testing.T) {
-	taken := set{"10.0.1.254": true, "10.0.1.20": true}
-	if got, _ := nextFreeN2Ip("10.0.1.253", taken.has); got != "10.0.1.21" {
-		t.Fatalf("got %s", got)
-	}
-}
-
 func TestPlanGnbBulk(t *testing.T) {
 	src := validLabGnb()
 	src.ID, src.Name, src.GnbID, src.N2Ip = "aaaaaaaaaaaa", "edge", "000001", "10.0.1.20"
@@ -122,9 +117,9 @@ func TestPlanGnbBulk(t *testing.T) {
 		t.Fatal(d.Detail)
 	}
 	want := []struct{ name, id, n2 string }{
-		{"edge-2", "000002", "10.0.1.21"},
-		{"edge-4", "000004", "10.0.1.23"},
-		{"edge-5", "000005", "10.0.1.24"},
+		{"edge-2", "000002", ""},
+		{"edge-4", "000004", ""},
+		{"edge-5", "000005", ""},
 	}
 	for i, w := range want {
 		g := plan[i]
@@ -143,12 +138,9 @@ func TestPlanGnbBulk(t *testing.T) {
 			t.Errorf("count %d accepted", n)
 		}
 	}
-	// the N2 range has 235 addresses; src holds one
-	if _, d := planGnbBulk(src, []model.GnbProfile{src}, 235); d == nil {
-		t.Error("ran past the N2 range")
-	}
-	if _, d := planGnbBulk(src, []model.GnbProfile{src}, 234); d != nil {
-		t.Errorf("full N2 range refused: %s", d.Detail)
+	// N2 IPs are assigned on deploy, so they do not limit a bulk copy
+	if _, d := planGnbBulk(src, []model.GnbProfile{src}, 300); d != nil {
+		t.Errorf("bulk of 300 refused: %s", d.Detail)
 	}
 }
 

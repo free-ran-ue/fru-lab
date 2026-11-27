@@ -31,7 +31,7 @@ function sectionOf(pathname: string): Crumb | null {
   if (pathname.startsWith('/free-ran')) return { label: 'free-ran', to: '/free-ran' }
   if (pathname.startsWith('/free-ue')) return { label: 'free-ue', to: '/free-ue' }
   if (pathname.startsWith('/logs') || pathname.startsWith('/events')) return { label: 'Overview', to: '/' }
-  if (pathname.startsWith('/images')) return { label: 'Tools' }
+  if (pathname.startsWith('/images') || pathname.startsWith('/addresses')) return { label: 'Tools' }
   return null
 }
 

@@ -39,7 +39,8 @@ export function useGnbInstances() {
     }
   }, [refresh])
 
-  const deploy = useCallback((profileId: string) => withPending(profileId, () => api.deployGnbUp(profileId)), [withPending])
+  // core: '' keeps the profile's, 'lab' is free5GC, else a core network id
+  const deploy = useCallback((profileId: string, core = '') => withPending(profileId, () => api.deployGnbUp(profileId, core ? { core } : undefined)), [withPending])
   const stop = useCallback((profileId: string) => withPending(profileId, () => api.deployGnbDown(profileId)), [withPending])
 
   return { instances, loaded, pending, refresh, deploy, stop }

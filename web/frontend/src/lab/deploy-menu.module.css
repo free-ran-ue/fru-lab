@@ -48,6 +48,15 @@
   outline: none;
 }
 
+.item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.item:disabled:hover {
+  background: transparent;
+}
+
 .item span {
   color: var(--muted);
   font-family: var(--font-mono);

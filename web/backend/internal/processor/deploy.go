@@ -34,10 +34,6 @@ func (p *Processor) DeployUp(ctx context.Context, target string, templateVariant
 		}
 	}
 
-	if detail := p.checkDeployPrerequisite(ctx, target); detail != nil {
-		return nil, detail
-	}
-
 	if err := p.FlContext.Up(ctx, target, templateVariant); err != nil {
 		p.ProcLog.Errorf("Failed to deploy up target %s: %v", target, err)
 		return nil, &model.ErrorDetail{
@@ -253,16 +249,26 @@ func (p *Processor) DeployUeList(ctx context.Context) (*model.ResponseDeployUeLi
 // on its own.
 func (p *Processor) checkStopDependents(ctx context.Context, target string) *model.ErrorDetail {
 	switch {
-	case target == constant.DEPLOY_TARGET_FREE5GC:
-		running, err := p.anyLabGnbRunning(ctx)
+	case target == constant.DEPLOY_TARGET_FREE5GC, flctx.IsCoreInstance(target):
+		coreNetwork := strings.TrimPrefix(target, flctx.CoreInstancePrefix)
+		what := "the lab core"
+		if target == constant.DEPLOY_TARGET_FREE5GC {
+			coreNetwork = ""
+		} else {
+			what = "core network " + coreNetwork
+			if n, err := p.FlContext.GetCoreNetwork(coreNetwork); err == nil && n != nil {
+				what = "core network " + n.Name
+			}
+		}
+		gnbs, err := p.gnbsOnCore(ctx, coreNetwork)
 		if err != nil {
 			p.ProcLog.Warnf("Failed to check gnb status before stopping core: %v", err)
 			return nil
 		}
-		if running {
+		if len(gnbs) > 0 {
 			return &model.ErrorDetail{
 				HttpStatus: http.StatusConflict,
-				Detail:     "Stop every gNB on the lab core before stopping the core network",
+				Detail:     "Stop every gNB on " + what + " before stopping it: " + strings.Join(gnbs, ", "),
 			}
 		}
 	case isGnbTarget(target):
@@ -276,31 +282,6 @@ func (p *Processor) checkStopDependents(ctx context.Context, target string) *mod
 				HttpStatus: http.StatusConflict,
 				Detail:     "Stop the UEs on " + target + " first: " + strings.Join(ues, ", "),
 			}
-		}
-	}
-
-	return nil
-}
-
-// checkDeployPrerequisite enforces the same dependency chain in the opposite
-// direction: deploying an upper layer before its lower layer is actually up
-// just means it immediately fails to connect (a gNB with no core to
-// register against, a UE with no gNB to dial) - blocking it up front avoids
-// a confusing failed-deploy state that looks like a real bug.
-func (p *Processor) checkDeployPrerequisite(ctx context.Context, target string) *model.ErrorDetail {
-	if !isGnbTarget(target) {
-		return nil
-	}
-
-	status, err := p.targetStatus(ctx, constant.DEPLOY_TARGET_FREE5GC)
-	if err != nil {
-		p.ProcLog.Warnf("Failed to check core status before deploying gnb: %v", err)
-		return nil
-	}
-	if status != "running" {
-		return &model.ErrorDetail{
-			HttpStatus: http.StatusConflict,
-			Detail:     "Deploy the core network before deploying gNB",
 		}
 	}
 
@@ -323,19 +304,26 @@ func (p *Processor) isTargetRunning(ctx context.Context, target string) (bool, e
 	return status != "stopped", nil
 }
 
-// anyLabGnbRunning tells whether a gNB that registers with the lab core
-// runs: a lab-core profile gNB.
-func (p *Processor) anyLabGnbRunning(ctx context.Context) (bool, error) {
+// gnbsOnCore are the running lab-type gNBs that register with the lab
+// free5GC (coreNetwork "") or with free5gc core network coreNetwork.
+func (p *Processor) gnbsOnCore(ctx context.Context, coreNetwork string) ([]string, error) {
 	gnbs, err := p.runningGnbs(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
+	return gnbTargetsOnCore(gnbs, coreNetwork), nil
+}
+
+// gnbTargetsOnCore are the lab-type gNBs among gnbs on coreNetwork ("" is
+// the lab free5GC).
+func gnbTargetsOnCore(gnbs []runningGnb, coreNetwork string) []string {
+	var out []string
 	for _, g := range gnbs {
-		if g.Core != model.GnbCoreExternal {
-			return true, nil
+		if g.Core != model.GnbCoreExternal && g.CoreNetwork == coreNetwork {
+			out = append(out, g.Target)
 		}
 	}
-	return false, nil
+	return out
 }
 
 // uesOnGnb are the running UE instances that dial gNB target; a UE that

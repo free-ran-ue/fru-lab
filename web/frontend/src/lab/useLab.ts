@@ -1,5 +1,8 @@
-import type { GnbDeployment } from '../api'
+import type { CoreNetwork, GnbDeployment } from '../api'
 import { useFree5gcStatus } from './useFree5gcStatus'
+import { useCoreDeploys } from './useCoreDeploys'
+import { LAB_CORE, useCoreNetworks } from './useCoreNetworks'
+import { coreAddresses, useIpam } from './useIpam'
 import { useGnbInstances } from './useGnbInstances'
 import { useUeInstances, type UeRow } from './useUeInstances'
 import { useGnbProfiles, useUeProfiles } from './useProfiles'
@@ -20,6 +23,9 @@ export interface LabGnb {
   // what it was deployed with (profile name, core, IDs and addresses)
   deployment: GnbDeployment | null
   core: 'lab' | 'external'
+  // the core network it attached to (deployment.coreNetwork); '' for the
+  // lab free5GC (or a gNB deployed before core networks recorded it)
+  coreNetwork: string
   sd: string
   pending: boolean
   stop: () => Promise<void>
@@ -32,6 +38,33 @@ function worst(statuses: NodeStatus[]): NodeStatus {
 }
 
 const fmtTime = (t?: string) => (t ? new Date(t).toLocaleString() : '—')
+
+// isFree5gcCore tells a free5GC core network fru-lab deploys on this host
+// (kind free5gc) from a core outside fru-lab (kind external, the default).
+export const isFree5gcCore = (n?: CoreNetwork) => n?.kind === 'free5gc'
+
+// onLabCore: the gNB is attached to the lab free5GC (not to a free5GC core
+// network, whose gNBs also have core lab)
+export const onLabCore = (g: LabGnb) => g.core === 'lab' && !g.coreNetwork
+
+// LabCore is one free5GC core network (kind free5gc) with how it runs.
+export interface LabCore {
+  id: string
+  name: string
+  network: CoreNetwork
+  status: NodeStatus
+  template: Free5gcTemplate | null
+  networkFunctions: NetworkFunction[]
+  healthyNfs: number
+  lastDeployed: string
+  pending: boolean
+  // the running gNBs attached to it
+  gnbs: LabGnb[]
+  // why it cannot be stopped now, if it cannot
+  stopBlocked?: string
+  deploy: (template: Free5gcTemplate) => Promise<void>
+  stop: () => Promise<void>
+}
 
 // The UE count is driven by the UE profiles (one UE each), not by who
 // happens to be deployed right now - a profile never deployed still counts
@@ -68,6 +101,11 @@ function useLabState() {
   const free5gc = useFree5gcStatus()
   const gnbInstances = useGnbInstances()
   const gnbProfiles = useGnbProfiles()
+  const coreNetworks = useCoreNetworks()
+  const ipam = useIpam()
+  // the lab free5GC with its addresses from the address plan
+  const labCore = { ...LAB_CORE, ...coreAddresses(ipam.pools) }
+  const coreDeploys = useCoreDeploys()
   const ueProfiles = useUeProfiles()
   const ue = useUeInstances({ profiles: ueProfiles.profiles })
   const coreRunning = free5gc.node.status === 'running'
@@ -93,6 +131,7 @@ function useLabState() {
         lastDeployed: fmtTime(g.lastDeployed),
         deployment: g.gnb ?? null,
         core: g.gnb?.core === 'external' ? 'external' : 'lab',
+        coreNetwork: g.gnb?.coreNetwork ?? '',
         sd: g.gnb?.sd ?? '',
         pending: Boolean(gnbPending[g.profileId]),
         stop: () => stopGnb(g.profileId),
@@ -116,8 +155,41 @@ function useLabState() {
   const externalGnbs = gnbs.filter((g) => g.core === 'external')
   const gnbExternal = externalGnbs.length > 0
   // gNBs that depend on the lab core
-  const labGnbs = gnbs.filter((g) => g.core === 'lab')
-  const loaded = free5gc.loaded && gnbInstances.loaded && !ue.isLoadingInstances
+  const labGnbs = gnbs.filter(onLabCore)
+  // the running gNBs on a core: the lab free5GC's without one, else those
+  // recorded on that core network (an external one's from before that
+  // record: those dialing its AMF)
+  const gnbsOnCore = (n?: CoreNetwork): LabGnb[] => (!n
+    ? labGnbs
+    : gnbs.filter((g) => (g.coreNetwork
+      ? g.coreNetwork === n.id
+      : !isFree5gcCore(n) && g.core === 'external' && Boolean(n.n2Ip) && g.deployment?.amfIp === n.n2Ip)))
+
+  // every free5GC core network with how it runs, in name order
+  const { deploy: deployCore, stop: stopCore, get: coreDeploy, pending: corePending } = coreDeploys
+  const free5gcCores: LabCore[] = coreNetworks.networks.filter((n) => isFree5gcCore(n) && n.id).map((n) => {
+    const id = n.id!
+    const d = coreDeploy(id)
+    const on = gnbsOnCore(n)
+    return {
+      id,
+      name: n.name,
+      network: n,
+      status: d.status,
+      template: d.template,
+      networkFunctions: d.networkFunctions,
+      healthyNfs: d.networkFunctions.filter((nf) => nf.status === 'running').length,
+      lastDeployed: d.lastDeployed,
+      pending: Boolean(corePending[id]),
+      gnbs: on,
+      stopBlocked: on.length ? `Stop the ${on.length} gNB${on.length === 1 ? '' : 's'} on ${n.name} (free-ran) before stopping it` : undefined,
+      deploy: (t: Free5gcTemplate) => deployCore(id, t),
+      stop: () => stopCore(id),
+    }
+  })
+  // the free5GC core networks that are up (deploying, running or unhealthy)
+  const upCores = free5gcCores.filter((c) => c.status !== 'stopped')
+  const loaded = free5gc.loaded && gnbInstances.loaded && !ue.isLoadingInstances && coreDeploys.loaded
   const upUes = ue.rows.filter((row) => row.status !== 'stopped')
   const ueUp = upUes.length > 0
 
@@ -148,12 +220,12 @@ function useLabState() {
   }
 
   return {
-    free5gc, gnbInstances, ue,
-    gnbs, externalGnbs,
+    free5gc, gnbInstances, ue, coreDeploys,
+    gnbs, externalGnbs, labGnbs, gnbsOnCore, free5gcCores, upCores,
     runningTemplate,
     nodes: { core: free5gc.node, gnb: gnbNode, ue: ueNode },
     coreUp, gnbUp, ueUp, upUes, gnbExternal, loaded,
-    gnbProfiles, ueProfiles, coreRunning,
+    gnbProfiles, ueProfiles, coreRunning, coreNetworks, ipam, labCore,
     healthyNfs, ueCounts, blocked, gnbStopBlocked,
   }
 }

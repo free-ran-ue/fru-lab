@@ -175,6 +175,181 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeployLogsResponse'
 
+  /api/deploy/cores:
+    get:
+      summary: List the status of every free5GC core network
+      description: One entry per core network of kind free5gc (the extra free5GC instances on this host). The lab's own free5GC stays under /api/deploy/free5gc.
+      operationId: deployCoreList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployCoreListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/cores/{id}:
+    post:
+      summary: Deploy a free5GC core network
+      description: Brings up the free5GC of core network id (kind free5gc) from a template on its own networks - a cn-ran network 10.0.(100+slot).0/24 with the AMF at .3 and the UPF at .5 (as the lab free5GC on 10.0.1.0/24), an internal SBI network, and its webconsole on host port deploy.webconsole.port + slot. 409 if it already runs or the core is not of kind free5gc.
+      operationId: deployCoreUp
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: A core network of kind free5gc.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestDeployFree5gc'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Bad Request - unknown template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such core network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Stop a free5GC core network
+      description: 409 while a gNB attached to it runs.
+      operationId: deployCoreDown
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: A core network of kind free5gc.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such core network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - a gNB on it still runs, or the core network is not of kind free5gc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/deploy/cores/{id}/logs:
+    get:
+      summary: Get the logs of a free5GC core network
+      description: The live log stream is /api/stream/logs?target=core-<id> (service= narrows it to one NF).
+      operationId: deployCoreLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: A core network of kind free5gc.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeployLogsResponse'
+        '404':
+          description: No such core network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the core network is not of kind free5gc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
   /api/deploy/gnbs:
     get:
       summary: List the gNBs deployed from gNB profiles
@@ -205,7 +380,7 @@ paths:
   /api/deploy/gnbs/{profileId}:
     post:
       summary: Deploy the gNB of one gNB profile
-      description: Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab; its N2/N3 address is the profile's n2Ip (lab core) or hostIp on hostInterface (external core). Fails with 409 if it already runs, if the lab core is not running (lab core), or if a running gNB already uses its gNB ID, N2 IP or host address.
+      description: Every gNB profile is one gNB; several run at once. Its ran-ue address (where UEs dial it) is picked by fru-lab. On the lab free5GC or a free5gc core network its N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core's cn-ran network, shown in GnbDeployment.n2Ip); on an external core it is the profile's typed-in hostIp, which must be an address of the core's n2Interface (or of hostInterface for an external core given by address). Fails with 409 if it already runs, if its free5GC core (lab or free5gc core network) is not running, if its external core network is disabled or has no n2Interface, if the hostIp is missing or not on that interface, or if a running gNB already uses its gNB ID or host address.
       operationId: deployGnbUp
       security:
         - bearerAuth: []
@@ -215,6 +390,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployGnbRequest'
       responses:
         '200':
           description: OK
@@ -521,6 +702,157 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeployUeLogsResponse'
+
+  /api/core-networks:
+    get:
+      summary: List the saved core networks
+      description: 5G cores besides the lab free5GC that gNBs can attach to - external ones and free5gc ones fru-lab deploys on this host; the lab free5GC is not among them.
+      operationId: coreNetworkList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoreNetwork'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    post:
+      summary: Save a new core network
+      description: Fails with 409 when the name (compared ignoring case) is the lab core's (free5GC) or another core network's, or (kind free5gc) when all 9 slots are taken.
+      operationId: coreNetworkCreate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreNetwork'
+      responses:
+        '200':
+          description: The saved core network, with its id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreNetwork'
+        '400':
+          description: Bad Request - a field is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the name is taken, or every free5gc slot is
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/core-networks/{id}:
+    put:
+      summary: Update a core network
+      description: The kind cannot change (400); a kind left out keeps the saved one. A free5gc core keeps its slot.
+      operationId: coreNetworkUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreNetwork'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreNetwork'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: No such core network
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the name is taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Delete a core network
+      description: A free5gc core network cannot be deleted while it is deployed (409).
+      operationId: coreNetworkDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '409':
+          description: Conflict - the free5gc core network is deployed; stop it first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/ipam:
+    get:
+      summary: The lab's address plan and who holds what
+      description: Every address pool fru-lab manages (each core's cn-ran and SBI networks, the shared ran-ue network) with its reserved addresses, its dynamic ranges and its current leases, reconciled with Docker; plus any warning found (an address held outside fru-lab's leases, a host network overlapping a pool).
+      operationId: ipamView
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IpamView'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '500':
+          description: The leases or the core networks could not be read from the database (Docker being unreachable is a warning, not an error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
 
   /api/host/interfaces:
     get:
@@ -1304,6 +1636,9 @@ components:
         ranIp:
           type: string
           description: Where UEs dial it (ran-ue), picked by fru-lab; the host address on an external core.
+        coreNetwork:
+          type: string
+          description: The core network it attached to (a core network id); empty for the lab free5GC.
     RenderedConfig:
       type: object
       required: [yaml]
@@ -1349,14 +1684,17 @@ components:
         n2Ip:
           type: string
           example: 10.0.1.20
-          description: Lab core only - the gNB's N2/N3 address on the lab's cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core's). Unique among the gNB profiles.
+          description: Ignored - on the lab free5GC or a free5gc core network the gNB's N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core's cn-ran network) and shows in GnbDeployment.n2Ip.
         hostInterface:
           type: string
           example: eth0
           description: External core only - the host interface the gNB listens on (see /api/host/interfaces).
         hostIp:
           type: string
-          description: External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles.
+          description: External core only - the IPv4 address the gNB listens on, typed in; UEs dial it too. On a saved external core network it must be an address of that core's n2Interface (which becomes hostInterface). Unique among the external gNB profiles.
+        coreNetwork:
+          type: string
+          description: A saved core network's id - the core this gNB deploys onto when a deploy names none. Kind free5gc - the gNB joins that core's cn-ran network (core stays lab, addresses assigned). Kind external - core is external, its N2 / N3 addresses become the AMF / UPF and its n2Interface the host interface; hostIp is typed in.
         logLevel:
           type: string
         updatedAt:
@@ -1392,6 +1730,9 @@ components:
           type: string
         sd:
           type: string
+        gnbProfileId:
+          type: string
+          description: The gNB profile this UE attaches to when a deploy names no gNB; empty picks a running gNB by SD.
         updatedAt:
           type: string
           format: date-time
@@ -1430,7 +1771,7 @@ components:
       properties:
         gnb:
           type: string
-          description: The gNB target to attach to (gnb-<profileId>); empty lets fru-lab pick.
+          description: The gNB target to attach to (gnb-<profileId>); empty uses the UE profile's gnbProfileId, else lets fru-lab pick by SD; auto always lets fru-lab pick.
     ProfileCheckResult:
       type: object
       required: [conflicts]
@@ -1475,3 +1816,186 @@ components:
           items:
             type: string
           example: [192.168.1.20]
+    CoreNetwork:
+      type: object
+      required: [name, dns]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Unique among the core networks (ignoring case) and not free5GC, the lab core's name. 1-32 letters, digits, spaces, dots, dashes, underscores.
+          example: campus-core
+        kind:
+          type: string
+          enum: [external, free5gc]
+          default: external
+          description: external is a core outside fru-lab (n2Ip / n3Ip / interfaces given); free5gc is another free5GC fru-lab deploys on this host, whose addresses fru-lab assigns (n2Ip, n3Ip, n2Interface, n3Interface, slot, webconsolePort are then read-only, filled in on save, and dns is always [internet]). The kind cannot change after the first save.
+        slot:
+          type: integer
+          readOnly: true
+          description: kind free5gc - 1 to 9, unique; picks its networks (cn-ran 10.0.(100+slot).0/24, SBI 10.0.(110+slot).0/24), its container name prefix and its webconsole port.
+        webconsolePort:
+          type: integer
+          readOnly: true
+          description: kind free5gc - the host port its webconsole is published on (deploy.webconsole.port + slot). The browser reaches it at /api/core-networks/{id}/webconsole/..., which proxies it like /api/webconsole does for the lab free5GC.
+        n2Ip:
+          type: string
+          description: The AMF's N2 address. Required for kind external; assigned for kind free5gc (10.0.(100+slot).3).
+          example: 192.168.10.5
+        n2Interface:
+          type: string
+          description: The host interface that reaches n2Ip.
+          example: eth0
+        n3Ip:
+          type: string
+          description: The UPF's N3 address. Required for kind external; assigned for kind free5gc (10.0.(100+slot).5).
+          example: 192.168.10.6
+        n3Interface:
+          type: string
+          description: The host interface that reaches n3Ip.
+          example: eth1
+        dns:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CoreDn'
+        enabled:
+          type: boolean
+          description: Switched on, the core counts as part of the lab and the Overview draws it.
+        updatedAt:
+          type: string
+          format: date-time
+    CoreDn:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The DNN, unique within the core.
+          example: internet
+        cidr:
+          type: string
+          description: The address range its UEs get, optional.
+          example: 10.60.0.0/16
+    DeployGnbRequest:
+      type: object
+      properties:
+        core:
+          type: string
+          description: The core this deploy attaches to - empty keeps the profile's, lab is the lab free5GC, anything else an enabled external core network's id (its N2 / N3 addresses become the AMF and UPF; the gNB listens on the profile's typed-in hostIp on the core's N2 interface), or a running free5gc core network's id (the gNB joins its cn-ran network at an assigned address).
+    DeployCoreListResponse:
+      type: object
+      required: [cores]
+      properties:
+        cores:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoreDeployStatus'
+    CoreDeployStatus:
+      type: object
+      required: [coreId, status]
+      properties:
+        coreId:
+          type: string
+        status:
+          type: string
+          example: running
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+        lastDeployed:
+          type: string
+          format: date-time
+        template:
+          type: string
+          description: The template it runs (basic / ulcl); empty while stopped.
+    IpamView:
+      type: object
+      required: [pools, warnings]
+      properties:
+        pools:
+          type: array
+          items:
+            $ref: '#/components/schemas/IpamPool'
+        warnings:
+          type: array
+          items:
+            type: string
+    IpamPool:
+      type: object
+      required: [id, network, subnet, purpose, reserved, ranges, leases]
+      properties:
+        id:
+          type: string
+          description: cn-ran (the lab free5GC's), cn-ran-<coreId>, sbi, sbi-<coreId>, ran-ue
+          example: cn-ran
+        network:
+          type: string
+          description: The Docker network it is.
+          example: frulab-cn-ran
+        subnet:
+          type: string
+          example: 10.0.1.0/24
+        purpose:
+          type: string
+          example: N2 / N3 between the lab free5GC and its gNBs
+        coreId:
+          type: string
+          description: The core network it belongs to; empty for the lab free5GC's and the shared ones.
+        reserved:
+          type: array
+          items:
+            $ref: '#/components/schemas/IpamReserved'
+        ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/IpamRange'
+        leases:
+          type: array
+          items:
+            $ref: '#/components/schemas/IpamLease'
+    IpamReserved:
+      type: object
+      required: [addr, role]
+      properties:
+        addr:
+          type: string
+          example: 10.0.1.3
+        role:
+          type: string
+          description: gateway, amf, upf, i-upf, psa-upf, smf, nrf, ... (a core NF's fixed address)
+          example: amf
+    IpamRange:
+      type: object
+      required: [name, first, last]
+      properties:
+        name:
+          type: string
+          description: gnb-n2 (gNB N2/N3 addresses), gnb-ran (where UEs dial a gNB), docker (what Docker hands out itself, e.g. to UEs)
+          example: gnb-n2
+        first:
+          type: string
+        last:
+          type: string
+    IpamLease:
+      type: object
+      required: [addr, owner]
+      properties:
+        addr:
+          type: string
+          example: 10.0.1.20
+        owner:
+          type: string
+          description: Who holds it - a deploy target (gnb-<profileId>, ue-<imsi>, core-<id>) with an optional /<role>.
+          example: gnb-3f2a9c1e5b7d
+        role:
+          type: string
+          example: n2
+        since:
+          type: string
+          format: date-time
+        live:
+          type: boolean
+          description: A running container holds it right now (false is a lease kept for a stopped owner so it gets the same address back).

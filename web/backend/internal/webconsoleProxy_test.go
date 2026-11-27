@@ -17,7 +17,7 @@ func TestWebconsoleProxyStripsThePrefixAndFruLabAuth(t *testing.T) {
 	}))
 	defer webconsole.Close()
 
-	proxy, err := newWebconsoleProxy(webconsole.URL)
+	proxy, err := newWebconsoleProxy(webconsole.URL, "/api/webconsole")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestWebconsoleProxyStripsThePrefixAndFruLabAuth(t *testing.T) {
 }
 
 func TestWebconsoleProxyReportsAnUnreachableWebconsole(t *testing.T) {
-	proxy, err := newWebconsoleProxy("http://127.0.0.1:1")
+	proxy, err := newWebconsoleProxy("http://127.0.0.1:1", "/api/webconsole")
 	if err != nil {
 		t.Fatal(err)
 	}

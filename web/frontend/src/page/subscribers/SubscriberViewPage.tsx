@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import LabCoreTabs from '../../lab/core/LabCoreTabs'
 import AppLayout from '../../components/layout/AppLayout'
-import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
+import { extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
+import { WithCoreScope, type CoreScope } from '../../lab/core/coreScope'
 import { fromSubscription, snssaiKey, type SubscriberFormState } from './subscriberForm'
 import styles from './webconsole-style.module.css'
 import { SortTh, useSort } from '../../lab/sort'
@@ -39,6 +41,10 @@ function Panel({ title, meta, children }: { title: string; meta?: string; childr
 const dash = (v: string) => v || '—'
 
 export default function SubscriberViewPage() {
+  return <WithCoreScope>{(scope) => <SubscriberDetailView key={scope.base} scope={scope} />}</WithCoreScope>
+}
+
+function SubscriberDetailView({ scope }: { scope: CoreScope }) {
   const navigate = useNavigate()
   const { ueId, plmnId } = useParams<{ ueId: string; plmnId: string }>()
 
@@ -51,14 +57,14 @@ export default function SubscriberViewPage() {
     setIsLoading(true)
     setLoadError(null)
     try {
-      const response = await webconsoleApi.getSubscriberByID(ueId, plmnId)
+      const response = await scope.webconsole.getSubscriberByID(ueId, plmnId)
       setForm(fromSubscription(response.data))
     } catch (error) {
       setLoadError(extractWebconsoleErrorMessage(error, 'Failed to load subscriber'))
     } finally {
       setIsLoading(false)
     }
-  }, [ueId, plmnId])
+  }, [ueId, plmnId, scope.webconsole])
 
   useEffect(() => {
     load()
@@ -77,7 +83,8 @@ export default function SubscriberViewPage() {
   })
 
   return (
-    <AppLayout crumbs={[{ label: 'Subscribers', to: '/core-network/subscribers' }, { label: <span className="num">{ueId}</span> }]}>
+    <AppLayout crumbs={[{ label: scope.name, to: scope.base }, { label: 'Subscribers', to: `${scope.base}/subscribers` }, { label: <span className="num">{ueId}</span> }]}>
+      <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs base={scope.base} label={scope.name} /></div>
       <section className={styles.pageHeader}>
         <div className={styles.titleBlock}>
           <h1 className={`${styles.title} num`}>{ueId}</h1>
@@ -87,12 +94,12 @@ export default function SubscriberViewPage() {
           </p>
         </div>
         <div className={styles.headerActions}>
-          <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')}>Back</button>
+          <button type="button" className={styles.btn} onClick={() => navigate(`${scope.base}/subscribers`)}>Back</button>
           {!isLoading && !loadError && form && (
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}
+              onClick={() => navigate(`${scope.base}/subscribers/${encodeURIComponent(ueId!)}/${encodeURIComponent(plmnId!)}/edit`)}
             >
               Edit
             </button>

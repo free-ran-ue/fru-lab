@@ -39,6 +39,10 @@ type backend struct {
 
 	// webconsoleProxy serves free5GC's webconsole under /api/webconsole.
 	webconsoleProxy *httputil.ReverseProxy
+	// webconsoleURLAt is where a webconsole published on a host port is
+	// reached (a free5gc core network's, proxied under
+	// /api/core-networks/<id>/webconsole).
+	webconsoleURLAt func(port int) string
 
 	processor.Processor
 
@@ -92,12 +96,13 @@ func NewBackend(config *config.Config, logger *logger.BackendLogger) *backend {
 		BackendLogger: logger,
 	}
 
-	webconsoleProxy, err := newWebconsoleProxy(config.Backend.Deploy.WebconsoleURL())
+	webconsoleProxy, err := newWebconsoleProxy(config.Backend.Deploy.WebconsoleURL(), "/api/webconsole")
 	if err != nil {
 		logger.BckLog.Errorf("Invalid webconsole config: %v", err)
 		return nil
 	}
 	b.webconsoleProxy = webconsoleProxy
+	b.webconsoleURLAt = config.Backend.Deploy.WebconsoleURLAt
 
 	gin.DefaultWriter, gin.DefaultErrorWriter = loggergo.NewGinWriter(logger.GinLog), loggergo.NewGinWriter(logger.GinLog)
 
@@ -176,12 +181,15 @@ func addServices(router *gin.Engine, b *backend) {
 	addRoutes(authGroup, b.getDeployRoutes())
 	addRoutes(authGroup, b.getImageRoutes())
 	addRoutes(authGroup, b.getProfileRoutes())
+	addRoutes(authGroup, b.getCoreNetworkRoutes())
+	addRoutes(authGroup, b.getIpamRoutes())
 	// the ue terminal websocket does its own token check (query param, since
 	// a browser can't set an Authorization header on a WS handshake), so it
 	// is deliberately not behind authGroup's header-based middleware.
 	addRoutes(apiGroup, b.getTerminalRoutes())
 	addRoutes(apiGroup, b.getStreamRoutes())
 	authGroup.Any("/webconsole/*path", func(c *gin.Context) { b.webconsoleProxy.ServeHTTP(c.Writer, c.Request) })
+	authGroup.Any("/core-networks/:id/webconsole/*path", b.handleCoreWebconsole)
 }
 
 func addRoutes(group *gin.RouterGroup, routes util.Routes) {

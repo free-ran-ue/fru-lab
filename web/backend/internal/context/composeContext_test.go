@@ -3,6 +3,7 @@ package context
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -45,17 +46,26 @@ func (f *fakeCompose) Down(ctx context.Context, name string, _ api.DownOptions) 
 	return nil
 }
 
+// newTestCompose is a composeContext on fake with its own IPAM (leases in
+// a fresh database, no core network saved) whose networks are empty until
+// a test sets inspectNetworkFn.
 func newTestCompose(t *testing.T, fake *fakeCompose) *composeContext {
 	t.Helper()
-	return &composeContext{
+	c := &composeContext{
 		service:        fake,
 		workDir:        t.TempDir(),
 		targets:        defaultTargets(),
 		webconsolePort: 5055,
 		deployTimeout:  time.Minute,
 		networksReady:  true,
-		BackendLogger:  logger.NewBackendLogger("error", "", true),
+		ipam:           newTestIpam(t, nil),
+		inspectNetworkFn: func(context.Context, string) (map[netip.Addr]string, error) {
+			return map[netip.Addr]string{}, nil
+		},
+		BackendLogger: logger.NewBackendLogger("error", "", true),
 	}
+	c.ipam.inspect = c.NetworkAddresses
+	return c
 }
 
 func TestUpPublishesTheWebconsoleOnTheConfiguredPortOnly(t *testing.T) {
@@ -132,26 +142,30 @@ func TestUeUpFailureTakesTheInstanceDown(t *testing.T) {
 }
 
 // Shutdown tears down UE instances first, then the profile gNBs, the gNBs
-// older versions deployed, then the core, and leaves projects that are not fru-lab's
-// alone.
+// older versions deployed, then the free5gc core networks, then the lab
+// core, and leaves projects that are not fru-lab's alone.
 func TestTeardownOrder(t *testing.T) {
 	projects := map[string]bool{
-		"frulab-free5gc":          true,
-		"frulab-gnb":              true,
-		"frulab-gnb-slice2":       true,
-		"frulab-gnb-slice1":       true,
-		"frulab-gnb-bbbbbbbbbbbb": true,
-		"frulab-gnb-aaaaaaaaaaaa": true,
-		"frulab-gnb-nothex":       true,
-		"frulab-ue-imsi-2":        true,
-		"frulab-ue-imsi-1":        true,
-		"someone-else":            true,
+		"frulab-free5gc":           true,
+		"frulab-gnb":               true,
+		"frulab-gnb-slice2":        true,
+		"frulab-gnb-slice1":        true,
+		"frulab-gnb-bbbbbbbbbbbb":  true,
+		"frulab-gnb-aaaaaaaaaaaa":  true,
+		"frulab-gnb-nothex":        true,
+		"frulab-ue-imsi-2":         true,
+		"frulab-ue-imsi-1":         true,
+		"frulab-core-bbbbbbbbbbbb": true,
+		"frulab-core-aaaaaaaaaaaa": true,
+		"frulab-core-nothex":       true,
+		"someone-else":             true,
 	}
 	got := teardownOrder(projects, defaultTargets())
 	want := []string{
 		"frulab-ue-imsi-1", "frulab-ue-imsi-2",
 		"frulab-gnb-aaaaaaaaaaaa", "frulab-gnb-bbbbbbbbbbbb",
 		"frulab-gnb-slice1", "frulab-gnb-slice2", "frulab-gnb",
+		"frulab-core-aaaaaaaaaaaa", "frulab-core-bbbbbbbbbbbb",
 		"frulab-free5gc",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {

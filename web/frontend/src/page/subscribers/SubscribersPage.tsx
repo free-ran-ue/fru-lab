@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import LabCoreTabs from '../../lab/core/LabCoreTabs'
 import AppLayout from '../../components/layout/AppLayout'
 import Modal from '../../components/modal/modal'
 import { useNotifications } from '../../hooks/useNotifications'
 import { SortTh, useSort } from '../../lab/sort'
-import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
+import { extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
+import { WithCoreScope, type CoreScope } from '../../lab/core/coreScope'
 import type { Subscriber } from '../../webconsoleApi'
 import { MAX_BULK_SUBSCRIBERS } from './subscriberForm'
 import { BULK_CONCURRENCY, runLimited } from './bulk'
@@ -14,6 +16,10 @@ import styles from './subscribers.module.css'
 const PAGE_SIZES = [10, 50, 100]
 
 export default function SubscribersPage() {
+  return <WithCoreScope>{(scope) => <SubscribersView key={scope.base} scope={scope} />}</WithCoreScope>
+}
+
+function SubscribersView({ scope }: { scope: CoreScope }) {
   const navigate = useNavigate()
   const [subscribers, setSubscribers] = useState<Subscriber[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -37,7 +43,7 @@ export default function SubscribersPage() {
   function startAdd() {
     if (!isCountValid) return
     setIsAskingCount(false)
-    navigate(`/core-network/subscribers/new?count=${parsedCount}`)
+    navigate(`${scope.base}/subscribers/new?count=${parsedCount}`)
   }
 
   const { addError, addSuccess } = useNotifications()
@@ -46,17 +52,17 @@ export default function SubscribersPage() {
     setIsLoading(true)
     setLoadError(null)
     try {
-      const response = await webconsoleApi.getSubscribers()
+      const response = await scope.webconsole.getSubscribers()
       setSubscribers(response.data)
     } catch (error) {
       setLoadError(extractWebconsoleErrorMessage(
         error,
-        'Failed to reach the free5GC webconsole. Is free5GC deployed?',
+        `Failed to reach the webconsole of ${scope.name}. Is it deployed?`,
       ))
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [scope.webconsole, scope.name])
 
   useEffect(() => {
     refresh()
@@ -114,7 +120,7 @@ export default function SubscribersPage() {
     setIsConfirmingBulk(false)
     setBulkProgress(0)
     const failed = await runLimited(targets, BULK_CONCURRENCY,
-      (s) => webconsoleApi.deleteSubscriberByID(s.ueId, s.plmnID), setBulkProgress)
+      (s) => scope.webconsole.deleteSubscriberByID(s.ueId, s.plmnID), setBulkProgress)
     // keep the ones that failed selected, so they can be retried
     setSelected(new Set(failed.map((f) => keyOf(f.item))))
     setBulkProgress(null)
@@ -133,7 +139,7 @@ export default function SubscribersPage() {
     setDeletingUeId(subscriber.ueId)
 
     try {
-      await webconsoleApi.deleteSubscriberByID(subscriber.ueId, subscriber.plmnID)
+      await scope.webconsole.deleteSubscriberByID(subscriber.ueId, subscriber.plmnID)
       addSuccess(`Deleted ${subscriber.ueId}`)
       await refresh()
     } catch (error) {
@@ -145,13 +151,13 @@ export default function SubscribersPage() {
 
   return (
     <AppLayout
-      crumbs={[{ label: 'Subscribers' }]}
-     
+      crumbs={[{ label: scope.name, to: scope.base }, { label: 'Subscribers' }]}
     >
+      <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs base={scope.base} label={scope.name} /></div>
 
       <section className={styles.header}>
         <h1 className={styles.title}>Subscribers</h1>
-        <span className={styles.subtitle}>free5GC UDR via WebConsole</span>
+        <span className={styles.subtitle}>{scope.name} UDR via WebConsole</span>
         <div className={styles.headerActions}>
           {selectedSubscribers.length > 0 && (
             <>
@@ -164,7 +170,7 @@ export default function SubscribersPage() {
             </>
           )}
           <button type="button" className={styles.btn} onClick={() => { setUeCount('2'); setIsAskingCount(true) }}>Add in bulk</button>
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate('/core-network/subscribers/new')}>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => navigate(`${scope.base}/subscribers/new`)}>
             Add subscriber
           </button>
         </div>
@@ -251,7 +257,7 @@ export default function SubscribersPage() {
                         <button
                           type="button"
                           className={styles.lnk}
-                          onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
+                          onClick={() => navigate(`${scope.base}/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}`)}
                         >
                           View
                         </button>
@@ -259,7 +265,7 @@ export default function SubscribersPage() {
                         <button
                           type="button"
                           className={styles.lnk}
-                          onClick={() => navigate(`/core-network/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
+                          onClick={() => navigate(`${scope.base}/subscribers/${encodeURIComponent(subscriber.ueId)}/${encodeURIComponent(subscriber.plmnID)}/edit`)}
                         >
                           Edit
                         </button>

@@ -30,12 +30,13 @@ var streamTargets = map[string]bool{
 }
 
 // validStreamTarget tells whether logs of target (and, for "ue", instance)
-// can be streamed: free5gc or a profile gNB, gnb-<profile id>.
+// can be streamed: free5gc, a profile gNB, gnb-<profile id>, or a free5gc
+// core network, core-<core id>.
 func validStreamTarget(target, instance string) bool {
 	if target == constant.DEPLOY_TARGET_UE {
 		return instance != ""
 	}
-	return streamTargets[target] || flctx.IsGnbInstance(target)
+	return streamTargets[target] || flctx.IsGnbInstance(target) || flctx.IsCoreInstance(target)
 }
 
 func (b *backend) upgradeAuthed(c *gin.Context) *websocket.Conn {

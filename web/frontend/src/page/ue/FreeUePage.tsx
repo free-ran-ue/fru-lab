@@ -8,8 +8,9 @@ import { ID, ueGnbId } from '../../lab/canvas/graph'
 import { useEvents } from '../../lab/console/EventsContext'
 import { STAGE_LABEL } from '../../lab/console/events'
 import { DeployMenu } from '../../lab/GnbPicker'
+import ListToolbar from '../../lab/workbench/ListToolbar'
 import { useLab } from '../../lab/LabContext'
-import { Button, Hint, KV, Section, Segmented, ui } from '../../lab/LabUi'
+import { Button, Hint, KV, Section, ui } from '../../lab/LabUi'
 import UeProfilesPanel from '../../lab/profiles/UeProfilesPanel'
 import { BulkCreate } from '../../lab/profiles/parts'
 import type { UeRow } from '../../lab/useUeInstances'
@@ -26,8 +27,9 @@ type Tab = 'status' | 'config'
 // FreeUePage is everything about UEs on one page. Every UE profile is one
 // UE and one row (plus any UE still deployed without a profile). Actions
 // sit in two fixed places only:
-//   list toolbar   New, Bulk create, find, filter; "deploy onto" gNB,
-//                  Start all stopped, Stop all (the whole list)
+//   list toolbar   the shared ListToolbar: New, Bulk create, find,
+//                  All / Running; Deploy / Delete selected; Start all
+//                  stopped (onto a picked gNB), Stop all
 //   detail header  Deploy / Stop, Terminal, Logs, Duplicate, Delete
 // and each row ends with its Deploy / Stop. Every deploy goes onto the gNB
 // picked in the list toolbar. The detail pane has a Status tab (the
@@ -124,6 +126,18 @@ export default function FreeUePage() {
     }
   }
 
+  // Deploy selected: the ticked UEs, one after another, onto `gnb`
+  const [deployingMany, setDeployingMany] = useState<string | null>(null)
+  async function deployTicked(gnb: string) {
+    const ids = ue.rows.filter((r) => ticked.has(r.ueId) && r.status === 'stopped' && r.source !== 'other').map((r) => r.ueId)
+    setDeployingMany(`Deploying 0/${ids.length}…`)
+    const failedIds = await ue.deployMany(ids, gnb || undefined, (done) => setDeployingMany(`Deploying ${done}/${ids.length}…`))
+    setDeployingMany(null)
+    setTicked(new Set())
+    if (failedIds.length) addError(`${failedIds.length} of ${ids.length} UEs failed to start`)
+    else addSuccess(`Started ${ids.length} UE${ids.length === 1 ? '' : 's'}`)
+  }
+
   // Delete selected: the ticked UEs' profiles (running ones can't be ticked)
   async function removeTicked() {
     const targets = ue.rows.filter((r) => ticked.has(r.ueId) && r.status === 'stopped').map(profileOf).filter((p) => p?.id)
@@ -153,7 +167,10 @@ export default function FreeUePage() {
   function toggle(r: UeRow) {
     if (r.status !== 'stopped') return <Button kind="danger" small busy={ue.pendingInstances[r.ueId]} onClick={() => stop(r.ueId)}>Stop</Button>
     const why = r.source === 'other' ? 'No saved UE profile matches this UE' : blocked
-    return <DeployMenu busy={ue.pendingInstances[r.ueId]} blocked={why} onPick={(gnb) => deploy(r.ueId, gnb)} />
+    const p = profileOf(r)
+    const preset = p?.gnbProfileId ? lab.gnbProfiles.profiles.find((g) => g.id === p.gnbProfileId) : undefined
+    const own = p?.gnbProfileId ? { name: preset?.name ?? 'a deleted gNB profile', blocked: lab.gnbs.some((g) => g.profileId === p.gnbProfileId && g.status === 'running') ? undefined : 'not running' } : undefined
+    return <DeployMenu busy={ue.pendingInstances[r.ueId]} blocked={why} own={own} onPick={(gnb) => deploy(r.ueId, gnb)} />
   }
 
   const list = (
@@ -177,17 +194,23 @@ export default function FreeUePage() {
       onChecked={setTicked}
       defaultSort={{ key: '0', dir: 'asc' }}
       head={(
-        <>
-          <Button kind="primary" small onClick={() => setCreating({})}>+ New</Button>
-          <BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; the MSIN counts up to the next free value` : 'Select a UE with a profile to copy'} onCreate={bulk} />
-          <input className={ui.select} style={{ flex: '1 1 6rem', minWidth: 0 }} placeholder="find" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Find a UE" />
-          <Segmented value={show} options={[{ value: 'all', label: `All ${ue.rows.length}` }, { value: 'running', label: `Running ${lab.upUes.length}` }]} onChange={setShow} />
-          <span style={{ flexBasis: '100%' }} />
-          {ticked.size > 0 && <Button kind="danger" small busy={deleting} onClick={removeTicked}>Delete selected ({ticked.size})</Button>}
-          <span style={{ marginLeft: 'auto' }} />
-          <DeployMenu label="Start all stopped" busy={stoppedIds.some((id) => ue.pendingInstances[id])} blocked={blocked ?? (stoppedIds.length === 0 ? 'No stopped UE' : undefined)} onPick={launchStopped} />
-          <Button kind="danger" small disabled={!lab.ueUp} busy={anyPending} onClick={stopAll}>Stop all</Button>
-        </>
+        <ListToolbar
+          onNew={() => setCreating({})}
+          bulk={<BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; the MSIN counts up to the next free value` : 'Select a UE with a profile to copy'} onCreate={bulk} />}
+          find={find}
+          onFind={setFind}
+          findLabel="Find a UE"
+          show={show}
+          onShow={setShow}
+          counts={{ all: ue.rows.length, running: lab.upUes.length }}
+          ticked={ticked.size}
+          deploySelected={<Button kind="primary" small busy={Boolean(deployingMany)} disabled={Boolean(blocked)} title={blocked ?? "Each onto its profile's gNB"} onClick={() => deployTicked('')}>{deployingMany ?? `Deploy selected (${ticked.size})`}</Button>}
+          onDeleteSelected={removeTicked}
+          deleting={deleting}
+          startAll={<Button kind="primary" small busy={stoppedIds.some((id) => ue.pendingInstances[id])} disabled={Boolean(blocked) || stoppedIds.length === 0} title={blocked ?? "Each onto its profile's gNB"} onClick={() => launchStopped('')}>Start all stopped</Button>}
+          onStopAll={stopAll}
+          stopAll={{ disabled: !lab.ueUp, busy: anyPending }}
+        />
       )}
       empty={ue.rows.length ? 'Nothing matches.' : 'No UEs yet. Press + New: every UE profile is one UE.'}
     />
@@ -206,7 +229,7 @@ export default function FreeUePage() {
     const from = creating.from ? ueProfiles.profiles.find((p) => p.id === creating.from) : undefined
     detail = (
       <>
-        <DetailHeader icon="ue" name="New UE profile" sub={from ? `copy of ${from.name}` : 'from the defaults'} />
+        <DetailHeader icon="ue" name="New UE profile" sub={from ? `copy of ${from.name}` : 'from the defaults'} actions={<Button small onClick={() => setCreating(null)}>Cancel</Button>} />
         <UeProfilesPanel key={`new-${creating.from ?? ''}`} lab={lab} selectedId={null} copyOf={from} onSelect={onSaved} onNotify={notify} />
       </>
     )
@@ -238,7 +261,7 @@ export default function FreeUePage() {
             <Section title="Session">
               <KV rows={[
                 { k: 'Stage', v: row.status === 'stopped' ? 'stopped' : live?.stage ? STAGE_LABEL[live.stage] : 'starting' },
-                { k: 'gNB', v: row.status === 'stopped' ? 'picked on deploy' : <a href="/free-ran" onClick={(e) => { e.preventDefault(); navigate('/free-ran') }}>{gnbName(row)}</a> },
+                { k: 'gNB', v: row.status === 'stopped' ? (profile?.gnbProfileId ? `${lab.gnbProfiles.profiles.find((g) => g.id === profile.gnbProfileId)?.name ?? 'a deleted gNB profile'} (preset)` : 'Auto, by SD') : <a href="/free-ran" onClick={(e) => { e.preventDefault(); navigate('/free-ran') }}>{gnbName(row)}</a> },
                 { k: 'UE IP', v: live?.ip ?? '—' },
                 { k: 'Tunnel', v: live?.tun ?? '—' },
                 { k: 'PLMN', v: row.plmnId },

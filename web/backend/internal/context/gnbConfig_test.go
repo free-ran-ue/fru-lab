@@ -94,7 +94,7 @@ func TestMaterializeLabGnbInstance(t *testing.T) {
 	p.ID, p.N2Ip = "aaaaaaaaaaaa", "10.0.1.30"
 	target := GnbInstanceTarget(p.ID)
 	d := &model.GnbDeployment{ProfileID: p.ID, ProfileName: p.Name, Core: p.Core, GnbID: p.GnbID, Sd: p.Sd, N2Ip: p.N2Ip, RanIp: "10.0.2.200"}
-	if err := c.materializeGnbInstance(target, &p, d); err != nil {
+	if err := c.materializeGnbInstance(target, &p, d, CnRanNetwork); err != nil {
 		t.Fatal(err)
 	}
 	project, err := c.loadGnbInstanceProject(context.Background(), target)
@@ -135,7 +135,7 @@ func TestExternalGnbInstanceLifecycle(t *testing.T) {
 	p.ID, p.Core, p.N2Ip = "bbbbbbbbbbbb", model.GnbCoreExternal, ""
 	p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostInterface, p.HostIp = "192.168.1.10", 38412, "192.168.1.11", 2152, "eth0", "192.168.1.50"
 
-	d, err := c.UpGnbInstance(context.Background(), &p)
+	d, err := c.UpGnbInstance(context.Background(), &p, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestGnbInstanceFailedUpLeavesNothing(t *testing.T) {
 	c := newTestCompose(t, fake)
 	p := DefaultGnbProfile()
 	p.ID, p.Core, p.N2Ip, p.AmfIp, p.UpfIp, p.HostInterface, p.HostIp = "cccccccccccc", model.GnbCoreExternal, "", "1.1.1.1", "1.1.1.2", "eth0", "1.1.1.3"
-	if _, err := c.UpGnbInstance(context.Background(), &p); err == nil {
+	if _, err := c.UpGnbInstance(context.Background(), &p, nil); err == nil {
 		t.Fatal("want an error")
 	}
 	if ids, _ := c.ListGnbInstances(); len(ids) != 0 {
@@ -195,7 +195,7 @@ func TestProfilesRoundTrip(t *testing.T) {
 		t.Fatalf("save: %v, id %q", err, p.ID)
 	}
 	got, err := d.GetGnbProfile(p.ID)
-	if err != nil || got == nil || got.GnbID != "000314" || got.N2Ip != "10.0.1.20" {
+	if err != nil || got == nil || got.GnbID != "000314" || got.N2Ip != "" {
 		t.Fatalf("get: %+v %v", got, err)
 	}
 	u := model.UeProfile{Name: "u", Msin: "0000000001"}

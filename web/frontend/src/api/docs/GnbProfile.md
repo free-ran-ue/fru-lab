@@ -19,9 +19,10 @@ Name | Type | Description | Notes
 **amfPort** | **number** |  | [optional] [default to undefined]
 **upfIp** | **string** |  | [optional] [default to undefined]
 **upfPort** | **number** |  | [optional] [default to undefined]
-**n2Ip** | **string** | Lab core only - the gNB\&#39;s N2/N3 address on the lab\&#39;s cn-ran network (10.0.1.20 - 10.0.1.254; lower ones are the core\&#39;s). Unique among the gNB profiles. | [optional] [default to undefined]
+**n2Ip** | **string** | Ignored - on the lab free5GC or a free5gc core network the gNB\&#39;s N2/N3 address is assigned on deploy (the lowest free one from .20 up on that core\&#39;s cn-ran network) and shows in GnbDeployment.n2Ip. | [optional] [default to undefined]
 **hostInterface** | **string** | External core only - the host interface the gNB listens on (see /api/host/interfaces). | [optional] [default to undefined]
-**hostIp** | **string** | External core only - the IPv4 address of hostInterface the gNB listens on; UEs dial it too. Unique among the external gNB profiles. | [optional] [default to undefined]
+**hostIp** | **string** | External core only - the IPv4 address the gNB listens on, typed in; UEs dial it too. On a saved external core network it must be an address of that core\&#39;s n2Interface (which becomes hostInterface). Unique among the external gNB profiles. | [optional] [default to undefined]
+**coreNetwork** | **string** | A saved core network\&#39;s id - the core this gNB deploys onto when a deploy names none. Kind free5gc - the gNB joins that core\&#39;s cn-ran network (core stays lab, addresses assigned). Kind external - core is external, its N2 / N3 addresses become the AMF / UPF and its n2Interface the host interface; hostIp is typed in. | [optional] [default to undefined]
 **logLevel** | **string** |  | [optional] [default to undefined]
 **updatedAt** | **string** |  | [optional] [default to undefined]
 
@@ -48,6 +49,7 @@ const instance: GnbProfile = {
     n2Ip,
     hostInterface,
     hostIp,
+    coreNetwork,
     logLevel,
     updatedAt,
 };

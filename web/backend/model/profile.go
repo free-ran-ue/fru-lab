@@ -29,13 +29,18 @@ type GnbProfile struct {
 	AmfPort int    `json:"amfPort,omitempty"`
 	UpfIp   string `json:"upfIp,omitempty"`
 	UpfPort int    `json:"upfPort,omitempty"`
-	// lab core: the gNB's N2/N3 address on cn-ran
+	// ignored: a lab-type gNB's N2/N3 address is assigned on deploy (old
+	// profiles may still carry one)
 	N2Ip string `json:"n2Ip,omitempty"`
 	// external core: the host interface and its IPv4 address the gNB
 	// listens on
 	HostInterface string `json:"hostInterface,omitempty"`
 	HostIp        string `json:"hostIp,omitempty"`
-	LogLevel      string `json:"logLevel"`
+	// a saved core network this gNB deploys onto: kind free5gc keeps Core
+	// lab (it joins that core's cn-ran network); kind external makes Core
+	// external, with the core's AMF / UPF and N2 interface on deploy
+	CoreNetwork string `json:"coreNetwork,omitempty"`
+	LogLevel    string `json:"logLevel"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -54,6 +59,9 @@ type UeProfile struct {
 	Dnn          string `json:"dnn"`
 	Sst          string `json:"sst"`
 	Sd           string `json:"sd"`
+	// the gNB profile this UE attaches to unless a deploy says otherwise;
+	// empty picks a running gNB by SD
+	GnbProfileID string `json:"gnbProfileId,omitempty"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -97,6 +105,9 @@ type GnbDeployment struct {
 	// core) and where UEs dial it (ran-ue, or the host's address)
 	N2Ip  string `json:"n2Ip,omitempty"`
 	RanIp string `json:"ranIp,omitempty"`
+	// the core network it attached to; "" for the lab free5GC (and for an
+	// external core given by address)
+	CoreNetwork string `json:"coreNetwork,omitempty"`
 }
 
 // ProfileConflict is one field of a profile that another saved profile

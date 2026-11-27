@@ -49,11 +49,12 @@ func TestNormalizeGnbProfile(t *testing.T) {
 	if p.Core != model.GnbCoreLab || p.AmfIp != "" || p.HostIp != "" || p.HostInterface != "" {
 		t.Errorf("lab profile kept external fields: %+v", p)
 	}
-	for _, n2 := range []string{"", "10.0.1.19", "10.0.1.3", "10.0.2.20", "10.0.1.255", "nope"} {
+	// the N2 IP is assigned on deploy: never required, an old one dropped
+	for _, n2 := range []string{"", "10.0.1.19", "nope"} {
 		p := validLabGnb()
 		p.N2Ip = n2
-		if normalizeGnbProfile(&p) == nil {
-			t.Errorf("lab profile with n2Ip %q accepted", n2)
+		if d := normalizeGnbProfile(&p); d != nil || p.N2Ip != "" {
+			t.Errorf("lab profile with n2Ip %q: %v, kept %q", n2, d, p.N2Ip)
 		}
 	}
 

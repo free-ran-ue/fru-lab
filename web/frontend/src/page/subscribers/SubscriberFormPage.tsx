@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import LabCoreTabs from '../../lab/core/LabCoreTabs'
 import AppLayout from '../../components/layout/AppLayout'
 import { useNotifications } from '../../hooks/useNotifications'
-import { webconsoleApi, extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
+import { extractWebconsoleErrorMessage } from '../../webconsoleApiClient'
+import { WithCoreScope, type CoreScope } from '../../lab/core/coreScope'
 import {
   CHARGING_METHODS,
   PDU_SESSION_TYPES,
@@ -48,6 +50,10 @@ function Field({ label, required, children }: FieldProps) {
 }
 
 export default function SubscriberFormPage() {
+  return <WithCoreScope>{(scope) => <SubscriberFormView key={scope.base} scope={scope} />}</WithCoreScope>
+}
+
+function SubscriberFormView({ scope }: { scope: CoreScope }) {
   const navigate = useNavigate()
   const { ueId: editUeId, plmnId: editPlmnId } = useParams<{ ueId: string; plmnId: string }>()
   const isEditMode = Boolean(editUeId && editPlmnId)
@@ -71,14 +77,14 @@ export default function SubscriberFormPage() {
     setIsLoading(true)
     setLoadError(null)
     try {
-      const response = await webconsoleApi.getSubscriberByID(editUeId, editPlmnId)
+      const response = await scope.webconsole.getSubscriberByID(editUeId, editPlmnId)
       setForm(fromSubscription(response.data))
     } catch (error) {
       setLoadError(extractWebconsoleErrorMessage(error, 'Failed to load subscriber'))
     } finally {
       setIsLoading(false)
     }
-  }, [editUeId, editPlmnId])
+  }, [editUeId, editPlmnId, scope.webconsole])
 
   useEffect(() => {
     if (isEditMode) {
@@ -93,7 +99,7 @@ export default function SubscriberFormPage() {
     setProgress(0)
     setBulkFailures([])
     const failed = await runLimited(ids, BULK_CONCURRENCY,
-      (ueId) => webconsoleApi.postSubscriberByID(ueId, base.plmnID, { ...base, ueId }), setProgress)
+      (ueId) => scope.webconsole.postSubscriberByID(ueId, base.plmnID, { ...base, ueId }), setProgress)
     return failed.map((f) => ({ ueId: f.item, message: extractWebconsoleErrorMessage(f.error, 'Failed to create') }))
   }
 
@@ -108,7 +114,7 @@ export default function SubscriberFormPage() {
       try {
         const failures = await createMany(bulkIds)
         if (failures.length === 0) {
-          navigate('/core-network/subscribers')
+          navigate(`${scope.base}/subscribers`)
           return
         }
         setBulkFailures(failures)
@@ -122,13 +128,13 @@ export default function SubscriberFormPage() {
     try {
       const subscription = toSubscription(form)
       if (isEditMode && editUeId && editPlmnId) {
-        await webconsoleApi.putSubscriberByID(editUeId, editPlmnId, subscription)
+        await scope.webconsole.putSubscriberByID(editUeId, editPlmnId, subscription)
         addSuccess(`Updated ${subscription.ueId}`)
       } else {
-        await webconsoleApi.postSubscriberByID(subscription.ueId, subscription.plmnID, subscription)
+        await scope.webconsole.postSubscriberByID(subscription.ueId, subscription.plmnID, subscription)
         addSuccess(`Created ${subscription.ueId}`)
       }
-      navigate('/core-network/subscribers')
+      navigate(`${scope.base}/subscribers`)
     } catch (error) {
       addError(extractWebconsoleErrorMessage(error, 'Failed to save subscriber'))
     } finally {
@@ -153,9 +159,10 @@ export default function SubscriberFormPage() {
 
   const title = isEditMode ? 'Edit subscriber' : isBulk ? `Add ${count} subscribers` : 'Add subscriber'
   const crumbs = [
-    { label: 'Subscribers', to: '/core-network/subscribers' },
+    { label: scope.name, to: scope.base },
+    { label: 'Subscribers', to: `${scope.base}/subscribers` },
     ...(isEditMode
-      ? [{ label: <span className="num">{editUeId}</span>, to: `/core-network/subscribers/${encodeURIComponent(editUeId!)}/${encodeURIComponent(editPlmnId!)}` }, { label: 'Edit' }]
+      ? [{ label: <span className="num">{editUeId}</span>, to: `${scope.base}/subscribers/${encodeURIComponent(editUeId!)}/${encodeURIComponent(editPlmnId!)}` }, { label: 'Edit' }]
       : [{ label: isBulk ? `New (${count})` : 'New' }]),
   ]
   const header = (
@@ -165,7 +172,7 @@ export default function SubscriberFormPage() {
         <p className={styles.subtitle}>
           {isBulk
             ? 'You fill in the first subscriber; the rest get the next IMSIs (+1 each) with every other field the same.'
-            : 'A subscription in free5GC’s UDR: identity and keys, the UE AMBR, and one or more slices with their DNN.'}
+            : `A subscription in ${scope.name}’s UDR: identity and keys, the UE AMBR, and one or more slices with their DNN.`}
         </p>
       </div>
     </section>
@@ -174,13 +181,14 @@ export default function SubscriberFormPage() {
   if (isEditMode && (isLoading || loadError)) {
     return (
       <AppLayout crumbs={crumbs}>
+        <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs base={scope.base} label={scope.name} /></div>
         {header}
         <section className={styles.panel}>
           <p className={styles.emptyState}>{isLoading ? 'Loading subscriber…' : loadError}</p>
         </section>
         {loadError && (
           <div>
-            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')}>Back to subscribers</button>
+            <button type="button" className={styles.btn} onClick={() => navigate(`${scope.base}/subscribers`)}>Back to subscribers</button>
           </div>
         )}
       </AppLayout>
@@ -188,10 +196,8 @@ export default function SubscriberFormPage() {
   }
 
   return (
-    <AppLayout
-      crumbs={crumbs}
-     
-    >
+    <AppLayout crumbs={crumbs}>
+      <div style={{ marginBottom: '0.75rem' }}><LabCoreTabs base={scope.base} label={scope.name} /></div>
       {header}
 
         <form onSubmit={handleSubmit} className={styles.form}>
@@ -492,7 +498,7 @@ export default function SubscriberFormPage() {
           )}
 
           <div className={styles.actionsRow}>
-            <button type="button" className={styles.btn} onClick={() => navigate('/core-network/subscribers')} disabled={isSaving}>
+            <button type="button" className={styles.btn} onClick={() => navigate(`${scope.base}/subscribers`)} disabled={isSaving}>
               {bulkFailures.length > 0 ? 'Back to subscribers' : 'Cancel'}
             </button>
             <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={isSaving || (isBulk && typeof bulkIds === 'string')}>

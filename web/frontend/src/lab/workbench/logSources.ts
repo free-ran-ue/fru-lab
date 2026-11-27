@@ -7,6 +7,13 @@ export function logSourceFor(id: string | null): LogSource | null {
   if (!id) return null
   if (id === 'core') return { target: 'free5gc' }
   if (id.startsWith('nf:')) return { target: 'free5gc', service: id.slice(3).toLowerCase() }
+  // a free5GC core network is core:<id>, its NFs corenf:<id>:<NF>; core:<id>
+  // of a core outside the lab has no logs (its page offers none)
+  if (id.startsWith('corenf:')) {
+    const [, core, nf] = id.split(':')
+    return core && nf ? { target: `core-${core}`, service: nf.toLowerCase() } : null
+  }
+  if (id.startsWith('core:') && id.split(':').length === 2) return { target: `core-${id.slice(5)}` }
   // a gNB's node id is its target name, gnb-<profileId>
   if (/^gnb-[0-9a-f]{12}$/.test(id)) return { target: id as `gnb-${string}` }
   if (id.startsWith('ue:')) return { target: 'ue', instance: id.slice(3) }
@@ -38,6 +45,10 @@ export function useLogSources(): SourceOption[] {
   if (lab.coreUp) {
     options.push({ label: 'free5GC · all NFs', source: { target: 'free5gc' } })
     for (const nf of lab.free5gc.networkFunctions) options.push({ label: `free5GC · ${nf.name}`, source: { target: 'free5gc', service: nf.name.toLowerCase() } })
+  }
+  for (const c of lab.upCores) {
+    options.push({ label: `${c.name} · all NFs`, source: { target: `core-${c.id}` } })
+    for (const nf of c.networkFunctions) options.push({ label: `${c.name} · ${nf.name}`, source: { target: `core-${c.id}`, service: nf.name.toLowerCase() } })
   }
   for (const g of lab.gnbs) options.push({ label: `gNB ${g.profileName}`, source: { target: g.id as `gnb-${string}` } })
   for (const r of lab.ue.rows) if (r.hasBeenDeployed) options.push({ label: `UE ${r.ueId}`, source: { target: 'ue', instance: r.ueId } })

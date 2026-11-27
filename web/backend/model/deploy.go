@@ -88,3 +88,24 @@ type GnbInstance struct {
 type ResponseDeployGnbList struct {
 	Instances []GnbInstance `json:"instances"`
 }
+
+// RequestDeployGnbProfile picks the core a gNB deploy attaches to: empty
+// keeps the profile's, "lab" is the lab free5GC, anything else a saved
+// core network's id.
+type RequestDeployGnbProfile struct {
+	Core string `json:"core"`
+}
+
+// CoreDeployStatus is the deploy state of one free5gc-kind core network.
+type CoreDeployStatus struct {
+	CoreID       string          `json:"coreId"`
+	Status       string          `json:"status"`
+	Services     []ServiceStatus `json:"services,omitempty"`
+	LastDeployed *time.Time      `json:"lastDeployed,omitempty"`
+	// the template it runs (basic / ulcl); empty while stopped
+	Template string `json:"template,omitempty"`
+}
+
+type ResponseDeployCoreList struct {
+	Cores []CoreDeployStatus `json:"cores"`
+}
