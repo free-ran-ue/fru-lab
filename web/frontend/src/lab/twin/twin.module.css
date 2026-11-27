@@ -303,3 +303,75 @@
   cursor: default;
   opacity: 0.4;
 }
+
+/* radio */
+.weak {
+  opacity: 0.45;
+}
+
+.weak .marker {
+  stroke-dasharray: 3 3;
+}
+
+.scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--ink-2);
+}
+
+.scale input {
+  width: 4.5rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-mono);
+}
+
+/* the selected UE's radio card */
+.card {
+  position: absolute;
+  top: 0.625rem;
+  right: 0.625rem;
+  min-width: 15rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+}
+
+.cardTitle {
+  margin: 0 0 0.375rem;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.125rem 0.75rem;
+  margin: 0;
+}
+
+.card dt {
+  color: var(--muted);
+}
+
+.card dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.cardNote {
+  margin: 0.375rem 0 0;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-2);
+}

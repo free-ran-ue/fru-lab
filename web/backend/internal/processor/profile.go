@@ -5,6 +5,7 @@ import (
 	"backend/model"
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -83,6 +84,8 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 		return bad("sd must be 6 hex digits")
 	case !logLevels[p.LogLevel]:
 		return bad("unknown log level %s", p.LogLevel)
+	case p.RadioRange < 0 || p.RadioRange > 1e6 || math.IsNaN(p.RadioRange):
+		return bad("radioRange must be 0 (unlimited) to 1000000 metres")
 	}
 	switch p.Core {
 	case model.GnbCoreLab:

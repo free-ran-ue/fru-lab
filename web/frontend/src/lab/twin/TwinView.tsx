@@ -6,6 +6,8 @@ import { STAGE_LABEL, type UeStage } from '../console/events'
 import { useLab } from '../LabContext'
 import type { NodeStatus } from '../types'
 import { useStoredState } from '../useProfiles'
+import { formatSignal, OUT_OF_RANGE, signalAt, signalDb } from './signal'
+import NumberInput from '../NumberInput'
 import styles from './twin.module.css'
 
 interface Props {
@@ -34,6 +36,10 @@ const PAD = 60
 const ROW = { dn: 0, core: 240, gnb: 520 } // the default rows on the map
 const UE_RING = 120
 const DOUBLE_MS = 350
+// a gNB's coverage is painted out to FADE x its radio range, where the
+// signal is ~0.1% (-30 dB): fading by dB, with no edge line
+const FADE = 3.2
+const FADE_DB = 30
 
 const snap = (v: number) => Math.round(v / SNAP) * SNAP
 
@@ -65,6 +71,10 @@ interface Point {
   // UEs: coloured by stage
   tone?: string
   dashed?: boolean
+  // UEs: the signal of their serving gNB here, and the strongest gNB
+  signal?: number
+  best?: { id: string; name: string; signal: number }
+  serving?: string
 }
 interface Edge { id: string; from: string; to: string; label: string; live: boolean; dashed?: boolean }
 
@@ -82,6 +92,14 @@ export default function TwinView({ selectedId, onSelect, onOpen }: Props) {
   const [lockedLayers, setLockedLayers] = useStoredState<TwinLayer[]>('frulab-twin-locked', [])
   const [drag, setDrag] = useState<{ key: string; p: Pt } | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
+  // the map's scale: metres per grid cell
+  const [scale, setScale] = useStoredState('frulab-twin-scale', 50)
+  const metres = (px: number) => (px / GRID) * scale
+  const pixels = (m: number) => (m / scale) * GRID
+  const rangeOf = (gnbId: string) => {
+    const g = lab.gnbs.find((x) => x.id === gnbId)
+    return lab.gnbProfiles.profiles.find((p) => p.id === g?.profileId)?.radioRange || 0
+  }
 
   // ----- the model: points on four layers and the links between them -----
   const { specs, laneOf } = overviewCores(lab)
@@ -152,6 +170,27 @@ export default function TwinView({ selectedId, onSelect, onOpen }: Props) {
   }, [points.map((p) => p.key).join('|')])
 
   const posOf = (key: string): Pt => (drag?.key === key ? drag.p : placed[key] ?? defaults.get(key) ?? { x: 0, y: 0 })
+  // a UE's signal from gNB gnbId where it stands, by the radio model
+  const signalFrom = (ueKey: string, gnbId: string) => {
+    const a = posOf(ueKey)
+    const b = posOf(`gnb:${gnbId}`)
+    return signalAt(metres(Math.hypot(a.x - b.x, a.y - b.y)), rangeOf(gnbId))
+  }
+  for (const p of points) {
+    if (p.layer !== 'ue') continue
+    const serving = edges.find((e) => e.from === p.key && e.label === 'Uu')?.to.slice(4)
+    if (serving) {
+      p.serving = serving
+      p.signal = signalFrom(p.key, serving)
+    }
+    let best: Point['best']
+    for (const g of lab.gnbs) {
+      const sg = signalFrom(p.key, g.id)
+      if (!best || sg > best.signal) best = { id: g.id, name: g.profileName, signal: sg }
+    }
+    p.best = best
+    if (p.signal !== undefined) p.sub = `${formatSignal(p.signal)} · ${signalDb(p.signal).toFixed(1)} dB`
+  }
   const shown = (layer: TwinLayer) => !hiddenLayers.includes(layer)
   const layerOf = (key: string) => key.slice(0, key.indexOf(':')) as TwinLayer
 
@@ -284,11 +323,28 @@ export default function TwinView({ selectedId, onSelect, onOpen }: Props) {
           <pattern id="twin-major" width={GRID * 5} height={GRID * 5} patternUnits="userSpaceOnUse" patternTransform={gridT}>
             <path d={`M${GRID * 5} 0H0V${GRID * 5}`} fill="none" className={styles.gridMajor} />
           </pattern>
+          {/* a gNB's coverage: opacity by the signal in dB down to -FADE_DB at
+              FADE x its range - a soft fade, no edge */}
+          <radialGradient id="twin-radio">
+            {Array.from({ length: 17 }, (_, i) => {
+              const t = i / 16
+              const db = signalDb(signalAt(t * FADE, 1))
+              const a = Math.max(0, 1 + db / FADE_DB) * 0.36
+              return <stop key={i} offset={t} style={{ stopColor: 'var(--accent)', stopOpacity: a }} />
+            })}
+          </radialGradient>
         </defs>
         <rect width="100%" height="100%" fill="url(#twin-minor)" />
         <rect width="100%" height="100%" fill="url(#twin-major)" />
 
         <g transform={gridT}>
+          {/* gNB coverage (with the gNB layer), under everything else */}
+          {shown('gnb') && lab.gnbs.map((g) => {
+            const range = rangeOf(g.id)
+            if (!range) return null
+            const c = posOf(`gnb:${g.id}`)
+            return <circle key={`radio-${g.id}`} cx={c.x} cy={c.y} r={pixels(range) * FADE} fill="url(#twin-radio)" pointerEvents="none" />
+          })}
           {/* links: under every layer, shown when both ends are */}
           {edges.filter((e) => shown(layerOf(e.from)) && shown(layerOf(e.to))).map((e) => {
             const a = posOf(e.from)
@@ -297,7 +353,7 @@ export default function TwinView({ selectedId, onSelect, onOpen }: Props) {
             const isUu = e.label === 'Uu'
             return (
               <g key={e.id}>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`${styles.link} ${e.live ? styles.live : ''} ${e.dashed ? styles.dashed : ''} ${isUu ? styles.radio : ''} ${hot ? styles.hot : ''}`} />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`${styles.link} ${e.live ? styles.live : ''} ${e.dashed ? styles.dashed : ''} ${isUu ? styles.radio : ''} ${hot ? styles.hot : ''}`} style={isUu ? { opacity: 0.3 + 0.7 * Math.max(0, 1 + signalDb(signalFrom(e.from, e.to.slice(4))) / FADE_DB) } : undefined} />
                 {e.live && !isUu && !reduced && (
                   <circle r={3} className={styles.packet}>
                     <animateMotion dur="2.4s" repeatCount="indefinite" path={`M${a.x} ${a.y}L${b.x} ${b.y}`} />
@@ -325,7 +381,7 @@ export default function TwinView({ selectedId, onSelect, onOpen }: Props) {
                     tabIndex={0}
                     aria-label={`${p.label}${p.status ? `, ${p.status}` : ''}`}
                     aria-pressed={on}
-                    className={`${styles.point} ${on ? styles.on : ''} ${locked ? styles.locked : ''} ${drag?.key === p.key ? styles.dragging : ''}`}
+                    className={`${styles.point} ${on ? styles.on : ''} ${locked ? styles.locked : ''} ${drag?.key === p.key ? styles.dragging : ''} ${p.signal !== undefined && p.signal < OUT_OF_RANGE ? styles.weak : ''}`}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.id) } }}
                     onPointerEnter={() => setHovered(p.key)}
                     onPointerLeave={() => setHovered(null)}
@@ -362,11 +418,32 @@ export default function TwinView({ selectedId, onSelect, onOpen }: Props) {
         ))}
       </div>
 
+      {(() => {
+        const ue = points.find((p) => p.layer === 'ue' && p.id === selectedId)
+        if (!ue) return null
+        const servingName = lab.gnbs.find((g) => g.id === ue.serving)?.profileName
+        const d = ue.serving ? metres(Math.hypot(posOf(ue.key).x - posOf(`gnb:${ue.serving}`).x, posOf(ue.key).y - posOf(`gnb:${ue.serving}`).y)) : undefined
+        const better = ue.best && ue.serving && ue.best.id !== ue.serving && ue.best.signal > (ue.signal ?? 0)
+        return (
+          <div className={styles.card} data-no-pan>
+            <p className={styles.cardTitle}>{ue.label}</p>
+            <dl>
+              <dt>Serving gNB</dt><dd>{servingName ?? '—'}</dd>
+              <dt>Distance</dt><dd>{d !== undefined ? `${d.toFixed(0)} m` : '—'}</dd>
+              <dt>Signal</dt><dd>{ue.signal !== undefined ? `${formatSignal(ue.signal)} · ${signalDb(ue.signal).toFixed(1)} dB` : '—'}</dd>
+              <dt>Strongest</dt><dd>{ue.best ? `${ue.best.name} · ${formatSignal(ue.best.signal)}` : '—'}</dd>
+            </dl>
+            {ue.signal !== undefined && ue.signal < OUT_OF_RANGE && <p className={styles.cardNote}>Out of range on the map (under 1%). It stays attached: the signal never reaches 0.</p>}
+            {better && <p className={styles.cardNote}>{ue.best!.name} is stronger here: a handover candidate.</p>}
+          </div>
+        )
+      })()}
       <div className={styles.legend} data-no-pan>
         <span><i className={styles.ok} /> UE ready</span>
         <span><i className={styles.wait} /> connecting</span>
         <span><i className={styles.bad} /> failed</span>
-        <span className={styles.hint}>drag any point · it snaps to the grid</span>
+        <span className={styles.hint}>faded UE: under 1% signal</span>
+        <label className={styles.scale}>1 cell = <NumberInput min={1} max={100000} value={scale} onChange={setScale} aria-label="Metres per grid cell" /> m</label>
       </div>
       <div className={styles.tools} data-no-pan>
         <button type="button" onClick={() => zoomAt(1.2, size.w / 2, size.h / 2)} aria-label="Zoom in">+</button>

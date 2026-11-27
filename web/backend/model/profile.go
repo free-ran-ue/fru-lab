@@ -40,7 +40,10 @@ type GnbProfile struct {
 	// lab (it joins that core's cn-ran network); kind external makes Core
 	// external, with the core's AMF / UPF and N2 interface on deploy
 	CoreNetwork string `json:"coreNetwork,omitempty"`
-	LogLevel    string `json:"logLevel"`
+	// the simulated radio reach in metres, where the signal falls to 1%;
+	// 0 is unlimited. Only the UI's map uses it.
+	RadioRange float64 `json:"radioRange,omitempty"`
+	LogLevel   string  `json:"logLevel"`
 
 	UpdatedAt time.Time `json:"updatedAt"`
 }

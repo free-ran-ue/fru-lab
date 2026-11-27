@@ -223,6 +223,10 @@ export interface GnbProfile {
      */
     'hostIp'?: string;
     /**
+     * The gNB\'s simulated radio reach in metres - where its signal falls to 1% (100% at the gNB, S(d) = 1 / (1 + 99 (d / radioRange)^2), inverse-square far out, never 0). Left out or 0 is unlimited - 100% everywhere. Only the UI\'s map uses it; the gNB itself is unaffected.
+     */
+    'radioRange'?: number;
+    /**
      * A saved core network\'s id - the core this gNB deploys onto when a deploy names none. Kind free5gc - the gNB joins that core\'s cn-ran network (core stays lab, addresses assigned). Kind external - core is external, its N2 / N3 addresses become the AMF / UPF and its n2Interface the host interface; hostIp is typed in.
      */
     'coreNetwork'?: string;

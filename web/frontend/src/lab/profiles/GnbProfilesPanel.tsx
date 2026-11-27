@@ -3,6 +3,7 @@ import type { GnbProfile, HostInterface } from '../../api'
 import { api, extractErrorMessage } from '../../apiClient'
 import { Button } from '../LabUi'
 import { useLab } from '../LabContext'
+import NumberInput from '../NumberInput'
 import { isFree5gcCore, type LabGnb } from '../useLab'
 import { LAB_DEFAULT_GNB, useGnbProfiles } from '../useProfiles'
 import { ConflictNote, Field, ps, useConfigPreview, useProfileCheck, Yaml } from './parts'
@@ -204,9 +205,9 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
           {external && !onSaved && (
             <>
               <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} conflict={conflict('amfIp')} />
-              <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} conflict={conflict('amfPort')} />
+              <Field label="AMF port" type="number" value={draft.amfPort ?? ''} onChange={(v) => set({ amfPort: v === '' ? undefined : Number(v) })} hint="empty is 38412" conflict={conflict('amfPort')} />
               <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} conflict={conflict('upfIp')} />
-              <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} conflict={conflict('upfPort')} />
+              <Field label="UPF port" type="number" value={draft.upfPort ?? ''} onChange={(v) => set({ upfPort: v === '' ? undefined : Number(v) })} hint="empty is 2152" conflict={conflict('upfPort')} />
               <div className={ps.field}>
                 <label htmlFor="gnb-iface">Host interface</label>
                 <select id="gnb-iface" className={`${ps.input} ${ifaceMissing || conflict('hostInterface') ? ps.inputBad : ''}`} value={draft.hostInterface ?? ''} onChange={(e) => pickInterface(e.target.value)}>
@@ -232,6 +233,24 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
               <span className={`${ps.fieldHint} ${ps.wide}`}>The gNB runs on the host network and listens on this address; the core must reach it, and UEs dial it too.</span>
             </>
           )}
+          <div className={`${ps.field} ${ps.wide}`}>
+            <label htmlFor="gnb-radio">Radio range</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem' }}>
+                <input type="checkbox" checked={!draft.radioRange} onChange={(e) => set({ radioRange: e.target.checked ? undefined : 500 })} />
+                Unlimited
+              </label>
+              {Boolean(draft.radioRange) && (
+                <>
+                  <NumberInput id="gnb-radio" className={ps.input} style={{ width: '8rem' }} min={1} max={1000000} value={draft.radioRange ?? 500} onChange={(v) => set({ radioRange: v })} />
+                  <span style={{ fontSize: '0.75rem' }}>metres</span>
+                </>
+              )}
+            </div>
+            <span className={ps.fieldHint}>{draft.radioRange
+              ? `Signal on the map: 100% at the gNB, 1% at ${draft.radioRange} m, then falling with the square of the distance (never 0). The UE stays attached whatever the map shows.`
+              : 'Signal on the map is 100% everywhere, so this gNB never hands a UE over.'}</span>
+          </div>
           <Field label="gNB ID" value={draft.gnbId} onChange={(v) => set({ gnbId: v })} pattern={HEX6} hint="6 hex digits" conflict={conflict('gnbId')} />
           <Field label="gNB name" value={draft.gnbName ?? ''} onChange={(v) => set({ gnbName: v })} conflict={conflict('gnbName')} />
           <Field label="MCC" value={draft.mcc} onChange={(v) => set({ mcc: v })} pattern={/^\d{3}$/} conflict={conflict('mcc')} />
