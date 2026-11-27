@@ -6,11 +6,12 @@ import { buildOverviewGraph } from '../../lab/canvas/graph'
 import { NodeIcon, type IconName } from '../../lab/canvas/icons'
 import { useEvents } from '../../lab/console/EventsContext'
 import { useLab } from '../../lab/LabContext'
-import { Actions, Button, Dot, KV, Section, ui } from '../../lab/LabUi'
+import { Actions, Button, Dot, KV, Section, Segmented, ui } from '../../lab/LabUi'
 import { isFree5gcCore, templateLabel } from '../../lab/useLab'
 import Workbench from '../../lab/workbench/Workbench'
 import { logsHref } from '../../lab/workbench/logSources'
 import TerminalDock from '../../lab/workbench/TerminalDock'
+import TwinView from '../../lab/twin/TwinView'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useConfirm } from '../../components/feedback/Feedback'
 import { extractErrorMessage } from '../../apiClient'
@@ -65,6 +66,8 @@ export default function DashboardPage() {
   // leaving the page and reconnect on return
   const [sessions, setSessions] = useStoredState<string[]>('frulab-terminal-nodes', [])
   const [activeTerm, setActiveTerm] = useState<string | null>(null)
+  // the logical topology or the 2D digital twin
+  const [view, setView] = useStoredState<'topology' | 'twin'>('frulab-overview-view', 'topology')
   const { addError, addSuccess } = useNotifications()
   const confirm = useConfirm()
   // what Tear down is stopping right now; null when idle
@@ -170,17 +173,21 @@ export default function DashboardPage() {
       <Workbench
         title="Overview"
         actions={(lab.coreUp || coresUp || lab.gnbUp || lab.ueUp || tearing) ? <Button kind="danger" busy={Boolean(tearing)} title="Stop every UE, every gNB and every core fru-lab deployed" onClick={tearDown}>{tearing ?? 'Tear down'}</Button> : undefined}
-        status={<><span>core <b>{coreText}</b></span>{coresUp && <span>free5GC cores <b>{lab.upCores.length}</b></span>}<span>gNBs <b>{lab.gnbs.length}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
+        status={<><Segmented value={view} options={[{ value: 'topology', label: 'Topology' }, { value: 'twin', label: 'Twin' }]} onChange={setView} /><span>core <b>{coreText}</b></span>{coresUp && <span>free5GC cores <b>{lab.upCores.length}</b></span>}<span>gNBs <b>{lab.gnbs.length}</b></span><span>UEs <b>{ueCounts.running}/{ueCounts.total}</b></span><span>PDU sessions <b>{withPdu}</b></span></>}
         canvas={(
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ position: 'relative', flex: '1 1 auto', minHeight: 0 }}>
-              <LabCanvas
-                label="The lab: each connected UE on the radio to its gNB, every running gNB over N2 and N3 to its core, N6 out to the data network."
-                {...graph}
-                selectedId={selected}
-                onSelect={setSelected}
-                onOpen={(id) => { setSelected(id); if (canShell(id)) openTerminal(id) }}
-              />
+              {view === 'twin'
+                ? <TwinView selectedId={selected} onSelect={setSelected} onOpen={(id) => { setSelected(id); if (canShell(id)) openTerminal(id) }} />
+                : (
+                <LabCanvas
+                  label="The lab: each connected UE on the radio to its gNB, every running gNB over N2 and N3 to its core, N6 out to the data network."
+                  {...graph}
+                  selectedId={selected}
+                  onSelect={setSelected}
+                  onOpen={(id) => { setSelected(id); if (canShell(id)) openTerminal(id) }}
+                />
+                )}
             </div>
             <TerminalDock
               sessions={sessions}
