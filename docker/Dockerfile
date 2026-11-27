@@ -13,7 +13,7 @@ RUN go build -o /out/fru-lab .
 # -------------------------------
 # Stage 2: Build the frontend
 # -------------------------------
-FROM node:20 AS frontendbuilder
+FROM node:22 AS frontendbuilder
 WORKDIR /src/frontend
 
 COPY web/frontend/ .
