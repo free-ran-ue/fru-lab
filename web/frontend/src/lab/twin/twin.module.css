@@ -1,0 +1,377 @@
+/* The Overview's map: a grid, points on four layers, a layer panel. */
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--canvas-bg);
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.svg:active {
+  cursor: grabbing;
+}
+
+/* the map grid */
+.gridMinor {
+  stroke: var(--border-soft);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.gridMajor {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* links */
+.link {
+  stroke: var(--link);
+  stroke-width: 1.6;
+}
+
+.live {
+  stroke: color-mix(in srgb, var(--link-live) 70%, var(--link));
+}
+
+.dashed {
+  stroke-dasharray: 5 5;
+}
+
+.radio {
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+}
+
+.hot {
+  stroke: var(--accent);
+  stroke-width: 2.2;
+}
+
+.packet {
+  fill: var(--link-live);
+}
+
+.linkLabel {
+  fill: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  paint-order: stroke;
+  stroke: var(--canvas-bg);
+  stroke-width: 3;
+}
+
+.linkLabelHot {
+  fill: var(--ink);
+}
+
+/* points */
+.point {
+  cursor: grab;
+}
+
+.point.locked {
+  cursor: pointer;
+}
+
+.dragging {
+  cursor: grabbing;
+  opacity: 0.85;
+}
+
+.marker {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.dashedMarker {
+  stroke-dasharray: 4 3;
+}
+
+.ring {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.st_running { stroke: var(--ok); }
+.st_stopped { stroke: var(--idle); }
+.st_unhealthy { stroke: var(--bad); }
+.st_deploying { stroke: var(--warn); }
+
+.point:hover .marker,
+.on .marker {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.on .ring {
+  stroke: var(--accent);
+}
+
+.icon {
+  color: var(--ink-2);
+}
+
+.iconOnTone {
+  color: var(--surface);
+}
+
+/* UE markers, filled by state */
+.marker.ok { fill: var(--ok); stroke: var(--surface); }
+.marker.wait { fill: var(--warn); stroke: var(--surface); }
+.marker.bad { fill: var(--bad); stroke: var(--surface); }
+
+.label {
+  fill: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--canvas-bg);
+  stroke-width: 4;
+}
+
+.labelSm {
+  fill: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  paint-order: stroke;
+  stroke: var(--canvas-bg);
+  stroke-width: 3;
+}
+
+.sub {
+  fill: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  paint-order: stroke;
+  stroke: var(--canvas-bg);
+  stroke-width: 3;
+}
+
+/* the layer panel */
+.layers {
+  position: absolute;
+  top: 0.625rem;
+  left: 0.625rem;
+  min-width: 11rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+}
+
+.layersTitle {
+  margin: 0 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.layerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.5rem;
+}
+
+.layerShow {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+}
+
+.layerShow input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.layerShow svg {
+  color: var(--ink-2);
+}
+
+.layerShow b {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.lock {
+  padding: 0 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.lockOn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* legend and tools */
+.legend {
+  position: absolute;
+  left: 0.625rem;
+  bottom: 0.625rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.3125rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.6875rem;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+}
+
+.legend i {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.legend i.ok { background: var(--ok); }
+.legend i.wait { background: var(--warn); }
+.legend i.bad { background: var(--bad); }
+
+.hint {
+  color: var(--muted);
+}
+
+.tools {
+  position: absolute;
+  right: 0.625rem;
+  bottom: 0.625rem;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.tools button {
+  min-width: 1.75rem;
+  height: 1.625rem;
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tools button + button {
+  border-left: 1px solid var(--border);
+}
+
+.tools button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.tools button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* radio */
+.weak {
+  opacity: 0.45;
+}
+
+.weak .marker {
+  stroke-dasharray: 3 3;
+}
+
+.scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--ink-2);
+}
+
+.scale input {
+  width: 4.5rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-mono);
+}
+
+/* the selected UE's radio card */
+.card {
+  position: absolute;
+  top: 0.625rem;
+  right: 0.625rem;
+  min-width: 15rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+}
+
+.cardTitle {
+  margin: 0 0 0.375rem;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.125rem 0.75rem;
+  margin: 0;
+}
+
+.card dt {
+  color: var(--muted);
+}
+
+.card dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.cardNote {
+  margin: 0.375rem 0 0;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-2);
+}

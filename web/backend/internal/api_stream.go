@@ -64,16 +64,27 @@ func closeOnHangup(conn *websocket.Conn, cancel context.CancelFunc) {
 	}()
 }
 
+// parseTail reads the stream's tail query: a line count (0-5000, else
+// 200), or "all" (-1) for everything since the container started - the
+// event timeline replays it so it holds events from before the page opened.
+func parseTail(q string) int {
+	if q == "all" {
+		return -1
+	}
+	n, err := strconv.Atoi(q)
+	if err != nil || n < 0 || n > 5000 {
+		return 200
+	}
+	return n
+}
+
 func (b *backend) handleStreamLogs(c *gin.Context) {
 	target, instance := c.Query("target"), c.Query("instance")
 	if !validStreamTarget(target, instance) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "unknown target"})
 		return
 	}
-	tail, err := strconv.Atoi(c.DefaultQuery("tail", "200"))
-	if err != nil || tail < 0 || tail > 5000 {
-		tail = 200
-	}
+	tail := parseTail(c.DefaultQuery("tail", "200"))
 	conn := b.upgradeAuthed(c)
 	if conn == nil {
 		return
@@ -85,7 +96,7 @@ func (b *backend) handleStreamLogs(c *gin.Context) {
 	closeOnHangup(conn, cancel)
 
 	var mu sync.Mutex
-	err = b.FlContext.FollowLogs(ctx, target, instance, parseServiceQuery(c), tail, func(l flctx.LogLine) {
+	err := b.FlContext.FollowLogs(ctx, target, instance, parseServiceQuery(c), tail, func(l flctx.LogLine) {
 		raw, _ := json.Marshal(l)
 		mu.Lock()
 		defer mu.Unlock()

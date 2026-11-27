@@ -1,0 +1,140 @@
+/* The Events page: a search bar over a sortable table. */
+.page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.search {
+  flex: 0 1 28rem;
+  min-width: 12rem;
+}
+
+.push {
+  flex: 1 1 auto;
+}
+
+.count {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.25rem 0 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 0.75rem;
+}
+
+.chip button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.375rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.tbl td {
+  padding: 0.3125rem 0.75rem;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--ink-2);
+  vertical-align: top;
+}
+
+.tbl tbody tr:hover {
+  background: var(--surface-muted);
+}
+
+.time {
+  width: 13rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.level {
+  width: 6rem;
+  white-space: nowrap;
+}
+
+.source {
+  width: 14rem;
+}
+
+.srcBtn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.srcBtn:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.err td {
+  color: var(--bad-ink);
+}
+
+.warn td {
+  color: var(--warn-ink);
+}
+
+.ip {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.mark {
+  padding: 0 0.0625rem;
+  border-radius: 2px;
+  background: var(--accent-soft);
+  color: var(--ink);
+}

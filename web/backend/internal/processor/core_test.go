@@ -222,3 +222,19 @@ func TestNormalizeGnbOnSavedCore(t *testing.T) {
 		t.Errorf("a lab gNB on a free5gc core network: %v %+v", d, lab)
 	}
 }
+
+func TestNormalizeGnbRadioRange(t *testing.T) {
+	base := func(r float64) *model.GnbProfile {
+		return &model.GnbProfile{Name: "g", GnbID: "000314", Mcc: "208", Mnc: "93", Tac: "000001", Sst: "1", Core: model.GnbCoreLab, RadioRange: r}
+	}
+	for _, r := range []float64{0, 1, 500, 1e6} {
+		if d := normalizeGnbProfile(base(r)); d != nil {
+			t.Errorf("radioRange %v rejected: %s", r, d.Detail)
+		}
+	}
+	for _, r := range []float64{-1, 1e6 + 1} {
+		if normalizeGnbProfile(base(r)) == nil {
+			t.Errorf("radioRange %v accepted", r)
+		}
+	}
+}

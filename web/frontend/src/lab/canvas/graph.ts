@@ -325,12 +325,19 @@ const gnbSub = (g: LabGnb, lab: Lab) => (g.coreNetwork
 // buildOverviewGraph is the overview map: every connected UE on the radio
 // to its gNB, every running gNB, the core(s) as one node each and the data
 // network.
-export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}): Graph {
-  const nodes: CanvasNode[] = []
-  const links: CanvasLink[] = []
-  const coreStatus = lab.nodes.core.status
-  const upUes = lab.upUes
+// one core as the Overview draws it (topology and twin alike)
+export interface OverviewCore {
+  id: string
+  node: Omit<CanvasNode, 'x' | 'y' | 'w' | 'h' | 'id'>
+  live: boolean
+  dashed: boolean
+  dns: string[]
+}
 
+// overviewCores is which cores the Overview shows, in order, and which of
+// them each gNB belongs to (every gNB lands on a shown core).
+export function overviewCores(lab: Lab): { specs: OverviewCore[]; laneOf: (g: LabGnb) => string } {
+  const coreStatus = lab.nodes.core.status
   // ----- which cores show: the lab free5GC once deployed, every free5GC
   // core network that is up (or has a gNB on it), every enabled core
   // outside the lab, and (only for an external gNB dialing none of those)
@@ -351,8 +358,7 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
   }
   const orphans = ext.filter((g) => extCoreOf(g) === ID.externalCore)
   const showLab = lab.coreUp || lab.gnbs.some((g) => g.core === 'lab' && !g.coreNetwork) || (enabled.length === 0 && ext.length === 0 && shownCores.length === 0)
-  type Spec = { id: string; node: Omit<CanvasNode, 'x' | 'y' | 'w' | 'h' | 'id'>; live: boolean; dashed: boolean; dns: string[] }
-  const specs: Spec[] = []
+  const specs: OverviewCore[] = []
   const nfs = lab.free5gc.networkFunctions
   if (showLab) {
     specs.push({
@@ -381,6 +387,17 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
     specs.push({ id: ID.externalCore, node: { icon: 'core', label: 'External core', sub: `AMF ${amfs.join(', ')}`, tag: 'not in Core Network' }, live: false, dashed: true, dns: [] })
   }
 
+  const laneOf = (g: LabGnb) => (specs.some((c) => c.id === coreOfGnb(g)) ? coreOfGnb(g) : specs[0].id)
+  return { specs, laneOf }
+}
+
+export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}): Graph {
+  const nodes: CanvasNode[] = []
+  const links: CanvasLink[] = []
+  const upUes = lab.upUes
+
+  const { specs, laneOf } = overviewCores(lab)
+
   // ----- lanes: every core is an invisible row, left to right its UEs,
   // its gNBs, the core, and its own data networks; each UE sits level with
   // its gNB, so no link crosses another row -----
@@ -395,7 +412,6 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
 
   const hidden = Math.max(0, upUes.length - MAX_OVERVIEW_UES)
   const shownUes = hidden ? upUes.slice(0, MAX_OVERVIEW_UES - 1) : upUes
-  const laneOf = (g: LabGnb) => (specs.some((c) => c.id === coreOfGnb(g)) ? coreOfGnb(g) : specs[0].id)
   const lanes = specs.map((c) => ({ spec: c, gnbs: lab.gnbs.filter((g) => laneOf(g) === c.id) }))
   const firstGnb = lanes.find((l) => l.gnbs.length)?.gnbs[0]
   // each UE under its gNB (a UE whose gNB is not drawn joins the first one)

@@ -1806,6 +1806,7 @@ This endpoint does not have any parameters.
 |-------------|-------------|------------------|
 |**200** | OK |  -  |
 |**401** | Unauthorized |  -  |
+|**500** | The leases or the core networks could not be read from the database (Docker being unreachable is a warning, not an error) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ProfileConflict } from '../../api'
 import { extractErrorMessage } from '../../apiClient'
 import { Button, ui } from '../LabUi'
+import NumberInput from '../NumberInput'
 import styles from './profiles.module.css'
 
 export { styles as ps }
@@ -94,14 +95,14 @@ export function BulkCreate({ disabled, title, onCreate }: { disabled?: boolean; 
   }
   return (
     <span className={styles.bulk}>
-      <input
+      <NumberInput
         className={ui.select}
-        type="number"
+        integer
         min={1}
         max={500}
         value={count}
         disabled={disabled}
-        onChange={(e) => setCount(Math.trunc(Number(e.target.value)))}
+        onChange={setCount}
         aria-label="How many copies"
         title="How many copies (1-500)"
       />
