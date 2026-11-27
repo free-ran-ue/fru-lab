@@ -23,30 +23,17 @@ import (
 	dockerclient "github.com/moby/moby/client"
 )
 
-// The lab core's AMF / UPF addresses on cn-ran (see the free5gc
-// templates), and the shared networks a lab-core gNB joins.
-const (
-	labAmfIp = "10.0.1.3"
-	labUpfIp = "10.0.1.5"
-
-	CnRanNetwork = "frulab-cn-ran"
-	RanUeNetwork = "frulab-ran-ue"
-)
-
-// A lab-core gNB profile's N2/N3 address (n2Ip) is in GnbN2IpFirst ..
-// GnbN2IpLast; the lower cn-ran addresses are kept for the gateway and the
-// core's NFs. Its ran-ue address is picked at deploy from
-// gnbRanIpFirst .. gnbRanIpLast.
-var (
-	GnbN2IpFirst  = netip.MustParseAddr("10.0.1.20")
-	GnbN2IpLast   = netip.MustParseAddr("10.0.1.254")
-	gnbRanIpFirst = netip.MustParseAddr("10.0.2.200")
-	gnbRanIpLast  = netip.MustParseAddr("10.0.2.250")
-)
+// A lab-type gNB's N2/N3 address is leased at deploy from the gnb-n2
+// range of its core's cn-ran pool (see GnbCnRan), its ran-ue address from
+// the gnb-ran range of the ran-ue pool (see ipamPlan.go).
 
 // GnbRanIpPreview is the ran-ue address a config preview shows for a gNB
-// that is not deployed (the real one is picked at deploy).
-var GnbRanIpPreview = gnbRanIpFirst.String()
+// that is not deployed (the real one is leased at deploy): the first of
+// the gnb-ran range.
+var GnbRanIpPreview = func() string {
+	r, _ := ranUePool().Range(RangeGnbRan)
+	return r.First.String()
+}()
 
 // DefaultGnbProfile is the default values of a new gNB profile.
 func DefaultGnbProfile() model.GnbProfile {
@@ -60,7 +47,6 @@ func DefaultGnbProfile() model.GnbProfile {
 		Sst:      "1",
 		Sd:       "010203",
 		Core:     model.GnbCoreLab,
-		N2Ip:     GnbN2IpFirst.String(),
 		LogLevel: "info",
 	}
 }
@@ -73,8 +59,10 @@ type gnbAddresses struct {
 	RanUeIp, ApiIp   string
 }
 
-// gnbAddressesFor are p's addresses when UEs dial it at ranIp (lab core;
-// on an external core everything is the host address).
+// gnbAddressesFor are p's addresses when UEs dial it at ranIp. A lab-type
+// gNB listens on p.N2Ip (the assigned address) and dials p.AmfIp / p.UpfIp
+// (the lab free5GC's when empty); on an external core everything is the
+// host address.
 func gnbAddressesFor(p *model.GnbProfile, ranIp string) gnbAddresses {
 	if p.Core == model.GnbCoreExternal {
 		return gnbAddresses{
@@ -82,8 +70,16 @@ func gnbAddressesFor(p *model.GnbProfile, ranIp string) gnbAddresses {
 			RanN2Ip: p.HostIp, RanN3Ip: p.HostIp, RanUeIp: p.HostIp, ApiIp: p.HostIp,
 		}
 	}
+	amfIp, upfIp := p.AmfIp, p.UpfIp
+	lab := LabCnRan()
+	if amfIp == "" {
+		amfIp = lab.AmfIp
+	}
+	if upfIp == "" {
+		upfIp = lab.UpfIp
+	}
 	return gnbAddresses{
-		AmfIp: labAmfIp, AmfPort: 38412, UpfIp: labUpfIp, UpfPort: 2152,
+		AmfIp: amfIp, AmfPort: 38412, UpfIp: upfIp, UpfPort: 2152,
 		RanN2Ip: p.N2Ip, RanN3Ip: p.N2Ip, RanUeIp: ranIp, ApiIp: p.N2Ip,
 	}
 }
@@ -130,9 +126,10 @@ logger:
   level: "{{.P.LogLevel}}" # error, warn, info, debug, trace, test
 `))
 
-// gnbComposeTemplate is a profile gNB's compose file: on the lab networks
-// at fixed addresses, or on the host network for an external core (so it
-// reaches any core the host can and UEs reach it at the host's address).
+// gnbComposeTemplate is a profile gNB's compose file: on its core's cn-ran
+// network and the shared ran-ue network at fixed addresses, or on the host
+// network for an external core (so it reaches any core the host can and
+// UEs reach it at the host's address).
 var gnbComposeTemplate = template.Must(template.New("compose").Parse(`services:
   gnb:
     container_name: {{.Container}}
@@ -152,7 +149,7 @@ var gnbComposeTemplate = template.Must(template.New("compose").Parse(`services:
 networks:
   cn-ran:
     external: true
-    name: ` + CnRanNetwork + `
+    name: {{.CnRan}}
   ran-ue:
     external: true
     name: ` + RanUeNetwork + `
@@ -170,13 +167,15 @@ func RenderGnbConfig(p *model.GnbProfile, ranIp string) (string, error) {
 	return buf.String(), err
 }
 
-func renderGnbCompose(container string, p *model.GnbProfile, ranIp string) (string, error) {
+// renderGnbCompose is the compose file of p's gNB as container; a lab-type
+// one joins cn-ran network cnRan.
+func renderGnbCompose(container string, p *model.GnbProfile, ranIp, cnRan string) (string, error) {
 	var buf bytes.Buffer
 	err := gnbComposeTemplate.Execute(&buf, struct {
-		Container   string
-		External    bool
-		N2Ip, RanIp string
-	}{Container: container, External: p.Core == model.GnbCoreExternal, N2Ip: p.N2Ip, RanIp: ranIp})
+		Container          string
+		External           bool
+		N2Ip, RanIp, CnRan string
+	}{Container: container, External: p.Core == model.GnbCoreExternal, N2Ip: p.N2Ip, RanIp: ranIp, CnRan: cnRan})
 	return buf.String(), err
 }
 
@@ -256,30 +255,44 @@ func (c *composeContext) LockGnbDeploys() func() {
 }
 
 // UpGnbInstance deploys the gNB of profile p (which must have an ID) into
-// <workDir>/gnb-<id>. On the lab core its ran-ue address is the lowest
-// free one of the gNB range. A failed deploy leaves nothing behind. The
+// <workDir>/gnb-<id>. A lab-type gNB joins cn-ran pool on (the lab
+// free5GC's when nil) at its leased address of the gnb-n2 range there
+// (see ipamContext.Allocate: the same one as last time, else the lowest
+// free one), dials that core's AMF / UPF, and gets its leased address of
+// the gnb-ran range of ran-ue; an external-core one runs on the host
+// network. A failed deploy leaves nothing behind but its leases. The
 // caller holds LockGnbDeploys.
-func (c *composeContext) UpGnbInstance(ctx context.Context, p *model.GnbProfile) (*model.GnbDeployment, error) {
+func (c *composeContext) UpGnbInstance(ctx context.Context, prof *model.GnbProfile, on *GnbCnRan) (*model.GnbDeployment, error) {
+	p := *prof
 	target := GnbInstanceTarget(p.ID)
-	ranIp, n2Ip, amfIp := p.HostIp, p.HostIp, p.AmfIp
+	cnRan := ""
+	d := &model.GnbDeployment{
+		ProfileID: p.ID, ProfileName: p.Name, Core: p.Core, AmfIp: p.AmfIp,
+		HostIp: p.HostIp, HostInterface: p.HostInterface,
+		GnbID: p.GnbID, GnbName: p.GnbName, Sd: p.Sd, N2Ip: p.HostIp, RanIp: p.HostIp,
+		CoreNetwork: p.CoreNetwork,
+	}
 	if p.Core != model.GnbCoreExternal {
-		used, err := c.usedRanUeIps(ctx, target)
+		if on == nil {
+			lab := LabCnRan()
+			on = &lab
+		}
+		ranIp, err := c.ipam.Allocate(ctx, ranUePool(), RangeGnbRan, target, LeaseRoleRan)
 		if err != nil {
 			return nil, err
 		}
-		addr, ok := PickFreeAddr(gnbRanIpFirst, gnbRanIpLast, func(a netip.Addr) bool { return used[a] })
-		if !ok {
-			return nil, fmt.Errorf("no free ran-ue address left in %s - %s", gnbRanIpFirst, gnbRanIpLast)
+		n2Ip, err := c.ipam.Allocate(ctx, on.pool, RangeGnbN2, target, LeaseRoleN2)
+		if err != nil {
+			return nil, err
 		}
-		ranIp, n2Ip, amfIp = addr.String(), p.N2Ip, labAmfIp
+		p.N2Ip, p.AmfIp, p.UpfIp = n2Ip.String(), on.AmfIp, on.UpfIp
+		p.HostIp, p.HostInterface = "", ""
+		cnRan = on.Network
+		d.AmfIp, d.HostIp, d.HostInterface = on.AmfIp, "", ""
+		d.N2Ip, d.RanIp, d.CoreNetwork = p.N2Ip, ranIp.String(), on.CoreNetwork
 	}
 
-	d := &model.GnbDeployment{
-		ProfileID: p.ID, ProfileName: p.Name, Core: p.Core, AmfIp: amfIp,
-		HostIp: p.HostIp, HostInterface: p.HostInterface,
-		GnbID: p.GnbID, GnbName: p.GnbName, Sd: p.Sd, N2Ip: n2Ip, RanIp: ranIp,
-	}
-	if err := c.materializeGnbInstance(target, p, d); err != nil {
+	if err := c.materializeGnbInstance(target, &p, d, cnRan); err != nil {
 		c.removeGnbInstanceDir(target)
 		return nil, err
 	}
@@ -288,7 +301,7 @@ func (c *composeContext) UpGnbInstance(ctx context.Context, p *model.GnbProfile)
 		c.removeGnbInstanceDir(target)
 		return nil, err
 	}
-	c.CtxLog.Infof("Deploying %s with profile %q (core %s, n2 %s, ran-ue %s)", target, p.Name, p.Core, n2Ip, ranIp)
+	c.CtxLog.Infof("Deploying %s with profile %q (core %s %s, n2 %s, ran-ue %s)", target, p.Name, p.Core, d.CoreNetwork, d.N2Ip, d.RanIp)
 	if err := c.up(ctx, project); err != nil {
 		c.removeGnbInstanceDir(target)
 		return nil, err
@@ -296,12 +309,12 @@ func (c *composeContext) UpGnbInstance(ctx context.Context, p *model.GnbProfile)
 	return d, nil
 }
 
-func (c *composeContext) materializeGnbInstance(target string, p *model.GnbProfile, d *model.GnbDeployment) error {
+func (c *composeContext) materializeGnbInstance(target string, p *model.GnbProfile, d *model.GnbDeployment, cnRan string) error {
 	cfg, err := RenderGnbConfig(p, d.RanIp)
 	if err != nil {
 		return fmt.Errorf("failed to render gnb config: %v", err)
 	}
-	compose, err := renderGnbCompose(target, p, d.RanIp)
+	compose, err := renderGnbCompose(target, p, d.RanIp, cnRan)
 	if err != nil {
 		return fmt.Errorf("failed to render gnb compose file: %v", err)
 	}
@@ -392,6 +405,9 @@ func (c *composeContext) GnbInstanceDeployment(profileID string) *model.GnbDeplo
 // docker network name to the container's name; empty when the network
 // does not exist.
 func (c *composeContext) NetworkAddresses(ctx context.Context, name string) (map[netip.Addr]string, error) {
+	if c.inspectNetworkFn != nil {
+		return c.inspectNetworkFn(ctx, name)
+	}
 	res, err := c.dockerCli.Client().NetworkInspect(ctx, name, dockerclient.NetworkInspectOptions{})
 	if err != nil {
 		if cerrdefs.IsNotFound(err) {
@@ -408,42 +424,31 @@ func (c *composeContext) NetworkAddresses(ctx context.Context, name string) (map
 	return out, nil
 }
 
-// usedRanUeIps are the ran-ue addresses a new gNB must not take: every
-// container's on the network, and every other deployed profile gNB's.
-func (c *composeContext) usedRanUeIps(ctx context.Context, exceptTarget string) (map[netip.Addr]bool, error) {
-	attached, err := c.NetworkAddresses(ctx, RanUeNetwork)
-	if err != nil {
-		return nil, err
-	}
-	used := make(map[netip.Addr]bool, len(attached))
-	for a, name := range attached {
-		if name != exceptTarget {
-			used[a] = true
-		}
-	}
+// gnbLeaseRecords are the addresses of every deployed lab-type profile
+// gNB as leases, for IPAM to adopt the ones fru-lab handed out before it
+// recorded leases.
+func (c *composeContext) gnbLeaseRecords() []IpamLease {
 	ids, err := c.ListGnbInstances()
 	if err != nil {
-		return nil, err
+		return nil
 	}
+	var out []IpamLease
 	for _, id := range ids {
-		if GnbInstanceTarget(id) == exceptTarget {
+		d := c.GnbInstanceDeployment(id)
+		if d == nil || d.Core == model.GnbCoreExternal {
 			continue
 		}
-		if d := c.GnbInstanceDeployment(id); d != nil {
-			if a, err := netip.ParseAddr(d.RanIp); err == nil {
-				used[a] = true
-			}
+		target := GnbInstanceTarget(id)
+		pool := PoolCnRan
+		if d.CoreNetwork != "" {
+			pool = PoolCnRan + "-" + d.CoreNetwork
+		}
+		if d.N2Ip != "" {
+			out = append(out, IpamLease{Pool: pool, Addr: d.N2Ip, Owner: target, Role: LeaseRoleN2})
+		}
+		if d.RanIp != "" {
+			out = append(out, IpamLease{Pool: PoolRanUe, Addr: d.RanIp, Owner: target, Role: LeaseRoleRan})
 		}
 	}
-	return used, nil
-}
-
-// PickFreeAddr is the lowest address in first .. last that is not used.
-func PickFreeAddr(first, last netip.Addr, used func(netip.Addr) bool) (netip.Addr, bool) {
-	for a := first; a.IsValid() && a.Compare(last) <= 0; a = a.Next() {
-		if !used(a) {
-			return a, true
-		}
-	}
-	return netip.Addr{}, false
+	return out
 }

@@ -6,7 +6,6 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { extractErrorMessage } from '../../apiClient'
 import LabCanvas from '../../lab/canvas/LabCanvas'
 import { ID, buildCoreGraph } from '../../lab/canvas/graph'
-import { LAB_CORE } from '../../lab/useCoreNetworks'
 import { useLab } from '../../lab/LabContext'
 import { Actions, Button, Dot, Hint, InspectorHead, KV, Section, Segmented, ui } from '../../lab/LabUi'
 import { FREE5GC_TEMPLATE_OPTIONS, type Free5gcTemplate } from '../../lab/free5gcTemplate'
@@ -34,11 +33,11 @@ export default function CoreNetworkPage() {
   const blocked = coreStopped ? undefined : lab.blocked.coreStop
   // the core as one node: N2 / N3 to the lab gNBs, N6 to its data network
   const graph = buildCoreGraph({
-    ...LAB_CORE,
+    ...lab.labCore,
     id: ID.core,
     sub: `${templateLabel(lab.runningTemplate ?? picked)}${coreStopped ? ' · stopped' : ''}`,
     status: nodes.core.status,
-    gnbs: lab.gnbs.filter((g) => g.core === 'lab').map((g) => ({ id: g.id, name: g.profileName, status: g.status })),
+    gnbs: lab.labGnbs.map((g) => ({ id: g.id, name: g.profileName, status: g.status })),
   })
   const nfs = free5gc.networkFunctions
   const template = lab.runningTemplate ?? picked
@@ -108,7 +107,7 @@ export default function CoreNetworkPage() {
     <AppLayout crumbs={[{ label: 'free5GC' }]} fill>
       <Workbench
         title="free5GC"
-        status={<><LabCoreTabs /><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
+        status={<><LabCoreTabs base="/core-network/lab" label="free5GC" /><span>free5GC <b>{nodes.core.status}</b></span>{nfs.length > 0 && <span>NFs <b>{lab.healthyNfs}/{nfs.length}</b></span>}</>}
         canvas={(
           <LabCanvas
             label="The lab free5GC as one node: N2 and N3 from the lab gNBs, N6 to its data network."

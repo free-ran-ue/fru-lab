@@ -65,11 +65,15 @@ func (t composeTarget) template(variant string) composeTemplate {
 	return t.composeTemplate
 }
 
-// sharedNetwork describes a docker network that is not owned by any single
-// target's lifecycle (e.g. cn-ran, shared between free5gc and free-ran-ue).
+// sharedNetwork is how fru-lab creates a docker network that is not owned
+// by any single target's lifecycle (e.g. cn-ran, shared between free5gc
+// and free-ran-ue): an IPAM pool's network (see IpamPool.network).
 type sharedNetwork struct {
-	name       string
-	subnet     string
+	name    string
+	subnet  string
+	gateway string
+	// the IPAM ip-range Docker hands addresses out of; "" for the subnet
+	ipRange    string
 	bridgeName string
 }
 
@@ -80,6 +84,8 @@ type composeContextIE struct {
 	// DeployTimeout bounds one deploy; a deploy that fails or runs over is
 	// taken down again.
 	DeployTimeout time.Duration
+	// Ipam is the address plan and leases every address comes from.
+	Ipam *ipamContext
 
 	*logger.BackendLogger
 }
@@ -92,7 +98,8 @@ type composeContext struct {
 	webconsolePort int
 	deployTimeout  time.Duration
 	targets        map[string]composeTarget
-	sharedNetworks []sharedNetwork
+	// every address and network comes from the IPAM plan
+	ipam *ipamContext
 
 	// guards the materialize-then-load sequence in loadProject: Up() writes
 	// the template's files to workDir while docker is bind-mounting them
@@ -106,9 +113,13 @@ type composeContext struct {
 	networksReady bool
 
 	// gnbDeployMu serializes profile gNB deploys: checking what a gNB may
-	// use, picking its ran-ue address and bringing it up (see
-	// LockGnbDeploys).
+	// use, leasing its addresses and bringing it up (see LockGnbDeploys).
 	gnbDeployMu sync.Mutex
+
+	// test hooks standing in for the Docker daemon's networks; nil uses
+	// Docker
+	inspectNetworkFn func(ctx context.Context, name string) (map[netip.Addr]string, error)
+	createNetworkFn  func(ctx context.Context, n sharedNetwork) error
 
 	*logger.BackendLogger
 }
@@ -135,23 +146,18 @@ func newComposeContext(ie *composeContextIE) (*composeContext, error) {
 		webconsolePort: ie.WebconsolePort,
 		deployTimeout:  ie.DeployTimeout,
 		targets:        defaultTargets(),
-		sharedNetworks: []sharedNetwork{
-			// free5gc (amf/upf) <-> gnb
-			{name: "frulab-cn-ran", subnet: "10.0.1.0/24", bridgeName: "docker-cn-ran"},
-			// gnb <-> ue (ue isn't a deploy target yet, but the network is
-			// shared infrastructure independent of either target's lifecycle,
-			// same reasoning as cn-ran, so it's created up front too)
-			{name: "frulab-ran-ue", subnet: "10.0.2.0/24", bridgeName: "docker-ran-ue"},
-		},
+		ipam:           ie.Ipam,
 
 		BackendLogger: ie.BackendLogger,
 	}
+	c.ipam.inspect = c.NetworkAddresses
+	c.ipam.dockerNetworks = c.dockerNetworkSubnets
 
-	// fru-lab still starts when the Docker daemon is not reachable: the
-	// deploy pages then fail with the daemon's error, and the networks are
-	// created on the next deploy.
+	// fru-lab still starts when the Docker daemon is not reachable (or a
+	// network cannot be created): the deploy pages then fail with the
+	// error, and the networks are created on the next deploy.
 	if err := c.networks(context.Background()); err != nil {
-		c.CtxLog.Warnf("Docker is not reachable, deploying free5GC/gNB/UE will fail until it is: %v", err)
+		c.CtxLog.Warnf("The shared networks are not ready, deploying free5GC/gNB/UE will fail until they are: %v", err)
 	}
 
 	return c, nil
@@ -194,35 +200,95 @@ func (c *composeContext) networks(ctx context.Context) error {
 	return nil
 }
 
+// ensureSharedNetworks creates the networks of the plan fru-lab creates
+// up front: the lab core's cn-ran and ran-ue.
 func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
-	apiClient := c.dockerCli.Client()
-
-	for _, n := range c.sharedNetworks {
-		if _, err := apiClient.NetworkInspect(ctx, n.name, dockerclient.NetworkInspectOptions{}); err == nil {
-			c.CtxLog.Debugf("Shared network %s already exists", n.name)
-			continue
-		}
-
-		subnet, err := netip.ParsePrefix(n.subnet)
-		if err != nil {
-			return fmt.Errorf("invalid subnet %s for network %s: %v", n.subnet, n.name, err)
-		}
-
-		c.CtxLog.Infof("Creating shared network %s (%s)", n.name, n.subnet)
-		if _, err := apiClient.NetworkCreate(ctx, n.name, dockerclient.NetworkCreateOptions{
-			Driver: "bridge",
-			IPAM: &dockernetwork.IPAM{
-				Config: []dockernetwork.IPAMConfig{{Subnet: subnet}},
-			},
-			Options: map[string]string{
-				"com.docker.network.bridge.name": n.bridgeName,
-			},
-		}); err != nil {
-			return fmt.Errorf("failed to create network %s: %v", n.name, err)
+	for _, p := range sharedPools() {
+		if err := c.ensureNetwork(ctx, p); err != nil {
+			return err
 		}
 	}
-
 	return nil
+}
+
+// ensureNetwork creates the docker network of pool p unless it exists,
+// refusing when its subnet overlaps another docker network or a host
+// network. A network that exists is left as it is: one created before the
+// plan had IPAM ip-ranges (frulab-ran-ue without one, so Docker hands UEs
+// any address of the subnet) keeps working, and only gets its ip-range
+// when it is created again (after fru-lab removed it on shutdown).
+func (c *composeContext) ensureNetwork(ctx context.Context, p IpamPool) error {
+	n := p.network()
+	if c.createNetworkFn != nil {
+		if err := c.ipam.checkOverlaps(ctx, p); err != nil {
+			return err
+		}
+		return c.createNetworkFn(ctx, n)
+	}
+	apiClient := c.dockerCli.Client()
+	if _, err := apiClient.NetworkInspect(ctx, n.name, dockerclient.NetworkInspectOptions{}); err == nil {
+		c.CtxLog.Debugf("Shared network %s already exists", n.name)
+		return nil
+	}
+	if err := c.ipam.checkOverlaps(ctx, p); err != nil {
+		return err
+	}
+
+	ipamConfig, err := n.ipamConfig()
+	if err != nil {
+		return err
+	}
+	c.CtxLog.Infof("Creating shared network %s (%s, gateway %s, ip-range %q)", n.name, n.subnet, n.gateway, n.ipRange)
+	if _, err := apiClient.NetworkCreate(ctx, n.name, dockerclient.NetworkCreateOptions{
+		Driver: "bridge",
+		IPAM: &dockernetwork.IPAM{
+			Config: []dockernetwork.IPAMConfig{ipamConfig},
+		},
+		Options: map[string]string{
+			"com.docker.network.bridge.name": n.bridgeName,
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to create network %s: %v", n.name, err)
+	}
+	return nil
+}
+
+// ipamConfig is the Docker IPAM config n is created with.
+func (n sharedNetwork) ipamConfig() (dockernetwork.IPAMConfig, error) {
+	var cfg dockernetwork.IPAMConfig
+	var err error
+	if cfg.Subnet, err = netip.ParsePrefix(n.subnet); err != nil {
+		return cfg, fmt.Errorf("invalid subnet %s for network %s: %v", n.subnet, n.name, err)
+	}
+	if n.gateway != "" {
+		if cfg.Gateway, err = netip.ParseAddr(n.gateway); err != nil {
+			return cfg, fmt.Errorf("invalid gateway %s for network %s: %v", n.gateway, n.name, err)
+		}
+	}
+	if n.ipRange != "" {
+		if cfg.IPRange, err = netip.ParsePrefix(n.ipRange); err != nil {
+			return cfg, fmt.Errorf("invalid ip-range %s for network %s: %v", n.ipRange, n.name, err)
+		}
+	}
+	return cfg, nil
+}
+
+// dockerNetworkSubnets are the IPv4 subnets of every docker network by
+// name.
+func (c *composeContext) dockerNetworkSubnets(ctx context.Context) (map[string][]netip.Prefix, error) {
+	list, err := c.dockerCli.Client().NetworkList(ctx, dockerclient.NetworkListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]netip.Prefix, len(list.Items))
+	for _, item := range list.Items {
+		for _, cfg := range item.IPAM.Config {
+			if cfg.Subnet.IsValid() && cfg.Subnet.Addr().Is4() {
+				out[item.Name] = append(out[item.Name], cfg.Subnet)
+			}
+		}
+	}
+	return out, nil
 }
 
 // loadProject parses a target's docker-compose.yaml into a *types.Project,
@@ -248,6 +314,9 @@ func (c *composeContext) ensureSharedNetworks(ctx context.Context) error {
 func (c *composeContext) loadProject(ctx context.Context, target string, variant string, forceMaterialize bool) (*types.Project, error) {
 	if IsGnbInstance(target) {
 		return c.loadGnbInstanceProject(ctx, target)
+	}
+	if IsCoreInstance(target) {
+		return c.loadCoreInstanceProject(ctx, target)
 	}
 	t, ok := c.targets[target]
 	if !ok {
@@ -278,7 +347,10 @@ func (c *composeContext) loadProject(ctx context.Context, target string, variant
 		if err != nil {
 			return nil, fmt.Errorf("failed to open template for target %s: %v", target, err)
 		}
-		if err := os.CopyFS(workingDir, templateFS); err != nil {
+		// the lab free5GC: the plan's lab cn-ran / SBI pools, no
+		// container name prefix
+		render := labCoreRender()
+		if err := renderTemplateFS(templateFS, workingDir, render, render.funcs()); err != nil {
 			return nil, fmt.Errorf("failed to materialize template for target %s: %v", target, err)
 		}
 		// go:embed drops the executable bit (embed.FS always reports a
@@ -364,6 +436,12 @@ func restoreScriptPermissions(dir string) error {
 }
 
 func (c *composeContext) Up(ctx context.Context, target string, templateVariant string) error {
+	if target == constant.DEPLOY_TARGET_FREE5GC {
+		// its compose project creates its SBI network
+		if err := c.ipam.checkOverlaps(ctx, labSbiPool()); err != nil {
+			return err
+		}
+	}
 	project, err := c.loadProject(ctx, target, templateVariant, true)
 	if err != nil {
 		return err
@@ -404,7 +482,18 @@ func (c *composeContext) up(ctx context.Context, project *types.Project) error {
 	if downErr := c.service.Down(downCtx, project.Name, api.DownOptions{Project: project}); downErr != nil {
 		c.CtxLog.Errorf("Failed to take %s down after the failed deploy: %v", project.Name, downErr)
 	}
-	return explainUpError(err, c.webconsolePort)
+	return explainUpError(err, c.publishedWebconsolePort(project))
+}
+
+// publishedWebconsolePort is the host port project publishes its
+// webconsole on; the configured one when it has none.
+func (c *composeContext) publishedWebconsolePort(project *types.Project) int {
+	if svc, ok := project.Services[webconsoleService]; ok && len(svc.Ports) > 0 {
+		if port, err := strconv.Atoi(svc.Ports[0].Published); err == nil {
+			return port
+		}
+	}
+	return c.webconsolePort
 }
 
 // explainUpError adds what to do about the usual cause of a failed deploy:
@@ -418,6 +507,9 @@ func explainUpError(err error, webconsolePort int) error {
 }
 
 func (c *composeContext) Down(ctx context.Context, target string) error {
+	if IsCoreInstance(target) {
+		return c.downCoreInstance(ctx, target)
+	}
 	project, err := c.loadProject(ctx, target, "", false)
 	if err != nil {
 		return err
@@ -437,6 +529,10 @@ type ComposeStatusResult struct {
 func (c *composeContext) Status(ctx context.Context, target string) (*ComposeStatusResult, error) {
 	// a profile gNB that is not deployed has no working dir; it is stopped
 	if IsGnbInstance(target) && !c.gnbInstanceMaterialized(target) {
+		return &ComposeStatusResult{Services: []model.ServiceStatus{}}, nil
+	}
+	// so is a free5gc core network that never was
+	if IsCoreInstance(target) && !c.coreInstanceMaterialized(target) {
 		return &ComposeStatusResult{Services: []model.ServiceStatus{}}, nil
 	}
 	project, err := c.loadProject(ctx, target, "", false)
@@ -571,9 +667,10 @@ const teardownTimeout = 2 * time.Minute
 const ueProjectPrefix = "frulab-ue-"
 
 // teardown runs on shutdown and removes everything fru-lab created on the
-// Docker host: the UE, gNB and core compose projects (in that order, the
-// one the backend enforces for single stops), then the shared networks and
-// their host bridge interfaces. A shared network cannot be removed while a
+// Docker host: the UE, gNB, free5gc core network and lab core compose
+// projects (in that order, the one the backend enforces for single stops),
+// then the shared networks, every core network's cn-ran network and their
+// host bridge interfaces. A shared network cannot be removed while a
 // container is still attached, so the projects go first.
 func (c *composeContext) teardown(ctx context.Context) {
 	projects, err := c.deployedProjects(ctx)
@@ -615,49 +712,83 @@ func (c *composeContext) deployedProjects(ctx context.Context) (map[string]bool,
 var legacyGnbProjects = []string{"frulab-gnb-slice1", "frulab-gnb-slice2", "frulab-gnb"}
 
 // teardownOrder picks fru-lab's own projects out of projects: UE instances
-// first, then the profile gNBs, any legacy gNBs, then the core.
+// first, then the profile gNBs, any legacy gNBs, then the free5gc core
+// networks, then the lab core.
 func teardownOrder(projects map[string]bool, targets map[string]composeTarget) []string {
+	matching := func(match func(string) bool) []string {
+		out := make([]string, 0)
+		for name := range projects {
+			if match(name) {
+				out = append(out, name)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
 	var order []string
-	ues := make([]string, 0)
-	for name := range projects {
-		if strings.HasPrefix(name, ueProjectPrefix) {
-			ues = append(ues, name)
-		}
-	}
-	sort.Strings(ues)
-	order = append(order, ues...)
-	gnbs := make([]string, 0)
-	for name := range projects {
-		if gnbInstanceProject.MatchString(name) {
-			gnbs = append(gnbs, name)
-		}
-	}
-	sort.Strings(gnbs)
-	order = append(order, gnbs...)
-	for _, name := range append(append([]string{}, legacyGnbProjects...), targets[constant.DEPLOY_TARGET_FREE5GC].projectName) {
+	order = append(order, matching(func(name string) bool { return strings.HasPrefix(name, ueProjectPrefix) })...)
+	order = append(order, matching(gnbInstanceProject.MatchString)...)
+	for _, name := range legacyGnbProjects {
 		if projects[name] {
 			order = append(order, name)
 		}
 	}
+	order = append(order, matching(coreInstanceProject.MatchString)...)
+	if name := targets[constant.DEPLOY_TARGET_FREE5GC].projectName; projects[name] {
+		order = append(order, name)
+	}
 	return order
 }
 
-// removeSharedNetworks removes the shared docker networks; docker deletes
-// their bridge interfaces with them. A bridge interface that is somehow
-// left on the host (it is only visible when fru-lab runs on the host, not
-// in a container) is deleted too.
+// removeSharedNetworks removes the networks of the plan fru-lab creates
+// itself (the shared ones and the cn-ran network of every free5gc core
+// network), plus any core cn-ran network left from a core network deleted
+// meanwhile; docker deletes their bridge interfaces with them. A bridge
+// interface that is somehow left on the host (it is only visible when
+// fru-lab runs on the host, not in a container) is deleted too.
 func (c *composeContext) removeSharedNetworks(ctx context.Context) {
 	c.networksMu.Lock()
 	defer c.networksMu.Unlock()
 
 	apiClient := c.dockerCli.Client()
-	for _, n := range c.sharedNetworks {
+	networks := make([]sharedNetwork, 0)
+	if plan, err := c.ipam.plan(); err != nil {
+		c.CtxLog.Errorf("Failed to read the address plan, removing the shared networks only: %v", err)
+		for _, p := range sharedPools() {
+			networks = append(networks, p.network())
+		}
+	} else {
+		for _, p := range plan {
+			if p.managed {
+				networks = append(networks, p.network())
+			}
+		}
+	}
+	list, err := apiClient.NetworkList(ctx, dockerclient.NetworkListOptions{
+		Filters: dockerclient.Filters{}.Add("name", coreCnRanPrefix),
+	})
+	if err != nil {
+		c.CtxLog.Errorf("Failed to list the core networks' cn-ran networks: %v", err)
+	} else {
+		names := make([]string, 0, len(list.Items))
+		for _, item := range list.Items {
+			names = append(names, item.Name)
+		}
+		networks = append(networks, coreCnRanNetworks(names)...)
+	}
+
+	seen := map[string]bool{}
+	for _, n := range networks {
+		if seen[n.name] {
+			continue
+		}
+		seen[n.name] = true
 		if _, err := apiClient.NetworkRemove(ctx, n.name, dockerclient.NetworkRemoveOptions{}); err != nil {
 			if !cerrdefs.IsNotFound(err) {
 				c.CtxLog.Errorf("Failed to remove network %s: %v", n.name, err)
 			}
 		} else {
-			c.CtxLog.Infof("Removed shared network %s", n.name)
+			c.CtxLog.Infof("Removed network %s", n.name)
 		}
 
 		if _, err := net.InterfaceByName(n.bridgeName); err != nil {
@@ -742,7 +873,7 @@ func (c *composeContext) loadUeProject(ctx context.Context, instanceID string, c
 		if err := renderTemplateFS(templateFS, workingDir, struct {
 			InstanceID string
 			*UeInstanceConfig
-		}{InstanceID: instanceID, UeInstanceConfig: cfg}); err != nil {
+		}{InstanceID: instanceID, UeInstanceConfig: cfg}, nil); err != nil {
 			return nil, fmt.Errorf("failed to materialize ue instance %s: %v", instanceID, err)
 		}
 		if err := restoreScriptPermissions(workingDir); err != nil {
@@ -768,9 +899,10 @@ func (c *composeContext) loadUeProject(ctx context.Context, instanceID string, c
 }
 
 // renderTemplateFS walks every file under src, rendering *.tmpl files as Go
-// templates against data (writing the result without the .tmpl suffix) and
-// copying every other file verbatim into dest.
-func renderTemplateFS(src fs.FS, dest string, data any) error {
+// templates against data and funcs (writing the result without the .tmpl
+// suffix; a missing key is an error) and copying every other file verbatim
+// into dest.
+func renderTemplateFS(src fs.FS, dest string, data any, funcs template.FuncMap) error {
 	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -794,7 +926,7 @@ func renderTemplateFS(src fs.FS, dest string, data any) error {
 		}
 
 		destPath = strings.TrimSuffix(destPath, ".tmpl")
-		tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
+		tmpl, err := template.New(filepath.Base(path)).Option("missingkey=error").Funcs(funcs).Parse(string(content))
 		if err != nil {
 			return fmt.Errorf("failed to parse template file %s: %v", path, err)
 		}

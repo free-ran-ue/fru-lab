@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLab } from './LabContext'
 import { Button } from './LabUi'
+import { isFree5gcCore } from './useLab'
 import styles from './deploy-menu.module.css'
 
 export interface PickItem {
@@ -112,15 +113,17 @@ interface CoreMenuProps {
 }
 
 // CoreMenu is a gNB's Deploy button: it opens the cores to deploy onto -
-// the profile's own core first, then free5GC, then every enabled core
-// network - and picking one deploys.
+// the profile's own core first, then free5GC, every free5GC core network
+// (each only while it runs), then every enabled core outside the lab - and
+// picking one deploys.
 export function CoreMenu({ label = 'Deploy', small = true, busy, blocked, own, onPick }: CoreMenuProps) {
   const lab = useLab()
   const labDown = lab.nodes.core.status !== 'running' ? 'free5GC is not running' : undefined
   const items: PickItem[] = [
     own ? { value: '', label: "Profile's core", sub: own.text, disabled: own.blocked } : { value: '', label: "Each profile's own core" },
     { value: 'lab', label: 'free5GC', sub: 'the lab core', disabled: labDown },
-    ...lab.coreNetworks.networks.filter((n) => n.enabled && n.id).map((n) => ({ value: n.id!, label: n.name, sub: `AMF ${n.n2Ip}` })),
+    ...lab.free5gcCores.map((c) => ({ value: c.id, label: c.name, sub: `free5GC on this host · AMF ${c.network.n2Ip ?? ''}`, disabled: c.status !== 'running' ? `${c.name} is not running` : undefined })),
+    ...lab.coreNetworks.networks.filter((n) => !isFree5gcCore(n) && n.enabled && n.id).map((n) => ({ value: n.id!, label: n.name, sub: `external · AMF ${n.n2Ip ?? ''}` })),
   ]
   return <PickMenu label={label} title="Deploy onto core" items={items} small={small} busy={busy} blocked={blocked} onPick={onPick} />
 }

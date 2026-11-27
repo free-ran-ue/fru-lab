@@ -12,7 +12,7 @@ import { useLab } from '../../lab/LabContext'
 import { Button, Dot, Hint, KV, Section, ui } from '../../lab/LabUi'
 import GnbProfilesPanel from '../../lab/profiles/GnbProfilesPanel'
 import { BulkCreate } from '../../lab/profiles/parts'
-import type { LabGnb } from '../../lab/useLab'
+import { isFree5gcCore, type LabGnb } from '../../lab/useLab'
 import { useStoredState } from '../../lab/useProfiles'
 import { CoreMenu } from '../../lab/GnbPicker'
 import ListToolbar from '../../lab/workbench/ListToolbar'
@@ -28,7 +28,10 @@ type Tab = 'status' | 'config'
 // copy of a saved one)
 type View = { kind: 'profile'; id: string } | { kind: 'new'; from?: string }
 
-const addrOf = (p: GnbProfile) => (p.core === 'external' ? p.hostIp : p.n2Ip) || '—'
+// a profile's N2/N3 address: the typed-in host IP on an external core;
+// on free5GC or a free5GC core network it is assigned on deploy (the
+// running gNB's deployment.n2Ip)
+const addrOf = (p: GnbProfile, g?: LabGnb) => g?.deployment?.n2Ip || g?.deployment?.hostIp || (p.core === 'external' ? p.hostIp || '—' : 'on deploy')
 
 // FreeRanPage is everything about gNBs on one page. Every gNB profile is
 // one gNB and one row. Actions sit in two fixed places only:
@@ -57,7 +60,9 @@ export default function FreeRanPage() {
   const profiles = gnbProfiles.profiles
   // the core a profile deploys onto by default
   const savedCore = (p: GnbProfile) => (p.coreNetwork ? lab.coreNetworks.networks.find((n) => n.id === p.coreNetwork) : undefined)
-  const coreOf = (p: GnbProfile) => (p.core !== 'external' ? 'free5GC' : p.coreNetwork ? (savedCore(p)?.name ?? 'a deleted core') : `external ${p.amfIp ?? ''}`)
+  const coreOf = (p: GnbProfile) => (p.coreNetwork ? (savedCore(p)?.name ?? 'a deleted core') : p.core === 'external' ? `external ${p.amfIp ?? ''}` : 'free5GC')
+  // the core a running gNB attached to
+  const coreOfGnb = (g: LabGnb) => (g.coreNetwork ? (lab.coreNetworks.networks.find((n) => n.id === g.coreNetwork)?.name ?? 'a deleted core') : g.core === 'external' ? `external ${g.deployment?.amfIp ?? ''}` : 'free5GC')
   const runningOf = (id?: string) => lab.gnbs.find((g) => g.profileId === id)
   // a UE that failed to register is up but not connected
   const connected = (id: string) => lab.upUes.filter((r) => ueGnbId(lab, r) === id && ueLive[r.ueId]?.stage !== 'failed')
@@ -80,14 +85,20 @@ export default function FreeRanPage() {
 
   // why deploying `p` onto its own core cannot happen now, if it cannot
   const deployBlocked = (p: GnbProfile) => {
-    if (p.core !== 'external') return lab.blocked.gnbDeploy
-    if (!p.coreNetwork) return undefined
-    const n = savedCore(p)
-    return !n ? 'Its core network was deleted' : !n.enabled ? `Core network ${n.name} is disabled` : undefined
+    if (p.coreNetwork) {
+      const n = savedCore(p)
+      if (!n) return 'Its core network was deleted'
+      if (isFree5gcCore(n)) {
+        const c = lab.free5gcCores.find((x) => x.id === n.id)
+        return c?.status === 'running' ? undefined : `Deploy ${n.name} (Core Network) first, or pick another core`
+      }
+      return !n.enabled ? `Core network ${n.name} is disabled` : undefined
+    }
+    return p.core === 'external' ? undefined : lab.blocked.gnbDeploy
   }
 
   // core: '' keeps the profile's, 'lab' is free5GC, else a core network id
-  const coreName = (core: string) => (core === 'lab' ? 'free5GC' : lab.coreNetworks.networks.find((n) => n.id === core)?.name)
+  const coreName = (core: string) => (core === 'lab' ? 'free5GC' : lab.coreNetworks.networks.find((n) => n.id === core)?.name ?? core)
   async function deploy(p: GnbProfile, core = '') {
     if (!p.id) return
     try {
@@ -187,7 +198,7 @@ export default function FreeRanPage() {
   }
 
   // top to bottom by profile name, A to Z, until a header is clicked
-  const shown = [...profiles].sort((a, b) => compareValues(a.name, b.name, 'asc')).filter((p) => (show === 'all' || runningOf(p.id)) && (!find || `${p.name} ${p.n2Ip ?? ''} ${p.hostIp ?? ''} ${p.gnbId}`.toLowerCase().includes(find.toLowerCase())))
+  const shown = [...profiles].sort((a, b) => compareValues(a.name, b.name, 'asc')).filter((p) => (show === 'all' || runningOf(p.id)) && (!find || `${p.name} ${addrOf(p, runningOf(p.id))} ${p.hostIp ?? ''} ${p.gnbId} ${coreOf(p)}`.toLowerCase().includes(find.toLowerCase())))
 
   const list = (
     <ItemList
@@ -196,7 +207,7 @@ export default function FreeRanPage() {
       template="minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 2.5rem"
       rows={shown.map((p) => {
         const g = runningOf(p.id)
-        return { id: p.id ?? '', status: g?.status ?? 'stopped', cells: [p.name, coreOf(p), addrOf(p), g ? connected(g.id).length : '—'], action: toggle(p), checkable: g ? 'Stop its gNB first' : true }
+        return { id: p.id ?? '', status: g?.status ?? 'stopped', cells: [p.name, g ? coreOfGnb(g) : coreOf(p), addrOf(p, g), g ? connected(g.id).length : '—'], action: toggle(p), checkable: g ? 'Stop its gNB first' : true }
       })}
       selectedId={current?.kind === 'profile' ? current.id : null}
       onSelect={pick}
@@ -206,7 +217,7 @@ export default function FreeRanPage() {
       head={(
         <ListToolbar
           onNew={() => setView({ kind: 'new' })}
-          bulk={<BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; gNB ID and N2 IP count up to the next free value` : 'Select a profile to copy'} onCreate={bulk} />}
+          bulk={<BulkCreate disabled={!profile} title={profile ? `Copy ${profile.name}; gNB ID (and the host IP on an external core) count up to the next free value` : 'Select a profile to copy'} onCreate={bulk} />}
           find={find}
           onFind={setFind}
           findLabel="Find a gNB"
@@ -235,7 +246,7 @@ export default function FreeRanPage() {
           <KV rows={[
             { k: 'Core', v: coreOf(p) },
             { k: 'gNB ID', v: p.gnbId },
-            { k: p.core === 'external' ? 'Host IP (N2/N3)' : 'N2 IP', v: addrOf(p) },
+            { k: p.core === 'external' ? 'Host IP (N2/N3)' : 'N2/N3 IP', v: p.core === 'external' ? addrOf(p) : 'assigned on deploy' },
             ...(p.core === 'external' && p.hostInterface ? [{ k: 'Host interface', v: p.hostInterface }] : []),
             { k: 'RAN IP', v: 'picked on deploy' },
             { k: 'PLMN', v: `${p.mcc}${p.mnc}` },
@@ -254,8 +265,9 @@ export default function FreeRanPage() {
       <>
         <Section title="Running">
           <KV rows={[
+            { k: 'Core', v: coreOfGnb(g) },
             { k: 'gNB ID', v: d?.gnbId || '—' },
-            { k: g.core === 'external' ? 'Host IP (N2/N3)' : 'N2 IP', v: d?.n2Ip || d?.hostIp || '—' },
+            { k: g.core === 'external' ? 'Host IP (N2/N3)' : 'N2/N3 IP (assigned)', v: d?.n2Ip || d?.hostIp || '—' },
             ...(g.core === 'external' && d?.hostInterface ? [{ k: 'Host interface', v: d.hostInterface }] : []),
             { k: 'RAN IP (auto)', v: d?.ranIp || '—' },
             { k: 'SD', v: g.sd || '—' },
@@ -316,7 +328,7 @@ export default function FreeRanPage() {
         <DetailHeader
           icon="gnb"
           name={profile.name}
-          sub={`${running ? running.name : 'not deployed'} · ${coreOf(profile)}`}
+          sub={`${running ? running.name : 'not deployed'} · ${running ? coreOfGnb(running) : coreOf(profile)}`}
           status={running?.status ?? 'stopped'}
           actions={(
             <>
@@ -343,7 +355,7 @@ export default function FreeRanPage() {
     <AppLayout crumbs={[{ label: 'gNBs' }]} fill>
       <Workbench
         title="gNBs"
-        status={<><span>profiles <b>{profiles.length}</b></span><span>running <b>{lab.gnbs.length}</b></span><span>lab core <b>{lab.nodes.core.status}</b></span>{externalAmfs.length > 0 && <span>external <b>{externalAmfs.join(', ')}</b></span>}<span>UEs connected <b>{lab.gnbs.reduce((n, g) => n + connected(g.id).length, 0)}</b></span></>}
+        status={<><span>profiles <b>{profiles.length}</b></span><span>running <b>{lab.gnbs.length}</b></span><span>lab core <b>{lab.nodes.core.status}</b></span>{lab.free5gcCores.length > 0 && <span>free5GC cores up <b>{lab.upCores.length}/{lab.free5gcCores.length}</b></span>}{externalAmfs.length > 0 && <span>external <b>{externalAmfs.join(', ')}</b></span>}<span>UEs connected <b>{lab.gnbs.reduce((n, g) => n + connected(g.id).length, 0)}</b></span></>}
         body={<Split storageKey="frulab-split-gnb-6040" defaultRatio={0.6} left={list} right={detail} leftLabel="gNB list" rightLabel="gNB detail" />}
       />
     </AppLayout>

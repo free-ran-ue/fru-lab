@@ -31,7 +31,7 @@ export default function NodeInspector({ id, onLogs, extra }: { id: string; onLog
         <KV rows={rows} />
         <Actions>
           {info.page && <Button small onClick={() => navigate(info.page!)}>Open in {VIEW[info.page] ?? info.name}</Button>}
-          {onLogs && info.kind !== 'dn' && info.kind !== 'fleet' && <Button small onClick={onLogs}>Logs</Button>}
+          {onLogs && info.kind !== 'dn' && info.kind !== 'fleet' && info.logs !== false && <Button small onClick={onLogs}>Logs</Button>}
         </Actions>
       </Section>
       {info.services && info.services.length > 0 && (

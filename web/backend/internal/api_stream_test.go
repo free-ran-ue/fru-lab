@@ -16,6 +16,9 @@ func TestValidStreamTarget(t *testing.T) {
 		{"gnb-../../x", "", false},
 		{"ue", "", false},
 		{"ue", "imsi-208930000000001", true},
+		{"core-3f2a9c1e5b7d", "", true},
+		{"core-x", "", false},
+		{"core-../../3f2a9c", "", false},
 	} {
 		if validStreamTarget(tc.target, tc.instance) != tc.want {
 			t.Errorf("%s/%s: want %v", tc.target, tc.instance, tc.want)

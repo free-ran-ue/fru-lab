@@ -38,6 +38,30 @@ func (b *backend) getDeployRoutes() util.Routes {
 			HandlerFunc: withLogging("DeployFree5gcLogs", b.DeployLog, b.handleDeployFree5gcLogs),
 		},
 		{
+			Name:        "DeployCoreList",
+			Method:      http.MethodGet,
+			Pattern:     "/deploy/cores",
+			HandlerFunc: withLogging("DeployCoreList", b.DeployLog, b.handleDeployCoreList),
+		},
+		{
+			Name:        "DeployCoreUp",
+			Method:      http.MethodPost,
+			Pattern:     "/deploy/cores/:id",
+			HandlerFunc: withLogging("DeployCoreUp", b.DeployLog, b.handleDeployCoreUp),
+		},
+		{
+			Name:        "DeployCoreDown",
+			Method:      http.MethodDelete,
+			Pattern:     "/deploy/cores/:id",
+			HandlerFunc: withLogging("DeployCoreDown", b.DeployLog, b.handleDeployCoreDown),
+		},
+		{
+			Name:        "DeployCoreLogs",
+			Method:      http.MethodGet,
+			Pattern:     "/deploy/cores/:id/logs",
+			HandlerFunc: withLogging("DeployCoreLogs", b.DeployLog, b.handleDeployCoreLogs),
+		},
+		{
 			Name:        "DeployGnbList",
 			Method:      http.MethodGet,
 			Pattern:     "/deploy/gnbs",
@@ -176,6 +200,51 @@ func (b *backend) handleDeployFree5gcStatus(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, response)
+}
+
+func (b *backend) handleDeployCoreList(c *gin.Context) {
+	response, errDetail := b.Processor.DeployCoreList(c.Request.Context())
+	if errDetail != nil {
+		b.DeployLog.Warnf("Deploy core list failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (b *backend) handleDeployCoreUp(c *gin.Context) {
+	var req model.RequestDeployFree5gc
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, model.ResponseDeployAction{Message: "Invalid request body"})
+		return
+	}
+	response, errDetail := b.Processor.DeployCoreUp(c.Request.Context(), c.Param("id"), req.Template)
+	if errDetail != nil {
+		b.DeployLog.Warnf("Deploy core up failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (b *backend) handleDeployCoreDown(c *gin.Context) {
+	response, errDetail := b.Processor.DeployCoreDown(c.Request.Context(), c.Param("id"))
+	if errDetail != nil {
+		b.DeployLog.Warnf("Deploy core down failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (b *backend) handleDeployCoreLogs(c *gin.Context) {
+	response, errDetail := b.Processor.DeployCoreLogs(c.Request.Context(), c.Param("id"), parseServiceQuery(c))
+	if errDetail != nil {
+		b.DeployLog.Warnf("Deploy core logs failed for %s: %s", c.ClientIP(), errDetail.Detail)
+		c.JSON(errDetail.HttpStatus, model.ResponseDeployAction{Message: errDetail.Detail})
+		return
+	}
 	c.JSON(http.StatusOK, response)
 }
 

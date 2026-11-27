@@ -7,6 +7,7 @@ import SubscriberViewPage from './page/subscribers/SubscriberViewPage'
 import LogsPage from './page/overview/LogsPage'
 import EventsPage from './page/overview/EventsPage'
 import ImagesPage from './page/images/ImagesPage'
+import AddressesPage from './page/addresses/AddressesPage'
 import CoreNetworkPage from './page/core/CoreNetworkPage'
 import CoreNetworksPage from './page/core/CoreNetworksPage'
 import ExternalCorePage from './page/core/ExternalCorePage'
@@ -40,6 +41,11 @@ export default function App() {
         <Route path="/core-network/lab/subscribers/new" element={<SubscriberFormPage />} />
         <Route path="/core-network/lab/subscribers/:ueId/:plmnId/edit" element={<SubscriberFormPage />} />
         <Route path="/core-network/lab/subscribers/:ueId/:plmnId" element={<SubscriberViewPage />} />
+        {/* a free5GC core network's Subscribers: the same pages on its webconsole */}
+        <Route path="/core-network/n/:id/subscribers" element={<SubscribersPage />} />
+        <Route path="/core-network/n/:id/subscribers/new" element={<SubscriberFormPage />} />
+        <Route path="/core-network/n/:id/subscribers/:ueId/:plmnId/edit" element={<SubscriberFormPage />} />
+        <Route path="/core-network/n/:id/subscribers/:ueId/:plmnId" element={<SubscriberViewPage />} />
         <Route path="/free-ran" element={<FreeRanPage />} />
         {/* profiles are edited on the free-ran / free-ue pages themselves */}
         <Route path="/free-ran/profiles" element={<Navigate to="/free-ran" replace />} />
@@ -48,6 +54,7 @@ export default function App() {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/images" element={<ImagesPage />} />
+        <Route path="/addresses" element={<AddressesPage />} />
       </Route>
       {/* Subscribers moved under Core Network */}
       <Route path="/subscribers/*" element={<Navigate to="/core-network/lab/subscribers" replace />} />

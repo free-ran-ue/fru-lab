@@ -2,14 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../apiClient'
 import type { CoreNetwork } from '../api'
 
-// The lab free5GC's fixed addresses on the lab network (see the backend's
-// free5gc templates): AMF for N2, UPF for N3, and its one data network.
+// The lab free5GC: its name and its one data network. Its addresses come
+// from the backend's address plan (lab.labCore, from useIpam).
 export const LAB_CORE = {
   name: 'free5GC',
-  n2Ip: '10.0.1.3',
-  n3Ip: '10.0.1.5',
-  n2Interface: 'frulab-cn-ran',
-  n3Interface: 'frulab-cn-ran',
   dns: [{ name: 'internet' }],
 }
 

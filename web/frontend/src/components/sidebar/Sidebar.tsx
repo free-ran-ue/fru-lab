@@ -29,6 +29,7 @@ const ICONS = {
   ran: <Icon><path d="M8 7v7M5.5 14h5M8 7l-2.5 7M8 7l2.5 7" /><path d="M5.2 4.2a4 4 0 0 1 5.6 0M3.4 2.4a6.5 6.5 0 0 1 9.2 0" /></Icon>,
   ue: <Icon><rect x="4.5" y="1.5" width="7" height="13" rx="1.5" /><path d="M7 12h2" /></Icon>,
   images: <Icon><path d="M8 2.5l5.5 3-5.5 3-5.5-3zM2.5 8.5l5.5 3 5.5-3M2.5 11l5.5 3 5.5-3" /></Icon>,
+  addresses: <Icon><rect x="2.5" y="2.5" width="11" height="11" rx="1" /><path d="M2.5 6.5h11M2.5 10h11M6.5 6.5v7" /></Icon>,
   sun: <Icon><circle cx="8" cy="8" r="2.75" /><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" /></Icon>,
   moon: <Icon><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" /></Icon>,
   logout: <Icon><path d="M6 2.5H3v11h3M10 5l3 3-3 3M13 8H6" /></Icon>,
@@ -62,6 +63,7 @@ function coreItem(base: NavItem, cores: { id?: string; name: string }[]): NavIte
 
 const TOOLS: NavItem[] = [
   { to: '/images', label: 'Images', icon: ICONS.images },
+  { to: '/addresses', label: 'Addresses', icon: ICONS.addresses },
 ]
 
 const cls = ({ isActive }: { isActive: boolean }) => `${styles.item} ${isActive ? styles.active : ''}`

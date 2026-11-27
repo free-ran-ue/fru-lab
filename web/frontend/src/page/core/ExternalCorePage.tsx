@@ -6,10 +6,13 @@ import { buildCoreGraph } from '../../lab/canvas/graph'
 import { useLab } from '../../lab/LabContext'
 import { Actions, Button, Dot, InspectorHead, KV, Section, ui } from '../../lab/LabUi'
 import Workbench from '../../lab/workbench/Workbench'
+import { isFree5gcCore } from '../../lab/useLab'
+import Free5gcCorePage from './Free5gcCorePage'
 
-// ExternalCorePage is one saved core outside the lab: the core as one node
-// with its N2 / N3 endpoints, the gNBs attached to them (running external
-// gNBs dialing its AMF) and its data networks.
+// ExternalCorePage is one saved core network's page (/core-network/n/:id).
+// A free5GC core network gets Free5gcCorePage; a core outside the lab is
+// drawn as one node with its N2 / N3 endpoints, the gNBs attached to them
+// and its data networks.
 export default function ExternalCorePage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -25,14 +28,16 @@ export default function ExternalCorePage() {
     )
   }
 
-  const gnbs = lab.gnbs.filter((g) => g.core === 'external' && g.deployment?.amfIp === core.n2Ip)
+  if (isFree5gcCore(core)) return <Free5gcCorePage key={core.id} core={core} />
+
+  const gnbs = lab.gnbsOnCore(core)
   const graph = buildCoreGraph({
     id: `core:${core.id}`,
     name: core.name,
     sub: 'outside the lab',
-    n2Ip: core.n2Ip,
+    n2Ip: core.n2Ip ?? '',
     n2Interface: core.n2Interface,
-    n3Ip: core.n3Ip,
+    n3Ip: core.n3Ip ?? '',
     n3Interface: core.n3Interface,
     dns: core.dns,
     gnbs: gnbs.map((g) => ({ id: g.id, name: g.profileName, status: g.status })),
@@ -53,14 +58,14 @@ export default function ExternalCorePage() {
       </Section>
       <Section title="gNBs attached" aside={<span>{gnbs.length}</span>}>
         {gnbs.length === 0
-          ? <p className={ui.empty} style={{ padding: 0 }}>None. A gNB profile on an external core with AMF {core.n2Ip} attaches here once deployed.</p>
+          ? <p className={ui.empty} style={{ padding: 0 }}>None. A gNB profile on {core.name} attaches here once deployed.</p>
           : <ul className={ui.list}>{gnbs.map((g) => <li key={g.id}><button type="button" onClick={() => navigate('/free-ran')}><Dot status={g.status} />{g.profileName}<span style={{ marginLeft: 'auto' }}>{g.deployment?.hostIp ?? ''}</span></button></li>)}</ul>}
       </Section>
     </>
   )
 
   return (
-    <AppLayout crumbs={[{ label: core.name }]} fill>
+    <AppLayout crumbs={[{ label: 'Networks', to: '/core-network' }, { label: core.name }]} fill>
       <Workbench
         title={core.name}
         status={<><span>N2 <b>{core.n2Ip}</b></span><span>N3 <b>{core.n3Ip}</b></span><span>DNs <b>{core.dns.length}</b></span><span>gNBs <b>{gnbs.length}</b></span></>}

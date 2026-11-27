@@ -24,7 +24,7 @@ interface Events {
 const EventsContext = createContext<Events>({ events: [], ueLive: {}, clear: () => {} })
 
 // EventsProvider follows the logs of everything that runs (the AMF, every
-// gNB, every UE) for as long as the user is signed in, and turns them into
+// gNB, every UE, the AMF of every free5GC core network) for as long as the user is signed in, and turns them into
 // lab events: NG Setup, registration, PDU sessions, failures. The console's
 // Events tab lists them; the canvas marks each UE with its last stage.
 export function EventsProvider({ children }: { children: ReactNode }) {
@@ -35,14 +35,17 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const streams = useRef(new Map<string, () => void>())
 
   const gnbIds = lab.gnbs.map((g) => g.id).join('|')
+  // every free5GC core network that is up: its AMF's events are core:<id>'s
+  const coreIds = lab.upCores.map((c) => c.id).join('|')
   const sources = useMemo(() => {
     const out: LogSource[] = []
     if (lab.coreUp) out.push({ target: 'free5gc', service: 'amf' })
+    for (const id of coreIds.split('|').filter(Boolean)) out.push({ target: `core-${id}`, service: 'amf' })
     // every running gNB (gnb-<profileId>)
     for (const id of gnbIds.split('|').filter(Boolean)) out.push({ target: id as `gnb-${string}` })
     for (const r of lab.upUes.slice(0, MAX_UE_STREAMS)) out.push({ target: 'ue', instance: r.ueId })
     return out
-  }, [lab.coreUp, gnbIds, lab.upUes])
+  }, [lab.coreUp, coreIds, gnbIds, lab.upUes])
   const keys = sources.map(sourceKey).join('|')
 
   useEffect(() => {

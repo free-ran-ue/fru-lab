@@ -3,7 +3,7 @@ import type { GnbProfile, HostInterface } from '../../api'
 import { api, extractErrorMessage } from '../../apiClient'
 import { Button } from '../LabUi'
 import { useLab } from '../LabContext'
-import type { LabGnb } from '../useLab'
+import { isFree5gcCore, type LabGnb } from '../useLab'
 import { LAB_DEFAULT_GNB, useGnbProfiles } from '../useProfiles'
 import { ConflictNote, Field, ps, useConfigPreview, useProfileCheck, Yaml } from './parts'
 
@@ -47,7 +47,8 @@ interface Props {
 // detail header, not here.
 export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyOf, running, onNotify }: Props) {
   const saved = profiles.profiles.find((p) => p.id === selectedId)
-  const initial = (): GnbProfile => saved ?? (copyOf ? { ...copyOf, id: undefined, updatedAt: undefined, name: `${copyOf.name} copy` } : LAB_DEFAULT_GNB)
+  // a copy drops n2Ip: on free5GC or a free5GC core it is assigned on deploy
+  const initial = (): GnbProfile => saved ?? (copyOf ? { ...copyOf, id: undefined, updatedAt: undefined, n2Ip: undefined, name: `${copyOf.name} copy` } : LAB_DEFAULT_GNB)
   const [base, setBase] = useState<GnbProfile>(initial)
   const [draft, setDraft] = useState<GnbProfile>(base)
   const [saving, setSaving] = useState(false)
@@ -56,7 +57,6 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
   const external = draft.core === 'external'
   const preview = useConfigPreview(draft, profiles.render)
   const check = useProfileCheck(draft, profiles.check)
-  const hosts = useHostInterfaces(external)
 
   // a different profile picked (or the saved one reloaded): edit that one
   useEffect(() => {
@@ -67,26 +67,49 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
   }, [selectedId, saved])
 
   const set = (patch: Partial<GnbProfile>) => setDraft((d) => ({ ...d, ...patch }))
-  // the core this gNB deploys onto by default: the lab free5GC or a saved
-  // core network (cores are added on Core Network, not here). A profile
-  // from before, with its AMF / UPF typed in, shows them until it is moved
-  // to a saved core.
+  // the core this gNB deploys onto by default: the lab free5GC, a free5GC
+  // core network or a core outside the lab (cores are added on Core
+  // Network, not here). A profile from before, with its AMF / UPF typed
+  // in, shows them until it is moved to a saved core.
   const cores = useLab().coreNetworks.networks
-  const onSaved = draft.core === 'external' && draft.coreNetwork ? cores.find((n) => n.id === draft.coreNetwork) : undefined
-  const coreChoice = draft.core !== 'external' ? 'lab' : draft.coreNetwork ? draft.coreNetwork : 'manual'
+  const free5gcCores = cores.filter((n) => isFree5gcCore(n))
+  const externalCores = cores.filter((n) => !isFree5gcCore(n))
+  const chosen = draft.coreNetwork ? cores.find((n) => n.id === draft.coreNetwork) : undefined
+  // a saved core outside the lab: its addresses and N2 interface are used
+  const onSaved = chosen && !isFree5gcCore(chosen) ? chosen : undefined
+  const coreChoice = draft.coreNetwork ? draft.coreNetwork : draft.core === 'external' ? 'manual' : 'lab'
+  // on free5GC or a free5GC core network the gNB's N2/N3 address is assigned on deploy
+  const assigned = !external
+  const hosts = useHostInterfaces(external)
   function pickCore(v: string) {
-    if (v === 'lab') set({ core: 'lab', coreNetwork: undefined, amfIp: undefined, amfPort: undefined, upfIp: undefined, upfPort: undefined, hostInterface: undefined, hostIp: undefined, n2Ip: draft.n2Ip ?? LAB_DEFAULT_GNB.n2Ip })
-    else set({ core: 'external', coreNetwork: v, amfIp: undefined, upfIp: undefined, n2Ip: undefined })
+    const clear = { amfIp: undefined, amfPort: undefined, upfIp: undefined, upfPort: undefined, hostInterface: undefined, hostIp: undefined, n2Ip: undefined }
+    const n = cores.find((c) => c.id === v)
+    if (v === 'lab' || !n) set({ ...clear, core: 'lab', coreNetwork: undefined })
+    else if (isFree5gcCore(n)) set({ ...clear, core: 'lab', coreNetwork: v })
+    // an external core: its n2Interface is where the gNB listens; the host
+    // IP is typed in (kept when moving between external cores)
+    else set({ ...clear, core: 'external', coreNetwork: v, hostInterface: n.n2Interface || undefined, hostIp: external ? draft.hostIp : undefined })
   }
   const conflict = check.byField
 
-  // external core: the interface the gNB listens on, then one of its addresses
+  // external core typed in by hand: the interface the gNB listens on, then one of its addresses
   const iface = hosts.list.find((h) => h.name === draft.hostInterface)
   const ifaceMissing = Boolean(draft.hostInterface) && hosts.loaded && !iface
   function pickInterface(name: string) {
     const h = hosts.list.find((x) => x.name === name)
     set({ hostInterface: name || undefined, hostIp: h?.addresses[0] ?? undefined })
   }
+  // a saved external core: the host IP is typed in, an address of its N2 interface
+  const coreIface = onSaved?.n2Interface ? hosts.list.find((h) => h.name === onSaved.n2Interface) : undefined
+  const hostIpProblem = onSaved
+    ? !draft.hostIp?.trim()
+      ? 'Required: the address the gNB listens on'
+      : !IP.test(draft.hostIp.trim())
+        ? 'An IP address'
+        : coreIface && !coreIface.addresses.includes(draft.hostIp.trim())
+          ? `Not an address of ${onSaved.n2Interface} on this host`
+          : undefined
+    : undefined
 
   async function save() {
     setSaving(true)
@@ -112,7 +135,7 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
       <div className={ps.saveBar}>
         <span className={ps.saveState}>{hasConflicts ? `${check.conflicts.length} conflict${check.conflicts.length === 1 ? '' : 's'} to resolve` : isNew ? 'Not saved yet' : dirty ? 'Unsaved changes' : 'Saved'}</span>
         {draft.id && dirty && <Button small onClick={() => setDraft(base)}>Discard</Button>}
-        <Button kind="primary" small busy={saving} disabled={hasConflicts || (!dirty && !isNew)} title={hasConflicts ? 'Resolve the conflicts first' : undefined} onClick={save}>
+        <Button kind="primary" small busy={saving} disabled={hasConflicts || Boolean(hostIpProblem) || (!dirty && !isNew)} title={hasConflicts ? 'Resolve the conflicts first' : hostIpProblem} onClick={save}>
           {isNew ? 'Save profile' : 'Save'}
         </Button>
       </div>
@@ -126,30 +149,68 @@ export default function GnbProfilesPanel({ profiles, selectedId, onSelect, copyO
             <label htmlFor="gnb-core">Core network</label>
             <select id="gnb-core" className={ps.input} value={coreChoice} onChange={(e) => pickCore(e.target.value)}>
               <option value="lab">free5GC (the lab core)</option>
-              {cores.map((n) => <option key={n.id} value={n.id}>{n.name} · AMF {n.n2Ip}{n.enabled ? '' : ' · disabled'}</option>)}
+              {free5gcCores.length > 0 && (
+                <optgroup label="free5GC on this host">
+                  {free5gcCores.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+                </optgroup>
+              )}
+              {externalCores.length > 0 && (
+                <optgroup label="External cores">
+                  {externalCores.map((n) => <option key={n.id} value={n.id}>{n.name} · AMF {n.n2Ip}{n.enabled ? '' : ' · disabled'}</option>)}
+                </optgroup>
+              )}
               {coreChoice === 'manual' && <option value="manual" disabled>Typed-in AMF {draft.amfIp || ''} (pick a saved core instead)</option>}
+              {draft.coreNetwork && !chosen && <option value={draft.coreNetwork} disabled>A deleted core network (pick another)</option>}
             </select>
-            <span className={ps.fieldHint}>Where this gNB deploys by default (and with Deploy selected); a row's Deploy can still pick another. To add a core outside the lab, use Core Network → Networks.</span>
+            <span className={ps.fieldHint}>Where this gNB deploys by default (and with Deploy selected); a row's Deploy can still pick another. To add a core, use Core Network → Networks.</span>
           </div>
-          {!external && (
-            <Field wide label="N2 IP" value={draft.n2Ip ?? ''} onChange={(v) => set({ n2Ip: v })} pattern={IP} conflict={conflict('n2Ip')} hint="The gNB's N2/N3 address on the lab network: 10.0.1.20 - 10.0.1.254. The address UEs dial is assigned on deploy." />
+          {assigned && (
+            <div className={`${ps.field} ${ps.wide}`}>
+              <label>N2 / N3 IP</label>
+              <span className={ps.readonly}>Assigned on deploy</span>
+              <span className={ps.fieldHint}>N2/N3 assigned on deploy: the lowest free address from .20 up on {chosen ? `${chosen.name}'s` : "the lab's"} cn-ran network{chosen?.n2Interface ? ` (${chosen.n2Interface})` : ''}. The running gNB shows it on its Status tab.</span>
+            </div>
           )}
           {onSaved && (
             <>
               <div className={ps.field}><label>AMF (N2)</label><span className={ps.readonly}>{onSaved.n2Ip}</span></div>
               <div className={ps.field}><label>UPF (N3)</label><span className={ps.readonly}>{onSaved.n3Ip}</span></div>
+              <div className={ps.field}>
+                <label>Host interface</label>
+                <span className={ps.readonly}>{onSaved.n2Interface ? `listens on ${onSaved.n2Interface}` : '—'}</span>
+                <span className={ps.fieldHint}>{onSaved.n2Interface ? `${onSaved.name}'s N2 interface` : `${onSaved.name} has no N2 interface; set one on Core Network`}</span>
+              </div>
+              <div className={ps.field}>
+                <label htmlFor="gnb-hostip">Host IP</label>
+                <input
+                  id="gnb-hostip"
+                  className={`${ps.input} ${hostIpProblem || conflict('hostIp') ? ps.inputBad : ''}`}
+                  list="gnb-hostip-options"
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder={coreIface?.addresses[0] ?? 'an address of the interface'}
+                  value={draft.hostIp ?? ''}
+                  onChange={(e) => set({ hostIp: e.target.value || undefined })}
+                />
+                <datalist id="gnb-hostip-options">
+                  {(coreIface?.addresses ?? []).map((a) => <option key={a} value={a} />)}
+                </datalist>
+                <span className={ps.fieldHint}>{hostIpProblem ?? `An address of ${onSaved.n2Interface || 'its N2 interface'}${coreIface?.addresses.length ? `: ${coreIface.addresses.join(', ')}` : ''}`}</span>
+                <ConflictNote conflict={conflict('hostIp')} onUse={(v) => set({ hostIp: v })} />
+              </div>
+              <span className={`${ps.fieldHint} ${ps.wide}`}>The gNB runs on the host network and listens on this address; the core must reach it, and UEs dial it too.</span>
             </>
           )}
-          {external && (
+          {external && !onSaved && (
             <>
-              {!onSaved && <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} conflict={conflict('amfIp')} />}
-              {!onSaved && <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} conflict={conflict('amfPort')} />}
-              {!onSaved && <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} conflict={conflict('upfIp')} />}
-              {!onSaved && <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} conflict={conflict('upfPort')} />}
+              <Field label="AMF N2 IP" value={draft.amfIp ?? ''} onChange={(v) => set({ amfIp: v })} pattern={IP} conflict={conflict('amfIp')} />
+              <Field label="AMF port" type="number" value={draft.amfPort ?? 38412} onChange={(v) => set({ amfPort: Number(v) })} conflict={conflict('amfPort')} />
+              <Field label="UPF N3 IP" value={draft.upfIp ?? ''} onChange={(v) => set({ upfIp: v })} pattern={IP} conflict={conflict('upfIp')} />
+              <Field label="UPF port" type="number" value={draft.upfPort ?? 2152} onChange={(v) => set({ upfPort: Number(v) })} conflict={conflict('upfPort')} />
               <div className={ps.field}>
                 <label htmlFor="gnb-iface">Host interface</label>
                 <select id="gnb-iface" className={`${ps.input} ${ifaceMissing || conflict('hostInterface') ? ps.inputBad : ''}`} value={draft.hostInterface ?? ''} onChange={(e) => pickInterface(e.target.value)}>
-                  <option value="">{!hosts.loaded ? 'loading…' : onSaved ? `the core's N2 interface${onSaved.n2Interface ? ` (${onSaved.n2Interface})` : ''}` : 'pick an interface'}</option>
+                  <option value="">{!hosts.loaded ? 'loading…' : 'pick an interface'}</option>
                   {hosts.list.map((h) => <option key={h.name} value={h.name}>{h.name} · {h.addresses.join(', ')}</option>)}
                   {ifaceMissing && <option value={draft.hostInterface}>{draft.hostInterface} (not on this host)</option>}
                 </select>

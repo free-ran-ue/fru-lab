@@ -61,11 +61,17 @@ func (d DeployIE) WebconsolePort() int {
 }
 
 func (d DeployIE) WebconsoleURL() string {
+	return d.WebconsoleURLAt(d.WebconsolePort())
+}
+
+// WebconsoleURLAt is where fru-lab reaches a webconsole published on host
+// port port (a free5gc core network's is on WebconsolePort() + its slot).
+func (d DeployIE) WebconsoleURLAt(port int) string {
 	host := d.Webconsole.Host
 	if host == "" {
 		host = "localhost"
 	}
-	return fmt.Sprintf("http://%s:%d", host, d.WebconsolePort())
+	return fmt.Sprintf("http://%s:%d", host, port)
 }
 
 func (d DeployIE) DeployTimeout() time.Duration {

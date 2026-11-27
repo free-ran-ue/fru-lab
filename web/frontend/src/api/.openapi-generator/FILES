@@ -4,9 +4,11 @@ api.ts
 base.ts
 common.ts
 configuration.ts
+docs/CoreDeployStatus.md
 docs/CoreDn.md
 docs/CoreNetwork.md
 docs/DefaultApi.md
+docs/DeployCoreListResponse.md
 docs/DeployGnbListResponse.md
 docs/DeployGnbRequest.md
 docs/DeployLogsResponse.md
@@ -22,6 +24,11 @@ docs/GnbProfile.md
 docs/HostInterface.md
 docs/ImageInfo.md
 docs/ImageListResponse.md
+docs/IpamLease.md
+docs/IpamPool.md
+docs/IpamRange.md
+docs/IpamReserved.md
+docs/IpamView.md
 docs/LoginRequest.md
 docs/LoginResponse.md
 docs/MessageResponse.md

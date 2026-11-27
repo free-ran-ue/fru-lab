@@ -95,3 +95,17 @@ type ResponseDeployGnbList struct {
 type RequestDeployGnbProfile struct {
 	Core string `json:"core"`
 }
+
+// CoreDeployStatus is the deploy state of one free5gc-kind core network.
+type CoreDeployStatus struct {
+	CoreID       string          `json:"coreId"`
+	Status       string          `json:"status"`
+	Services     []ServiceStatus `json:"services,omitempty"`
+	LastDeployed *time.Time      `json:"lastDeployed,omitempty"`
+	// the template it runs (basic / ulcl); empty while stopped
+	Template string `json:"template,omitempty"`
+}
+
+type ResponseDeployCoreList struct {
+	Cores []CoreDeployStatus `json:"cores"`
+}

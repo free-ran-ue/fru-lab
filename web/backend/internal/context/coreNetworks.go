@@ -7,14 +7,30 @@ import (
 
 const coreNetworkBucket = "core-networks"
 
+// withKind fills the kind of a core network saved before kinds existed:
+// those are all external.
+func withKind(n *model.CoreNetwork) {
+	if n.Kind == "" {
+		n.Kind = model.CoreKindExternal
+	}
+}
+
 // ListCoreNetworks returns the saved core networks.
 func (d *dbContext) ListCoreNetworks() ([]model.CoreNetwork, error) {
-	return listProfiles[model.CoreNetwork](d, coreNetworkBucket)
+	list, err := listProfiles[model.CoreNetwork](d, coreNetworkBucket)
+	for i := range list {
+		withKind(&list[i])
+	}
+	return list, err
 }
 
 // GetCoreNetwork returns one core network, nil if there is none.
 func (d *dbContext) GetCoreNetwork(id string) (*model.CoreNetwork, error) {
-	return getProfile[model.CoreNetwork](d, coreNetworkBucket, id)
+	n, err := getProfile[model.CoreNetwork](d, coreNetworkBucket, id)
+	if n != nil {
+		withKind(n)
+	}
+	return n, err
 }
 
 // SaveCoreNetwork stores n, giving it an ID when it has none.

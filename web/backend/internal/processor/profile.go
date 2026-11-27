@@ -43,6 +43,16 @@ func internal(err error) *model.ErrorDetail {
 }
 
 // normalizeGnbProfile fills defaults and checks every field.
+//
+// Stored forms: core lab is the lab free5GC (coreNetwork empty) or a
+// free5gc-kind core network (coreNetwork its id) - the N2/N3 address is
+// assigned on deploy, so n2Ip and every external field are cleared. Core
+// external is either given by address (amfIp / upfIp / hostInterface /
+// hostIp) or an external-kind core network (coreNetwork its id; amfIp /
+// upfIp come from the core on deploy and are cleared, hostInterface is
+// the core's N2 interface, hostIp is typed in and may still be empty).
+// Which kind coreNetwork is, is checked against the saved core networks
+// by applyProfileCoreNetwork, not here.
 func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" {
@@ -76,15 +86,9 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 	}
 	switch p.Core {
 	case model.GnbCoreLab:
-		p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostIp, p.HostInterface, p.CoreNetwork = "", 0, "", 0, "", "", ""
-		if p.N2Ip == "" {
-			return bad("n2Ip is required on the lab core: set the N2 IP (%s - %s)", flctx.GnbN2IpFirst, flctx.GnbN2IpLast)
-		}
-		a, err := netip.ParseAddr(p.N2Ip)
-		if err != nil || !a.Is4() || a.Compare(flctx.GnbN2IpFirst) < 0 || a.Compare(flctx.GnbN2IpLast) > 0 {
-			return bad("n2Ip must be an address in %s - %s (the lower ones are the lab core's)", flctx.GnbN2IpFirst, flctx.GnbN2IpLast)
-		}
-		p.N2Ip = a.String()
+		// the N2/N3 address is assigned on deploy; an old profile's n2Ip
+		// is dropped
+		p.AmfIp, p.AmfPort, p.UpfIp, p.UpfPort, p.HostIp, p.HostInterface, p.N2Ip = "", 0, "", 0, "", "", ""
 	case model.GnbCoreExternal:
 		p.N2Ip = ""
 		if p.AmfPort == 0 {
@@ -94,19 +98,24 @@ func normalizeGnbProfile(p *model.GnbProfile) *model.ErrorDetail {
 			p.UpfPort = 2152
 		}
 		p.HostInterface = strings.TrimSpace(p.HostInterface)
+		p.HostIp = strings.TrimSpace(p.HostIp)
 		// on a saved core network the AMF / UPF come from that core on
-		// deploy, and the host interface defaults to the core's N2 one
+		// deploy and the host interface is the core's N2 one; the host IP
+		// is typed in, and checked against that interface on deploy
 		if p.CoreNetwork != "" {
 			p.AmfIp, p.UpfIp = "", ""
-			if p.HostInterface == "" {
-				p.HostIp = ""
-				break
-			}
-		} else {
-			for _, f := range []struct{ name, ip string }{{"amfIp", p.AmfIp}, {"upfIp", p.UpfIp}} {
-				if net.ParseIP(f.ip) == nil {
-					return bad("%s must be an IP address", f.name)
+			if p.HostIp != "" {
+				a, err := netip.ParseAddr(p.HostIp)
+				if err != nil || !a.Is4() {
+					return bad("hostIp must be an IPv4 address")
 				}
+				p.HostIp = a.String()
+			}
+			break
+		}
+		for _, f := range []struct{ name, ip string }{{"amfIp", p.AmfIp}, {"upfIp", p.UpfIp}} {
+			if net.ParseIP(f.ip) == nil {
+				return bad("%s must be an IP address", f.name)
 			}
 		}
 		if p.HostInterface == "" {
@@ -174,6 +183,9 @@ func (p *Processor) SaveGnbProfile(id string, prof *model.GnbProfile) (*model.Gn
 		}
 	}
 	prof.ID = id
+	if detail := p.applyProfileCoreNetwork(prof); detail != nil {
+		return nil, detail
+	}
 	if detail := normalizeGnbProfile(prof); detail != nil {
 		return nil, detail
 	}
@@ -190,24 +202,105 @@ func (p *Processor) SaveGnbProfile(id string, prof *model.GnbProfile) (*model.Gn
 	return prof, nil
 }
 
+// DeleteGnbProfile removes a gNB profile and releases its gNB's IPAM
+// leases (which it kept while stopped, to get the same addresses back).
 func (p *Processor) DeleteGnbProfile(id string) *model.ErrorDetail {
 	if err := p.FlContext.DeleteGnbProfile(id); err != nil {
 		return internal(err)
 	}
+	if reProfileID.MatchString(id) {
+		if err := p.FlContext.IpamReleaseOwner(flctx.GnbInstanceTarget(id)); err != nil {
+			p.ProcLog.Warnf("Failed to release the addresses of gNB profile %s: %v", id, err)
+		}
+	}
 	return nil
+}
+
+// applyProfileCoreNetwork makes prof's core follow its saved core network:
+// a free5gc-kind one keeps the gNB lab-type (on that core's cn-ran
+// network), an external-kind one makes it external on the core's N2
+// interface. See normalizeGnbProfile for the stored forms.
+func (p *Processor) applyProfileCoreNetwork(prof *model.GnbProfile) *model.ErrorDetail {
+	prof.CoreNetwork = strings.TrimSpace(prof.CoreNetwork)
+	if prof.CoreNetwork == "" {
+		return nil
+	}
+	n, err := p.FlContext.GetCoreNetwork(prof.CoreNetwork)
+	if err != nil {
+		return internal(err)
+	}
+	if n == nil {
+		return bad("core network %s does not exist", prof.CoreNetwork)
+	}
+	profileOnCoreNetwork(prof, n)
+	return nil
+}
+
+// profileOnCoreNetwork sets prof's core for core network n.
+func profileOnCoreNetwork(prof *model.GnbProfile, n *model.CoreNetwork) {
+	prof.CoreNetwork = n.ID
+	if n.IsFree5gc() {
+		prof.Core = model.GnbCoreLab
+		return
+	}
+	if prof.Core != model.GnbCoreExternal {
+		// coming from lab: the ports are the defaults
+		prof.AmfPort, prof.UpfPort = 0, 0
+	}
+	prof.Core = model.GnbCoreExternal
+	prof.HostInterface = n.N2Interface
 }
 
 func (p *Processor) RenderGnbProfile(prof *model.GnbProfile) (*model.ResponseRenderedConfig, *model.ErrorDetail) {
 	if prof.Name == "" {
 		prof.Name = "preview"
 	}
+	if detail := p.applyProfileCoreNetwork(prof); detail != nil {
+		return nil, detail
+	}
 	if detail := normalizeGnbProfile(prof); detail != nil {
 		return nil, detail
 	}
-	ranIp := flctx.GnbRanIpPreview
+	// a deployed gNB shows what it runs with; a stopped one the addresses
+	// it keeps leased (it gets them back on deploy)
+	var deployed *model.GnbDeployment
+	var n2Lease, ranLease flctx.IpamLease
+	var hasN2Lease, hasRanLease bool
 	if reProfileID.MatchString(prof.ID) {
-		if d := p.FlContext.GnbInstanceDeployment(prof.ID); d != nil && d.RanIp != "" {
-			ranIp = d.RanIp
+		deployed = p.FlContext.GnbInstanceDeployment(prof.ID)
+		target := flctx.GnbInstanceTarget(prof.ID)
+		n2Lease, hasN2Lease, _ = p.FlContext.Lookup(target, flctx.LeaseRoleN2)
+		ranLease, hasRanLease, _ = p.FlContext.Lookup(target, flctx.LeaseRoleRan)
+	}
+	ranIp := flctx.GnbRanIpPreview
+	switch {
+	case deployed != nil && deployed.RanIp != "":
+		ranIp = deployed.RanIp
+	case hasRanLease:
+		ranIp = ranLease.Addr
+	}
+	switch {
+	case prof.Core != model.GnbCoreExternal:
+		on := flctx.LabCnRan()
+		if prof.CoreNetwork != "" {
+			n, err := p.FlContext.GetCoreNetwork(prof.CoreNetwork)
+			if err != nil {
+				return nil, internal(err)
+			}
+			if n != nil && n.IsFree5gc() {
+				on = flctx.CoreCnRan(n.ID, n.Slot)
+			}
+		}
+		prof.AmfIp, prof.UpfIp, prof.N2Ip = on.AmfIp, on.UpfIp, on.N2Preview()
+		switch {
+		case deployed != nil && deployed.Core != model.GnbCoreExternal && deployed.CoreNetwork == on.CoreNetwork && deployed.N2Ip != "":
+			prof.N2Ip = deployed.N2Ip
+		case hasN2Lease && n2Lease.Pool == on.PoolID():
+			prof.N2Ip = n2Lease.Addr
+		}
+	case prof.CoreNetwork != "":
+		if n, err := p.FlContext.GetCoreNetwork(prof.CoreNetwork); err == nil && n != nil {
+			prof.AmfIp, prof.UpfIp = n.N2Ip, n.N3Ip
 		}
 	}
 	yaml, err := flctx.RenderGnbConfig(prof, ranIp)

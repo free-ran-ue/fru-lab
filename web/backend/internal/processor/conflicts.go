@@ -1,18 +1,17 @@
 package processor
 
 import (
-	flctx "backend/internal/context"
 	"backend/model"
 	"fmt"
 	"net/http"
-	"net/netip"
 	"strconv"
 	"strings"
 )
 
 // Every gNB profile is one gNB and every UE profile one UE, so the fields
 // that identify one must be unique among the saved profiles: gNB name,
-// gNB ID, N2 IP (lab core) and host IP (external core); UE name and IMSI.
+// gNB ID and host IP (external core); UE name and IMSI. (A lab-type gNB's
+// N2 IP is assigned on deploy, so it is not a profile field to clash on.)
 // A conflict suggests the next free value where there is one.
 
 const maxBulk = 500
@@ -54,27 +53,6 @@ func nextFreeGnbID(after string, taken func(string) bool) (string, bool) {
 	return "", false
 }
 
-// nextFreeN2Ip is the first N2 IP of the lab range after after that is not
-// taken (wrapping around to the start of the range).
-func nextFreeN2Ip(after string, taken func(string) bool) (string, bool) {
-	first, last := flctx.GnbN2IpFirst, flctx.GnbN2IpLast
-	start, err := netip.ParseAddr(after)
-	if err != nil || start.Compare(first) < 0 || start.Compare(last) > 0 {
-		start = last
-	}
-	for a := start.Next(); a.Compare(last) <= 0; a = a.Next() {
-		if !taken(a.String()) {
-			return a.String(), true
-		}
-	}
-	for a := first; a.Compare(start) < 0; a = a.Next() {
-		if !taken(a.String()) {
-			return a.String(), true
-		}
-	}
-	return "", false
-}
-
 // nextFreeMsin is the first MSIN after after, with as many digits, that is
 // not taken (wrapping around).
 func nextFreeMsin(after string, taken func(string) bool) (string, bool) {
@@ -102,8 +80,8 @@ func (s set) has(v string) bool { return s[v] }
 // gnbConflicts are the fields of prof another of the saved profiles uses
 // (prof itself, by ID, is skipped).
 func gnbConflicts(prof *model.GnbProfile, saved []model.GnbProfile) []model.ProfileConflict {
-	names, ids, n2Ips := set{}, set{}, set{}
-	var byName, byID, byN2, byHost *model.GnbProfile
+	names, ids := set{}, set{}
+	var byName, byID, byHost *model.GnbProfile
 	for i := range saved {
 		o := &saved[i]
 		if prof.ID != "" && o.ID == prof.ID {
@@ -111,17 +89,11 @@ func gnbConflicts(prof *model.GnbProfile, saved []model.GnbProfile) []model.Prof
 		}
 		names[o.Name] = true
 		ids[strings.ToLower(o.GnbID)] = true
-		if o.Core != model.GnbCoreExternal && o.N2Ip != "" {
-			n2Ips[o.N2Ip] = true
-		}
 		if byName == nil && o.Name == prof.Name {
 			byName = o
 		}
 		if byID == nil && strings.EqualFold(o.GnbID, prof.GnbID) {
 			byID = o
-		}
-		if byN2 == nil && prof.Core != model.GnbCoreExternal && o.Core != model.GnbCoreExternal && o.N2Ip == prof.N2Ip {
-			byN2 = o
 		}
 		if byHost == nil && prof.Core == model.GnbCoreExternal && o.Core == model.GnbCoreExternal && prof.HostIp != "" && o.HostIp == prof.HostIp {
 			byHost = o
@@ -141,14 +113,6 @@ func gnbConflicts(prof *model.GnbProfile, saved []model.GnbProfile) []model.Prof
 		out = append(out, model.ProfileConflict{
 			Field:      "gnbId",
 			Message:    fmt.Sprintf("gNB ID %s is used by profile %s", prof.GnbID, byID.Name),
-			Suggestion: s,
-		})
-	}
-	if byN2 != nil {
-		s, _ := nextFreeN2Ip(prof.N2Ip, n2Ips.has)
-		out = append(out, model.ProfileConflict{
-			Field:      "n2Ip",
-			Message:    fmt.Sprintf("N2 IP %s is used by profile %s", prof.N2Ip, byN2.Name),
 			Suggestion: s,
 		})
 	}
@@ -212,7 +176,8 @@ func checkBulkCount(count int) *model.ErrorDetail {
 }
 
 // planGnbBulk is count copies of lab-core profile src next to the saved
-// profiles: named src-2, src-3, ... with the next free gNB IDs and N2 IPs.
+// profiles: named src-2, src-3, ... with the next free gNB IDs (their N2
+// IPs are assigned on deploy).
 func planGnbBulk(src model.GnbProfile, saved []model.GnbProfile, count int) ([]model.GnbProfile, *model.ErrorDetail) {
 	if detail := checkBulkCount(count); detail != nil {
 		return nil, detail
@@ -220,29 +185,23 @@ func planGnbBulk(src model.GnbProfile, saved []model.GnbProfile, count int) ([]m
 	if src.Core == model.GnbCoreExternal {
 		return nil, bad("only lab-core gNB profiles can be copied in bulk; an external-core gNB needs its own host address")
 	}
-	names, ids, n2Ips := set{}, set{}, set{}
+	names, ids := set{}, set{}
 	for _, o := range saved {
 		names[o.Name] = true
 		ids[strings.ToLower(o.GnbID)] = true
-		if o.Core != model.GnbCoreExternal && o.N2Ip != "" {
-			n2Ips[o.N2Ip] = true
-		}
 	}
 	out := make([]model.GnbProfile, 0, count)
-	gnbID, n2Ip := src.GnbID, src.N2Ip
+	gnbID := src.GnbID
 	for i := 0; i < count; i++ {
 		var ok bool
 		if gnbID, ok = nextFreeGnbID(gnbID, ids.has); !ok {
 			return nil, bad("no free gNB ID left")
 		}
-		if n2Ip, ok = nextFreeN2Ip(n2Ip, n2Ips.has); !ok {
-			return nil, bad("only %d free N2 IPs are left in %s - %s", i, flctx.GnbN2IpFirst, flctx.GnbN2IpLast)
-		}
 		cp := src
 		cp.ID = ""
 		cp.Name = nextFreeName(src.Name, names.has)
-		cp.GnbID, cp.N2Ip = gnbID, n2Ip
-		names[cp.Name], ids[gnbID], n2Ips[n2Ip] = true, true, true
+		cp.GnbID, cp.N2Ip = gnbID, ""
+		names[cp.Name], ids[gnbID] = true, true
 		out = append(out, cp)
 	}
 	return out, nil
@@ -279,6 +238,9 @@ func planUeBulk(src model.UeProfile, saved []model.UeProfile, count int) ([]mode
 
 // CheckGnbProfile is prof's conflicts with the saved gNB profiles.
 func (p *Processor) CheckGnbProfile(prof *model.GnbProfile) (*model.ResponseProfileCheck, *model.ErrorDetail) {
+	if detail := p.applyProfileCoreNetwork(prof); detail != nil {
+		return nil, detail
+	}
 	if detail := normalizeGnbProfile(prof); detail != nil {
 		return nil, detail
 	}

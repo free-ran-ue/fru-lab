@@ -3,7 +3,6 @@ package processor
 import (
 	"backend/model"
 	"net"
-	"net/netip"
 	"strings"
 	"testing"
 )
@@ -40,27 +39,39 @@ func TestPickUeGnb(t *testing.T) {
 }
 
 func TestGnbDeployConflicts(t *testing.T) {
-	cnRan := map[netip.Addr]string{
-		netip.MustParseAddr("10.0.1.3"):  "amf",
-		netip.MustParseAddr("10.0.1.20"): "gnb-aaaaaaaaaaaa",
-	}
 	p := validLabGnb()
 	p.ID, p.GnbID, p.N2Ip = "eeeeeeeeeeee", "000002", "10.0.1.20"
-	got := gnbDeployConflicts(&p, testGnbs, cnRan)
-	if len(got) != 2 || !strings.Contains(got[0], "gnb-bbbbbbbbbbbb") || !strings.Contains(got[1], "gnb-aaaaaaaaaaaa") {
+	got := gnbDeployConflicts(&p, testGnbs)
+	if len(got) != 1 || !strings.Contains(got[0], "gnb-bbbbbbbbbbbb") {
 		t.Fatalf("got %v", got)
 	}
 
-	// redeploying A itself: its own address and ID do not count
-	p.ID, p.GnbID = "aaaaaaaaaaaa", "000001"
-	if got := gnbDeployConflicts(&p, testGnbs, cnRan); len(got) != 0 {
+	// redeploying B itself: its own ID does not count
+	p.ID = "bbbbbbbbbbbb"
+	if got := gnbDeployConflicts(&p, testGnbs); len(got) != 0 {
 		t.Fatalf("self: %v", got)
 	}
 
 	ext := validLabGnb()
 	ext.ID, ext.Core, ext.N2Ip, ext.GnbID, ext.HostIp = "ffffffffffff", model.GnbCoreExternal, "", "00ffff", "192.168.1.5"
-	if got := gnbDeployConflicts(&ext, testGnbs, nil); len(got) != 1 || !strings.Contains(got[0], "192.168.1.5") {
+	if got := gnbDeployConflicts(&ext, testGnbs); len(got) != 1 || !strings.Contains(got[0], "192.168.1.5") {
 		t.Fatalf("external: %v", got)
+	}
+}
+
+func TestGnbTargetsOnCore(t *testing.T) {
+	gnbs := append([]runningGnb{
+		{Target: "gnb-dddddddddddd", Core: model.GnbCoreLab, CoreNetwork: "f00000000001"},
+		{Target: "gnb-eeeeeeeeeeee", Core: model.GnbCoreExternal, CoreNetwork: "e00000000001"},
+	}, testGnbs...)
+	if got := gnbTargetsOnCore(gnbs, ""); strings.Join(got, ",") != "gnb-aaaaaaaaaaaa,gnb-bbbbbbbbbbbb" {
+		t.Errorf("lab: %v", got)
+	}
+	if got := gnbTargetsOnCore(gnbs, "f00000000001"); strings.Join(got, ",") != "gnb-dddddddddddd" {
+		t.Errorf("core: %v", got)
+	}
+	if got := gnbTargetsOnCore(gnbs, "e00000000001"); len(got) != 0 {
+		t.Errorf("an external gNB blocks nothing: %v", got)
 	}
 }
 

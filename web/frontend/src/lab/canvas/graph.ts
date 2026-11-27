@@ -1,7 +1,7 @@
 import type { Free5gcTemplate } from '../free5gcTemplate'
 import type { NodeStatus } from '../types'
 import type { Lab, LabGnb } from '../useLab'
-import { templateLabel } from '../useLab'
+import { isFree5gcCore, templateLabel } from '../useLab'
 import type { UeRow } from '../useUeInstances'
 import type { CanvasFrame, CanvasLink, CanvasNode } from './LabCanvas'
 import type { UeLive } from '../console/EventsContext'
@@ -318,7 +318,9 @@ export function ueGnbId(lab: Lab, row: UeRow): string {
 const MAX_OVERVIEW_UES = 24
 const RADIO_GAP = 150
 
-const gnbSub = (g: LabGnb) => (g.core === 'external' ? `external · AMF ${g.deployment?.amfIp ?? ''}` : 'lab free5GC')
+const gnbSub = (g: LabGnb, lab: Lab) => (g.coreNetwork
+  ? (lab.coreNetworks.networks.find((n) => n.id === g.coreNetwork)?.name ?? 'a deleted core')
+  : g.core === 'external' ? `external · AMF ${g.deployment?.amfIp ?? ''}` : 'lab free5GC')
 
 // buildOverviewGraph is the overview map: every connected UE on the radio
 // to its gNB, every running gNB, the core(s) as one node each and the data
@@ -337,11 +339,11 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
     const box = { x: gnbX, y: i * gnbStep, ...BIG }
     if (!g) {
       nodes.push({ id: ID.gnbNone, ...box, icon: 'gnb', label: 'gNB', sub: 'not deployed', tag: '0 UE connected', status: 'stopped', ghost: true })
-      return { id: ID.gnbNone, box, status: 'stopped' as NodeStatus, core: 'lab' as const }
+      return { id: ID.gnbNone, box, status: 'stopped' as NodeStatus, core: 'lab' as const, coreNetwork: '' }
     }
     const attached = upUes.filter((r) => ueGnbId(lab, r) === g.id && ueLive[r.ueId]?.stage !== 'failed').length
-    nodes.push({ id: g.id, ...box, icon: 'gnb', label: g.profileName, sub: gnbSub(g), tag: `${attached} UE connected`, status: g.status })
-    return { id: g.id, box, status: g.status, core: g.core }
+    nodes.push({ id: g.id, ...box, icon: 'gnb', label: g.profileName, sub: gnbSub(g, lab), tag: `${attached} UE connected`, status: g.status })
+    return { id: g.id, box, status: g.status, core: g.core, coreNetwork: g.coreNetwork }
   })
   const gnbTop = gnbs[0].box.y
   const gnbBottom = gnbs[gnbs.length - 1].box.y + BIG.h
@@ -371,19 +373,27 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
     nodes.push({ id: ID.fleet, ...box, icon: 'fleet', label: 'No UE connected', sub: 'launch UEs on free-ue', ghost: true })
   }
 
-  // ----- cores: the lab free5GC once deployed, every enabled core outside
-  // the lab, and (only for an external gNB dialing none of those) a plain
+  // ----- cores: the lab free5GC once deployed, every free5GC core network
+  // that is up (or has a gNB on it), every enabled core outside the lab,
+  // and (only for an external gNB dialing none of those) a plain
   // "External core" node -----
-  const enabled = lab.coreNetworks.networks.filter((n) => n.enabled)
+  const enabled = lab.coreNetworks.networks.filter((n) => n.enabled && !isFree5gcCore(n))
+  const shownCores = lab.free5gcCores.filter((c) => c.status !== 'stopped' || c.gnbs.length > 0)
   const ext = lab.externalGnbs
-  const coreOfGnb = (g: (typeof gnbs)[number]) => {
-    if (g.core !== 'external') return ID.core
-    const amf = lab.gnbs.find((x) => x.id === g.id)?.deployment?.amfIp
-    const n = enabled.find((c) => c.n2Ip === amf)
+  // an external gNB's core: the one recorded on it, else the enabled one
+  // whose AMF it dials
+  const extCoreOf = (g: LabGnb) => {
+    const n = g.coreNetwork ? enabled.find((c) => c.id === g.coreNetwork) : enabled.find((c) => c.n2Ip && c.n2Ip === g.deployment?.amfIp)
     return n ? `core:${n.id}` : ID.externalCore
   }
-  const orphanExt = ext.some((g) => !enabled.some((c) => c.n2Ip === g.deployment?.amfIp))
-  const showLab = lab.coreUp || gnbs.some((g) => g.core === 'lab') || (enabled.length === 0 && ext.length === 0)
+  const coreOfGnb = (g: (typeof gnbs)[number]) => {
+    if (g.coreNetwork && shownCores.some((c) => c.id === g.coreNetwork)) return `core:${g.coreNetwork}`
+    if (g.core !== 'external') return ID.core
+    const lg = lab.gnbs.find((x) => x.id === g.id)
+    return lg ? extCoreOf(lg) : ID.externalCore
+  }
+  const orphans = ext.filter((g) => extCoreOf(g) === ID.externalCore)
+  const showLab = lab.coreUp || gnbs.some((g) => g.core === 'lab' && !g.coreNetwork) || (enabled.length === 0 && ext.length === 0 && shownCores.length === 0)
   type CoreNode = { id: string; box: Box; live: boolean; dashed: boolean; dns: string[] }
   const specs: { id: string; node: Omit<CanvasNode, 'x' | 'y' | 'w' | 'h' | 'id'>; live: boolean; dashed: boolean; dns: string[] }[] = []
   const nfs = lab.free5gc.networkFunctions
@@ -396,11 +406,21 @@ export function buildOverviewGraph(lab: Lab, ueLive: Record<string, UeLive> = {}
       dns: ['internet'],
     })
   }
-  for (const n of enabled) {
-    specs.push({ id: `core:${n.id}`, node: { icon: 'core', label: n.name, sub: `AMF ${n.n2Ip}`, tag: 'outside the lab' }, live: true, dashed: false, dns: n.dns.map((d) => d.name) })
+  for (const c of shownCores) {
+    const cnfs = c.networkFunctions
+    specs.push({
+      id: `core:${c.id}`,
+      node: { icon: 'core', label: c.name, sub: c.template ? templateLabel(c.template) : 'not deployed', tag: cnfs.length ? `${c.healthyNfs} / ${cnfs.length} NF healthy` : 'free5GC on this host', status: c.status },
+      live: up(c.status),
+      dashed: false,
+      dns: c.network.dns.length ? c.network.dns.map((d) => d.name) : ['internet'],
+    })
   }
-  if (orphanExt) {
-    const amfs = [...new Set(ext.filter((g) => !enabled.some((c) => c.n2Ip === g.deployment?.amfIp)).map((g) => g.deployment?.amfIp).filter(Boolean))]
+  for (const n of enabled) {
+    specs.push({ id: `core:${n.id}`, node: { icon: 'core', label: n.name, sub: `AMF ${n.n2Ip ?? ''}`, tag: 'outside the lab' }, live: true, dashed: false, dns: n.dns.map((d) => d.name) })
+  }
+  if (orphans.length) {
+    const amfs = [...new Set(orphans.map((g) => g.deployment?.amfIp).filter(Boolean))]
     specs.push({ id: ID.externalCore, node: { icon: 'core', label: 'External core', sub: `AMF ${amfs.join(', ')}`, tag: 'not in Core Network' }, live: false, dashed: true, dns: [] })
   }
   const coreX = gnbX + BIG.w + 130
